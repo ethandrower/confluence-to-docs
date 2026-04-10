@@ -1,0 +1,50 @@
+.confluence-content {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  max-width: 720px;
+}
+
+.confluence-content h1 { font-size: 2rem; font-weight: 600; margin: 2rem 0 1rem; }
+.confluence-content h2 { font-size: 1.5rem; font-weight: 600; margin: 1.75rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+.confluence-content h3 { font-size: 1.2rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+.confluence-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+
+.confluence-content p { margin: 0 0 1rem; }
+.confluence-content ul, .confluence-content ol { margin: 0 0 1rem; padding-left: 1.5rem; }
+.confluence-content li { margin-bottom: 0.25rem; }
+
+.confluence-content table { border-collapse: collapse; width: 100%; margin: 1.5rem 0; font-size: 14px; }
+.confluence-content th, .confluence-content td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+.confluence-content th { background: var(--surface-2); font-weight: 600; }
+.confluence-content tr:nth-child(even) td { background: var(--surface-1); }
+
+.confluence-content pre { background: var(--surface-code); border: 1px solid var(--border); border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0; }
+.confluence-content code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; }
+.confluence-content p code, .confluence-content li code { background: var(--surface-code); padding: 2px 5px; border-radius: 3px; font-size: 0.875em; }
+
+.confluence-content blockquote { border-left: 3px solid var(--border-accent); padding-left: 1rem; margin: 1rem 0; color: var(--text-secondary); }
+.confluence-content a { color: var(--accent); text-decoration: none; }
+.confluence-content a:hover { text-decoration: underline; }
+.confluence-content img { max-width: 100%; border-radius: 4px; margin: 0.5rem 0; }
+
+/* Confluence panel macros */
+.confluence-content .panel { border-radius: 6px; padding: 0.875rem 1rem; margin: 1.25rem 0; border-left: 4px solid; }
+.confluence-content .panel p:last-child { margin-bottom: 0; }
+.confluence-content .panel-note  { background: #eff6ff; border-color: #3b82f6; }
+.confluence-content .panel-info  { background: #f0fdf4; border-color: #22c55e; }
+.confluence-content .panel-warning { background: #fffbeb; border-color: #f59e0b; }
+.confluence-content .panel-tip  { background: #fdf4ff; border-color: #a855f7; }
+
+/* Task lists */
+.confluence-content .task-list { list-style: none; padding-left: 0; }
+.confluence-content .task-item { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.4rem; }
+.confluence-content .task-item input[type="checkbox"] { margin-top: 3px; }
+
+/* Expand macro */
+.confluence-content .confluence-expand { border: 1px solid var(--border); border-radius: 6px; margin: 1rem 0; }
+.confluence-content .confluence-expand-title { padding: 0.5rem 1rem; font-weight: 500; cursor: pointer; background: var(--surface-1); border-radius: 6px; }
+.confluence-content .confluence-expand-content { padding: 0.75rem 1rem; border-top: 1px solid var(--border); }
+
+/* TOC placeholder - hidden since Vue renders its own */
+.confluence-content .toc-placeholder { display: none; }
