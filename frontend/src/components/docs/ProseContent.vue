@@ -46,56 +46,8 @@ const processedHtml = computed(() => {
   h = h.replace(/<(h[2-4])\s+id="([^"]+)">/g,
     '<$1 id="$2" class="group relative"><a href="#$2" class="anchor-link" aria-hidden="true">#</a>')
 
-  // ── Normalize Confluence formatting quirks ──────────────
-  h = normalizeConfluenceContent(h)
-
   return h
 })
-
-function normalizeConfluenceContent(html) {
-  const div = document.createElement('div')
-  div.innerHTML = html
-
-  // 1. Convert blockquotes used as indentation into regular divs
-  //    Confluence uses <blockquote> for visual indentation, not actual quotes
-  div.querySelectorAll('blockquote').forEach(bq => {
-    // If blockquote contains headings or multiple paragraphs, it's indentation not a quote
-    const hasStructure = bq.querySelector('h1,h2,h3,h4,h5,h6,p,ul,ol,table')
-    if (hasStructure) {
-      const wrapper = document.createElement('div')
-      wrapper.className = 'indent-block'
-      wrapper.innerHTML = bq.innerHTML
-      bq.replaceWith(wrapper)
-    }
-  })
-
-  // 2. Convert ALL CAPS bold-only paragraphs into proper headings
-  //    Pattern: <p><strong>ALL CAPS TEXT</strong></p>
-  div.querySelectorAll('p').forEach(p => {
-    const strong = p.querySelector('strong')
-    if (!strong) return
-    // Check if <p> only contains a <strong> (possibly with whitespace)
-    const textWithoutStrong = p.textContent.replace(strong.textContent, '').trim()
-    if (textWithoutStrong.length > 0) return
-    // Check if it's ALL CAPS (at least 3 chars, >60% uppercase letters)
-    const text = strong.textContent.trim()
-    if (text.length < 3) return
-    const letters = text.replace(/[^a-zA-Z]/g, '')
-    if (!letters.length) return
-    const upperRatio = letters.replace(/[^A-Z]/g, '').length / letters.length
-    if (upperRatio > 0.6) {
-      // Convert to a styled section heading
-      const h = document.createElement('h4')
-      h.className = 'caps-section-heading'
-      h.textContent = text
-      const id = text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
-      if (id) h.id = id
-      p.replaceWith(h)
-    }
-  })
-
-  return div.innerHTML
-}
 
 function fixBrokenTables(html) {
   const div = document.createElement('div')
