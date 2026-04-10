@@ -1,5 +1,5 @@
 """
-Confluence client for the CiteMed portal sync engine.
+Confluence client for the docs portal sync engine.
 
 Thin wrapper around trinity-atlassian-cli that:
 - Uses Django settings for credentials (rather than trinity's env/config resolution)

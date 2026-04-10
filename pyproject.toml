@@ -1,7 +1,7 @@
 [project]
-name = "citemed-portal"
+name = "confluence-to-docs"
 version = "0.1.0"
-description = "CiteMed Support Portal — Django backend"
+description = "Pull Confluence docs and serve them through a clean, searchable portal"
 requires-python = ">=3.12"
 dependencies = [
     "Django>=4.2,<5.0",
