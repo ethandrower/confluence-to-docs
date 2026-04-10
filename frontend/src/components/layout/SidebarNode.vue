@@ -1,35 +1,36 @@
 <template>
-  <li class="list-none">
+  <li>
     <div
-      class="flex items-center gap-1 pr-2 rounded-md group"
-      :style="{ paddingLeft: `${depth * 14 + 8}px` }"
+      class="group flex items-center rounded-lg transition-colors duration-100"
+      :class="isActive ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/40'"
     >
       <button
-        v-if="page.children && page.children.length"
-        @click="expanded = !expanded"
-        :aria-expanded="expanded"
-        class="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        v-if="hasChildren"
+        @click.stop="expanded = !expanded"
+        class="shrink-0 w-5 h-5 flex items-center justify-center text-muted-foreground/30 hover:text-muted-foreground transition-colors"
+        :style="{ marginLeft: `${depth * 12 + 6}px` }"
+        :aria-label="expanded ? 'Collapse' : 'Expand'"
       >
         <svg
           class="w-3 h-3 transition-transform duration-150"
           :class="expanded ? 'rotate-90' : ''"
           fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
         >
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
         </svg>
       </button>
-      <span v-else class="flex-shrink-0 w-5" />
+      <span v-else class="shrink-0 w-5" :style="{ marginLeft: `${depth * 12 + 6}px` }" />
 
       <RouterLink
         :to="{ name: 'doc-page', params: { slug: page.slug } }"
-        class="flex-1 py-1.5 text-sm truncate rounded-md no-underline transition-colors"
-        :class="currentSlug === page.slug
-          ? 'text-blue-600 font-medium'
-          : 'text-gray-700 hover:text-gray-900'"
+        class="flex-1 py-[6px] px-1.5 text-[13px] leading-snug truncate transition-colors duration-100"
+        :class="isActive
+          ? 'text-primary font-medium'
+          : 'text-muted-foreground hover:text-foreground'"
       >{{ page.title }}</RouterLink>
     </div>
 
-    <ul v-if="expanded && page.children && page.children.length" class="list-none m-0 p-0">
+    <ul v-if="expanded && hasChildren" class="space-y-px">
       <SidebarNode
         v-for="child in page.children"
         :key="child.id"
@@ -47,19 +48,18 @@ import { useRoute } from 'vue-router'
 const props = defineProps({ page: Object, depth: Number })
 const route = useRoute()
 const currentSlug = computed(() => route.params.slug)
+const hasChildren = computed(() => props.page.children?.length > 0)
+const isActive = computed(() => currentSlug.value === props.page.slug)
 
 function subtreeContains(page, slug) {
   if (!slug) return false
   if (page.slug === slug) return true
-  return (page.children || []).some(child => subtreeContains(child, slug))
+  return (page.children || []).some(c => subtreeContains(c, slug))
 }
 
 const expanded = ref(subtreeContains(props.page, currentSlug.value))
 
-// When navigating into this subtree, expand — but don't collapse when leaving
 watch(currentSlug, (slug) => {
-  if (subtreeContains(props.page, slug)) {
-    expanded.value = true
-  }
+  if (subtreeContains(props.page, slug)) expanded.value = true
 })
 </script>
