@@ -36,6 +36,40 @@ def preprocess_markdown(md):
     # Remove zero-width spaces that Confluence inserts
     md = md.replace('\u200c', '')
 
+    # ── Strip leading horizontal rules ────────────────────
+    # Confluence pages often start with --- separators
+    md = re.sub(r'^(\s*---\s*\n)+', '', md)
+
+    # ── Fix escaped brackets from Confluence ──────────────
+    # Confluence exports \[...\] which prevents markdown link parsing
+    md = md.replace('\\[', '[').replace('\\]', ']')
+
+    # ── Fix indented bullet items ─────────────────────────
+    # Confluence indents sub-bullets with 4 spaces + •/*, which markdown
+    # treats as a code block. Convert to proper nested list syntax.
+    md = re.sub(r'^(\s{4,})[•·]\s*', r'  * ', md, flags=re.MULTILINE)
+    # Also fix indented lines with * that have too much indentation
+    # BUT preserve lines that look like ASCII tree diagrams (├── └──)
+    md = re.sub(r'^(\s{4,})\*\s+(?!.*[├└│])', r'  * ', md, flags=re.MULTILINE)
+
+    # ── Fix 4-space-indented prose treated as code blocks ─
+    # Confluence often indents regular content with 4 spaces.
+    # Markdown treats this as <pre><code>. Strip the indent for
+    # lines that look like prose (contain links, sentences, normal text)
+    # but preserve genuine code (contains {, }, function, =>, var, etc.)
+    def _deindent_prose(match):
+        line = match.group(0)
+        content = line.lstrip()
+        # Keep as code if it looks like actual code
+        code_signals = ['{', '}', '=>', 'function ', 'var ', 'const ', 'let ',
+                        'import ', 'class ', '├', '└', '│', '```', '|']
+        if any(sig in content for sig in code_signals):
+            return line
+        # De-indent prose-like content
+        return content
+
+    md = re.sub(r'^    .+$', _deindent_prose, md, flags=re.MULTILINE)
+
     # ── Fix tables ────────────────────────────────────────
     md = _fix_broken_tables(md)
 
@@ -252,6 +286,20 @@ def postprocess_html(html):
 
     # Clean up empty <ol></ol> pairs left after promotion
     html = re.sub(r'<ol>\s*</ol>', '', html)
+
+    # Remove empty headings (Confluence artifacts)
+    html = re.sub(r'<h[1-6][^>]*>\s*</h[1-6]>', '', html)
+
+    # Remove leading <hr> tags (Confluence page separators at start)
+    html = re.sub(r'^(\s*<hr\s*/?\s*>\s*)+', '', html)
+
+    # Fix raw markdown links that weren't converted
+    # Pattern: [text](url) appearing in HTML outside of <a> tags
+    html = re.sub(
+        r'(?<!["\'])\[([^\]]+)\]\((https?://[^)]+)\)',
+        r'<a href="\2">\1</a>',
+        html
+    )
 
     return html
 

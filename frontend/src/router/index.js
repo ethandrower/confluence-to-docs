@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -38,8 +39,44 @@ const router = createRouter({
       path: '/auth/verify',
       component: () => import('@/components/auth/AuthVerify.vue'),
       name: 'auth-verify'
+    },
+    {
+      path: '/tickets',
+      component: () => import('@/views/TicketView.vue'),
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          component: () => import('@/components/tickets/TicketList.vue'),
+          name: 'ticket-list'
+        },
+        {
+          path: 'new',
+          component: () => import('@/components/tickets/TicketForm.vue'),
+          name: 'ticket-new'
+        },
+        {
+          path: ':id',
+          component: () => import('@/components/tickets/TicketDetail.vue'),
+          name: 'ticket-detail',
+          props: true
+        }
+      ]
     }
   ]
+})
+
+router.beforeEach(async (to, from, next) => {
+  if (to.meta.requiresAuth) {
+    const auth = useAuthStore()
+    if (!auth.user) {
+      await auth.fetchMe()
+    }
+    if (!auth.user) {
+      return next({ name: 'login', query: { redirect: to.fullPath } })
+    }
+  }
+  next()
 })
 
 export default router

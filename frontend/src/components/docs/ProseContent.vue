@@ -1,5 +1,5 @@
 <template>
-  <article ref="contentRef" class="confluence-content" v-html="processedHtml" />
+  <div ref="contentRef" class="confluence-content" v-html="processedHtml" />
 </template>
 
 <script setup>
@@ -46,8 +46,47 @@ const processedHtml = computed(() => {
   h = h.replace(/<(h[2-4])\s+id="([^"]+)">/g,
     '<$1 id="$2" class="group relative"><a href="#$2" class="anchor-link" aria-hidden="true">#</a>')
 
+  // ── Enhance content patterns (DOM-based) ────────────────
+  h = enhanceContentPatterns(h)
+
   return h
 })
+
+function enhanceContentPatterns(html) {
+  const div = document.createElement('div')
+  div.innerHTML = html
+
+  // 1. Convert definition-style paragraphs into styled cards
+  //    Pattern: <p><strong>ALL CAPS LABEL.</strong> Body text...</p>
+  div.querySelectorAll('p').forEach(p => {
+    const strong = p.querySelector('strong:first-child')
+    if (!strong) return
+    const strongText = strong.textContent.trim()
+    // Must be ALL CAPS with a trailing period and have body text after it
+    if (!/^[A-Z][A-Z\s,\-&/.0-9]+\.\s*$/.test(strongText + ' ')) return
+    const bodyText = p.innerHTML.replace(strong.outerHTML, '').trim()
+    if (!bodyText || bodyText.length < 10) return
+
+    p.classList.add('def-entry')
+  })
+
+  // 2. Convert lists where every item has <strong>Term</strong> - Description
+  //    into rich card lists
+  div.querySelectorAll('ul').forEach(ul => {
+    const items = [...ul.children]
+    if (items.length < 2) return
+    const richItems = items.filter(li => {
+      const strong = li.querySelector('strong:first-child')
+      return strong && li.textContent.length > strong.textContent.length + 5
+    })
+    // If majority of items have the bold-term pattern, enhance the list
+    if (richItems.length >= items.length * 0.6) {
+      ul.classList.add('rich-list')
+    }
+  })
+
+  return div.innerHTML
+}
 
 function fixBrokenTables(html) {
   const div = document.createElement('div')
@@ -208,6 +247,7 @@ function enhance() {
     if (pre.querySelector('.copy-btn')) return
     const btn = document.createElement('button')
     btn.className = 'copy-btn'
+    btn.setAttribute('aria-label', 'Copy code')
     btn.textContent = 'Copy'
     btn.addEventListener('click', () => {
       const code = pre.querySelector('code')
@@ -248,7 +288,7 @@ const EMOJI = {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   margin: 1.25rem 0;
-  border: 1px solid oklch(0.92 0.004 55);
+  border: 1px solid oklch(0.92 0.006 60);
   border-radius: 10px;
 }
 .confluence-content .table-wrap table {
@@ -265,19 +305,19 @@ const EMOJI = {
   border-radius: 5px;
   font-size: 0.75rem;
   font-weight: 500;
-  background: oklch(0.96 0.004 55);
-  color: oklch(0.38 0.012 55);
-  border: 1px solid oklch(0.93 0.004 55);
+  background: oklch(0.96 0.006 60);
+  color: oklch(0.38 0.015 50);
+  border: 1px solid oklch(0.93 0.006 60);
 }
 
 /* Image placeholder */
 .confluence-content .img-placeholder {
   border-radius: 10px;
-  border: 1px dashed oklch(0.90 0.004 55);
-  background: oklch(0.98 0.002 55);
+  border: 1px dashed oklch(0.90 0.006 60);
+  background: oklch(0.98 0.003 60);
   padding: 1.25rem;
   font-size: 0.8125rem;
-  color: oklch(0.55 0.012 55);
+  color: oklch(0.55 0.015 50);
   text-align: center;
   margin: 1rem 0;
 }
@@ -290,16 +330,16 @@ const EMOJI = {
   right: 8px;
   padding: 3px 10px;
   font-size: 11px;
-  color: oklch(0.6 0.008 55);
-  background: oklch(0.22 0.012 55);
-  border: 1px solid oklch(0.30 0.012 55);
+  color: oklch(0.6 0.01 50);
+  background: oklch(0.22 0.015 50);
+  border: 1px solid oklch(0.30 0.015 50);
   border-radius: 6px;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
 }
 .confluence-content pre:hover .copy-btn { opacity: 1; }
-.confluence-content pre .copy-btn:hover { background: oklch(0.28 0.012 55); }
+.confluence-content pre .copy-btn:hover { background: oklch(0.28 0.015 50); }
 .confluence-content pre .copy-btn.copied { color: oklch(0.65 0.13 160); }
 
 /* Heading anchor */

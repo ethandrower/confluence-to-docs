@@ -10,7 +10,7 @@
         :to="{ name: 'doc-page', params: { slug: crumb.slug } }"
         class="hover:text-foreground transition-colors truncate max-w-[160px]"
       >{{ crumb.title }}</RouterLink>
-      <span v-else class="text-muted-foreground truncate max-w-[200px]">{{ crumb.title }}</span>
+      <span v-else class="text-muted-foreground truncate max-w-[200px]" aria-current="page">{{ crumb.title }}</span>
     </template>
   </nav>
 </template>

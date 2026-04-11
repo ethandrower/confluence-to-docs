@@ -36,23 +36,23 @@
           <Breadcrumbs :crumbs="store.currentPage.breadcrumbs" />
 
           <!-- Search match banner -->
-          <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-xs text-yellow-800">
+          <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-accent border border-primary/15 text-xs text-accent-foreground">
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
             <span>{{ matchCount }} match{{ matchCount === 1 ? '' : 'es' }} for "<strong>{{ searchQuery }}</strong>"</span>
-            <button @click="clearHighlights" class="ml-auto text-yellow-600 hover:text-yellow-900 transition-colors">
+            <button @click="clearHighlights" aria-label="Dismiss search highlights" class="ml-auto text-muted-foreground hover:text-foreground transition-colors">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          <h1 class="text-[1.625rem] font-semibold tracking-tight leading-snug text-foreground mt-1.5">
+          <h1 class="text-[1.75rem] font-bold tracking-tight leading-tight text-foreground mt-1">
             {{ store.currentPage.title }}
           </h1>
 
-          <div class="mt-6 pt-6 border-t">
+          <div class="mt-6 pt-6 border-t border-border/60">
             <ProseContent :html="store.currentPage.rendered_html" />
           </div>
 

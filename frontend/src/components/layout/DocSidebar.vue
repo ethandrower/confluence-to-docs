@@ -12,9 +12,9 @@
         <li>
           <RouterLink
             to="/docs"
-            class="flex items-center gap-2 rounded-lg px-2.5 py-[6px] text-[13px] leading-snug transition-colors duration-100"
+            class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13.5px] leading-snug transition-colors duration-100"
             :class="isHome
-              ? 'bg-accent text-accent-foreground font-medium'
+              ? 'bg-primary/10 text-primary font-semibold'
               : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
           >
             <svg class="w-4 h-4 shrink-0" :class="isHome ? 'text-primary' : 'text-muted-foreground/50'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -46,9 +46,11 @@
         </button>
 
         <!-- Pages -->
-        <ul v-show="!collapsed[section.space_key]" class="space-y-px px-2">
-          <SidebarNode v-for="page in section.pages" :key="page.id" :page="page" :depth="0" />
-        </ul>
+        <Transition name="sidebar-expand">
+          <ul v-show="!collapsed[section.space_key]" class="space-y-px px-2">
+            <SidebarNode v-for="page in section.pages" :key="page.id" :page="page" :depth="0" />
+          </ul>
+        </Transition>
       </div>
     </template>
   </nav>

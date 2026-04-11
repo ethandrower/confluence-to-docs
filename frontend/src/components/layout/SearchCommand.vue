@@ -99,18 +99,28 @@ function onSearchInput(val) {
   doSearch(val)
 }
 
-watch(() => props.open, (val) => {
-  if (val) { reset(); currentQuery.value = '' }
-})
+let inputHandler = null
 
 watch(() => props.open, (isOpen) => {
-  if (!isOpen) return
-  setTimeout(() => {
+  if (isOpen) {
+    reset()
+    currentQuery.value = ''
+    // Attach listener after dialog renders
+    setTimeout(() => {
+      const input = document.querySelector('[cmdk-input]')
+      if (input && !inputHandler) {
+        inputHandler = (e) => onSearchInput(e.target.value)
+        input.addEventListener('input', inputHandler)
+      }
+    }, 50)
+  } else {
+    // Clean up listener on close
     const input = document.querySelector('[cmdk-input]')
-    if (input) {
-      input.addEventListener('input', (e) => onSearchInput(e.target.value))
+    if (input && inputHandler) {
+      input.removeEventListener('input', inputHandler)
+      inputHandler = null
     }
-  }, 50)
+  }
 })
 
 function navigate(slug) {

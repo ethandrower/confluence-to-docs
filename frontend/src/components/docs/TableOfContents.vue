@@ -1,45 +1,66 @@
 <template>
-  <div v-if="headings.length">
-    <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-3">On this page</p>
-    <ul class="space-y-0.5">
+  <nav v-if="headings.length" aria-label="Table of contents">
+    <p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40 mb-2">On this page</p>
+    <ul class="toc-list">
       <li v-for="h in headings" :key="h.id">
         <a
           :href="`#${h.id}`"
           @click.prevent="scrollTo(h.id)"
-          class="block text-[12.5px] leading-relaxed py-0.5 border-l-2 transition-all duration-150"
+          class="toc-link"
           :class="[
-            h.level === 3 ? 'pl-4' : 'pl-3',
-            activeId === h.id
-              ? 'border-primary text-foreground font-medium'
-              : 'border-transparent text-muted-foreground/50 hover:text-foreground hover:border-border'
+            h.level === 3 ? 'toc-link--nested' : '',
+            activeId === h.id ? 'toc-link--active' : ''
           ]"
         >{{ h.text }}</a>
       </li>
     </ul>
-  </div>
+  </nav>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 
 const props = defineProps({ html: String })
 const activeId = ref('')
+const headings = ref([])
 
-const headings = computed(() => {
-  if (!props.html || typeof document === 'undefined') return []
-  const div = document.createElement('div')
-  div.innerHTML = props.html
-  return [...div.querySelectorAll('h2, h3')].map(h => ({
-    id: h.id || h.textContent.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
-    text: h.textContent,
-    level: parseInt(h.tagName[1])
-  }))
-})
+function parseHeadings() {
+  // Parse from rendered DOM instead of creating throwaway elements
+  const content = document.querySelector('.confluence-content')
+  if (!content) {
+    // Fallback: parse from HTML string
+    if (!props.html || typeof document === 'undefined') { headings.value = []; return }
+    const div = document.createElement('div')
+    div.innerHTML = props.html
+    headings.value = [...div.querySelectorAll('h2, h3')]
+      .map(h => {
+        let text = h.textContent.replace(/^#\s*/, '').trim()
+        return {
+          id: h.id || text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+          text,
+          level: parseInt(h.tagName[1])
+        }
+      })
+      .filter(h => h.text && !h.text.includes('Image unavailable') && h.text.length > 1)
+    return
+  }
+  headings.value = [...content.querySelectorAll('h2, h3')]
+    .map(h => {
+      // Strip the anchor "#" prefix that ProseContent adds
+      let text = h.textContent.replace(/^#\s*/, '').trim()
+      return {
+        id: h.id || text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        text,
+        level: parseInt(h.tagName[1])
+      }
+    })
+    // Filter out image placeholders and empty headings
+    .filter(h => h.text && !h.text.includes('Image unavailable') && h.text.length > 1)
+}
 
 function scrollTo(id) {
   const el = document.getElementById(id)
   if (!el) return
-  // Content scrolls inside <main>, not window
   const main = el.closest('main')
   if (main) {
     const top = el.offsetTop - 24
@@ -53,13 +74,15 @@ let observer = null
 
 function setupObserver() {
   observer?.disconnect()
+  // Use the scrolling main container as root, not viewport
+  const main = document.querySelector('main')
   observer = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
         if (e.isIntersecting) activeId.value = e.target.id
       }
     },
-    { rootMargin: '-64px 0px -80% 0px' }
+    { root: main || null, rootMargin: '-24px 0px -80% 0px' }
   )
   headings.value.forEach(h => {
     const el = document.getElementById(h.id)
@@ -67,7 +90,57 @@ function setupObserver() {
   })
 }
 
-watch(headings, () => setTimeout(setupObserver, 100))
-onMounted(() => setTimeout(setupObserver, 200))
+watch(() => props.html, async () => {
+  await nextTick()
+  parseHeadings()
+  setTimeout(setupObserver, 100)
+})
+
+onMounted(async () => {
+  await nextTick()
+  parseHeadings()
+  setTimeout(setupObserver, 200)
+})
+
 onBeforeUnmount(() => observer?.disconnect())
 </script>
+
+<style scoped>
+.toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toc-link {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 3px 0 3px 10px;
+  border-left: 1.5px solid transparent;
+  color: var(--muted-foreground);
+  opacity: 0.6;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toc-link:hover {
+  opacity: 1;
+  color: var(--foreground);
+  border-left-color: var(--border);
+}
+
+.toc-link--nested {
+  padding-left: 20px;
+  font-size: 11.5px;
+}
+
+.toc-link--active {
+  opacity: 1;
+  color: var(--primary);
+  font-weight: 600;
+  border-left-color: var(--primary);
+}
+</style>
