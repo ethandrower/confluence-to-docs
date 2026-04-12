@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { reactive, computed } from 'vue'
+import { reactive, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDocsStore } from '@/stores/docs.js'
 import SidebarNode from './SidebarNode.vue'
@@ -66,6 +66,15 @@ const store = useDocsStore()
 const route = useRoute()
 const isHome = computed(() => route.name === 'docs-home')
 const collapsed = reactive({})
+
+watch(() => route.params.slug, () => {
+  nextTick(() => {
+    const active = document.querySelector('[data-sidebar-active]')
+    if (active) {
+      active.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  })
+})
 
 function toggleSection(key) {
   collapsed[key] = !collapsed[key]

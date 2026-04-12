@@ -24,6 +24,7 @@
         :class="isActive
           ? 'text-primary font-semibold'
           : 'text-muted-foreground hover:text-foreground'"
+        :data-sidebar-active="isActive || undefined"
       >{{ page.title }}</RouterLink>
       <span
         v-if="hasChildren && !expanded"
