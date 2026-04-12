@@ -143,4 +143,15 @@ onBeforeUnmount(() => observer?.disconnect())
   font-weight: 600;
   border-left-color: var(--primary);
 }
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .toc-link {
+    font-size: 11px;
+    padding: 2px 0 2px 8px;
+  }
+  .toc-link--nested {
+    padding-left: 16px;
+    font-size: 10.5px;
+  }
+}
 </style>

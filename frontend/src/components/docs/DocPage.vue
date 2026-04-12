@@ -33,52 +33,54 @@
     <template v-else-if="store.currentPage">
       <div class="flex">
         <article ref="articleRef" class="flex-1 min-w-0 page-pad py-8">
-          <Breadcrumbs :crumbs="store.currentPage.breadcrumbs" />
+          <div class="max-w-[var(--content-max-width)]">
+            <Breadcrumbs :crumbs="store.currentPage.breadcrumbs" />
 
-          <!-- Search match banner -->
-          <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-accent border border-primary/20 text-xs text-accent-foreground">
-            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-            </svg>
-            <span>{{ matchCount }} match{{ matchCount === 1 ? '' : 'es' }} for "<strong>{{ searchQuery }}</strong>"</span>
-            <button @click="clearHighlights" aria-label="Dismiss search highlights" class="ml-auto text-muted-foreground hover:text-foreground transition-colors">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            <!-- Search match banner -->
+            <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-accent border border-primary/20 text-xs text-accent-foreground">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
               </svg>
-            </button>
-          </div>
-
-          <h1 class="text-[1.75rem] font-bold tracking-tight leading-tight text-foreground mt-1">
-            {{ store.currentPage.title }}
-          </h1>
-
-          <div class="mt-6 pt-6 border-t border-border-subtle">
-            <ProseContent :html="store.currentPage.rendered_html" />
-          </div>
-
-          <!-- Footer -->
-          <footer class="mt-12 pt-6 border-t">
-            <div class="flex items-center justify-between text-xs text-muted-foreground">
-              <span v-if="store.currentPage.last_synced">
-                Last updated {{ formatDate(store.currentPage.last_synced) }}
-              </span>
-              <a
-                :href="`#`"
-                @click.prevent="scrollToTop"
-                class="inline-flex items-center gap-1 hover:text-muted-foreground transition-colors"
-              >
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+              <span>{{ matchCount }} match{{ matchCount === 1 ? '' : 'es' }} for "<strong>{{ searchQuery }}</strong>"</span>
+              <button @click="clearHighlights" aria-label="Dismiss search highlights" class="ml-auto text-muted-foreground hover:text-foreground transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>
-                Back to top
-              </a>
+              </button>
             </div>
-          </footer>
+
+            <h1 class="text-[1.75rem] font-bold tracking-tight leading-tight text-foreground mt-1">
+              {{ store.currentPage.title }}
+            </h1>
+
+            <div class="mt-6 pt-6 border-t border-border-subtle">
+              <ProseContent :html="store.currentPage.rendered_html" />
+            </div>
+
+            <!-- Footer -->
+            <footer class="mt-12 pt-6 border-t">
+              <div class="flex items-center justify-between text-xs text-muted-foreground">
+                <span v-if="store.currentPage.last_synced">
+                  Last updated {{ formatDate(store.currentPage.last_synced) }}
+                </span>
+                <a
+                  :href="`#`"
+                  @click.prevent="scrollToTop"
+                  class="inline-flex items-center gap-1 hover:text-muted-foreground transition-colors"
+                >
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+                  </svg>
+                  Back to top
+                </a>
+              </div>
+            </footer>
+          </div>
         </article>
 
         <!-- TOC -->
-        <div class="hidden xl:block w-52 shrink-0">
-          <div class="sticky top-[72px] py-8 pr-6">
+        <div class="hidden lg:block w-40 xl:w-52 shrink-0">
+          <div class="sticky top-[72px] py-8 pr-4 xl:pr-6">
             <TableOfContents :html="store.currentPage.rendered_html" />
           </div>
         </div>
