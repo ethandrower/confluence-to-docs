@@ -32,6 +32,11 @@ const processedHtml = computed(() => {
   h = h.replace(/<img[^>]*src="blob:[^"]*"[^>]*\/?>/gi,
     '<div class="img-placeholder">Image unavailable — requires API token sync</div>')
 
+  // ── Convert standalone pipe tables to HTML ────────────────
+  // Some pages have raw markdown pipe tables that were never converted.
+  // Detect and convert them before the broken-table fixer runs.
+  h = convertStandalonePipeTables(h)
+
   // ── Fix broken pipe tables ───────────────────────────────
   // The markdown converter often renders only the thead + first row,
   // then dumps remaining rows as raw pipe text inside <p> or loose text.
@@ -86,6 +91,56 @@ function enhanceContentPatterns(html) {
   })
 
   return div.innerHTML
+}
+
+function convertStandalonePipeTables(html) {
+  // Match blocks of pipe-delimited lines separated by <br> tags.
+  // Pattern: at least 3 consecutive lines starting with | and having 3+ pipes.
+  // These are full markdown tables never converted to HTML.
+  return html.replace(
+    /(?:(?:^|<br\s*\/?>|\n)\s*\|[^\n]*\|[ \t]*(?:<br\s*\/?>|\n)){3,}/gi,
+    (match) => {
+      const lines = match
+        .split(/<br\s*\/?>|\n/)
+        .map(l => l.trim())
+        .filter(l => l.startsWith('|') && l.endsWith('|') && l.split('|').length >= 3)
+
+      if (lines.length < 3) return match  // Need header + separator + at least 1 row
+
+      // Check for separator row (| --- | --- |)
+      const sepIdx = lines.findIndex(l => {
+        const cells = l.slice(1, -1).split('|')
+        return cells.every(c => /^\s*[-:]+\s*$/.test(c))
+      })
+      if (sepIdx < 1) return match  // No valid separator found
+
+      const headerLines = lines.slice(0, sepIdx)
+      const bodyLines = lines.slice(sepIdx + 1)
+
+      function parseRow(line) {
+        return line.slice(1, -1).split('|').map(c => c.trim())
+      }
+
+      // Build thead
+      let thead = '<thead>'
+      for (const hLine of headerLines) {
+        const cells = parseRow(hLine)
+        thead += '<tr>' + cells.map(c => `<th>${c}</th>`).join('') + '</tr>'
+      }
+      thead += '</thead>'
+
+      // Build tbody
+      let tbody = '<tbody>'
+      for (const bLine of bodyLines) {
+        if (!bLine.trim()) continue
+        const cells = parseRow(bLine)
+        tbody += '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>'
+      }
+      tbody += '</tbody>'
+
+      return `<table>${thead}${tbody}</table>`
+    }
+  )
 }
 
 function fixBrokenTables(html) {
