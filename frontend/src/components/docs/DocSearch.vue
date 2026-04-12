@@ -1,17 +1,17 @@
 <template>
   <div class="px-6 lg:px-10 py-10 max-w-3xl">
     <!-- Hero -->
-    <div class="mb-10">
+    <div class="mb-10 bg-primary/[0.06] rounded-xl p-6 -mx-2">
       <div class="flex items-center gap-2.5 mb-3">
-        <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+          <svg class="w-4 h-4 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
           </svg>
         </div>
-        <span class="text-xs font-semibold uppercase tracking-wider text-primary">Documentation</span>
+        <span class="text-xs font-bold uppercase tracking-wider text-primary">CiteMed Support</span>
       </div>
       <h1 class="text-[1.75rem] font-bold tracking-tight text-foreground leading-tight">
-        CiteMed Support Documentation
+        Documentation
       </h1>
       <p class="mt-2.5 text-[15px] leading-relaxed text-muted-foreground">
         Find answers, guides, and policies across all CiteMed spaces.
@@ -144,11 +144,11 @@ const sections = computed(() => store.sections || [])
 
 const sectionColors = [
   'oklch(0.42 0.12 165)',  // emerald
-  'oklch(0.44 0.10 245)',  // slate-indigo
-  'oklch(0.48 0.13 20)',   // terracotta
-  'oklch(0.46 0.12 145)',  // forest
-  'oklch(0.52 0.14 60)',   // warm amber
-  'oklch(0.43 0.10 295)',  // plum
+  'oklch(0.44 0.10 210)',  // teal-blue
+  'oklch(0.48 0.12 55)',   // warm sand
+  'oklch(0.45 0.12 145)',  // forest
+  'oklch(0.50 0.13 70)',   // amber
+  'oklch(0.43 0.10 185)',  // deep teal
 ]
 
 const sectionIcons = [
