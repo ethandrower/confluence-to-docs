@@ -116,10 +116,9 @@ onBeforeUnmount(() => observer?.disconnect())
   display: block;
   font-size: 12px;
   line-height: 1.5;
-  padding: 3px 0 3px 10px;
-  border-left: 1.5px solid transparent;
-  color: var(--muted-foreground);
-  opacity: 0.7;
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: oklch(0.35 0.015 50);
   transition: all 0.15s ease;
   white-space: nowrap;
   overflow: hidden;
@@ -127,9 +126,8 @@ onBeforeUnmount(() => observer?.disconnect())
 }
 
 .toc-link:hover {
-  opacity: 1;
   color: var(--foreground);
-  border-left-color: var(--border);
+  background: var(--muted);
 }
 
 .toc-link--nested {
@@ -138,16 +136,15 @@ onBeforeUnmount(() => observer?.disconnect())
 }
 
 .toc-link--active {
-  opacity: 1;
   color: var(--primary);
   font-weight: 600;
-  border-left-color: var(--primary);
+  background: var(--accent);
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {
   .toc-link {
     font-size: 11px;
-    padding: 2px 0 2px 8px;
+    padding: 2px 6px;
   }
   .toc-link--nested {
     padding-left: 16px;
