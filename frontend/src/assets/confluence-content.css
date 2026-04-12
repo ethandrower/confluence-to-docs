@@ -165,18 +165,18 @@
   font-family: var(--font-ui);
   text-align: left;
   font-weight: 650;
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: oklch(0.45 0.015 50);
+  color: oklch(0.35 0.015 50);
   padding: 10px 14px;
-  background: oklch(0.97 0.004 60);
-  border-bottom: 2px solid oklch(0.92 0.006 60);
+  background: oklch(0.965 0.006 60);
+  border-bottom: 2px solid var(--border);
 }
 
 .confluence-content td {
   padding: 10px 14px;
-  border-bottom: 1px solid oklch(0.95 0.004 60);
+  border-bottom: 1px solid oklch(0.93 0.005 60);
   vertical-align: top;
 }
 
@@ -185,7 +185,7 @@
 }
 
 .confluence-content tr:hover td {
-  background: oklch(0.985 0.003 60);
+  background: oklch(0.98 0.005 60);
 }
 
 /* ── Code ──────────────────────────────────────────────────── */
@@ -198,7 +198,7 @@
   background: oklch(0.96 0.006 60);
   padding: 2px 7px;
   border-radius: 5px;
-  color: oklch(0.35 0.09 165);
+  color: oklch(0.38 0.12 165);
   border: 1px solid oklch(0.93 0.006 60);
 }
 
@@ -254,10 +254,10 @@
 }
 
 .confluence-content .panel p:last-child { margin-bottom: 0; }
-.confluence-content .panel-note    { background: oklch(0.97 0.015 250); border-color: oklch(0.55 0.14 250); }
-.confluence-content .panel-info    { background: oklch(0.975 0.015 160); border-color: oklch(0.50 0.13 160); }
-.confluence-content .panel-warning { background: oklch(0.975 0.025 80); border-color: oklch(0.68 0.17 70); }
-.confluence-content .panel-tip     { background: oklch(0.975 0.015 300); border-color: oklch(0.58 0.14 300); }
+.confluence-content .panel-note    { background: oklch(0.97 0.015 210); border-color: oklch(0.48 0.10 210); }
+.confluence-content .panel-info    { background: oklch(0.97 0.02 165); border-color: oklch(0.50 0.12 165); }
+.confluence-content .panel-warning { background: oklch(0.975 0.025 80); border-color: oklch(0.62 0.15 70); }
+.confluence-content .panel-tip     { background: oklch(0.97 0.02 145); border-color: oklch(0.45 0.12 145); }
 
 /* ── Tasks ─────────────────────────────────────────────────── */
 
