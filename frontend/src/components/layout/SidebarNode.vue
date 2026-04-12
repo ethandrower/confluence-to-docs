@@ -1,11 +1,11 @@
 <template>
   <li :class="['tree-item', { 'tree-item--active': isActive, 'tree-item--in-path': isInSubtree }]">
-    <div class="tree-row group" :class="isActive ? 'bg-primary/8' : 'hover:bg-muted/40'">
+    <div class="tree-row group" :class="isActive ? 'bg-accent' : 'hover:bg-muted'">
       <button
         v-if="hasChildren"
         @click.stop="expanded = !expanded"
         class="tree-toggle"
-        :class="isActive || isInSubtree ? 'text-primary/50' : 'text-muted-foreground/25 hover:text-muted-foreground'"
+        :class="isActive || isInSubtree ? 'text-primary/70' : 'text-muted-foreground/30 hover:text-muted-foreground'"
         :aria-label="expanded ? 'Collapse' : 'Expand'"
       >
         <svg
@@ -143,7 +143,7 @@ watch(currentSlug, (slug) => {
   font-size: 10px;
   font-weight: 600;
   color: var(--muted-foreground);
-  opacity: 0.4;
+  opacity: 0.5;
   padding: 0 4px;
   margin-right: 4px;
   font-variant-numeric: tabular-nums;

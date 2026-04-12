@@ -8,7 +8,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
           </svg>
         </div>
-        <span class="text-xs font-semibold uppercase tracking-wider text-primary/70">Documentation</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-primary">Documentation</span>
       </div>
       <h1 class="text-[1.75rem] font-bold tracking-tight text-foreground leading-tight">
         CiteMed Support Documentation
@@ -20,7 +20,7 @@
 
     <!-- Search -->
     <div class="relative group">
-      <div class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40 group-focus-within:text-primary transition-colors" aria-hidden="true">
+      <div class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" aria-hidden="true">
         <svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
         </svg>
@@ -31,7 +31,7 @@
         @input="onInput"
         aria-label="Search documentation"
         placeholder="Search documentation..."
-        class="w-full h-12 pl-11 pr-4 rounded-xl border border-border/80 bg-card text-[15px] placeholder:text-muted-foreground/35 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/30 transition-all"
+        class="w-full h-12 pl-11 pr-4 rounded-xl border bg-card text-[15px] placeholder:text-muted-foreground/60 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
         autofocus
       />
       <div v-if="loading" class="absolute right-4 top-1/2 -translate-y-1/2">
@@ -40,51 +40,51 @@
     </div>
 
     <!-- Search Results -->
-    <div v-if="results.length" class="mt-3 rounded-xl border bg-card shadow-md overflow-hidden divide-y divide-border/40">
+    <div v-if="results.length" class="mt-3 rounded-xl border bg-card shadow-md overflow-hidden divide-y divide-border-subtle">
       <RouterLink
         v-for="r in results"
         :key="r.slug"
         :to="{ name: 'doc-page', params: { slug: r.slug }, query: query.trim() ? { q: query.trim() } : undefined }"
-        class="flex gap-3 px-4 py-3.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
+        class="flex gap-3 px-4 py-3.5 text-sm text-foreground hover:bg-accent transition-colors"
       >
-        <div class="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center shrink-0 mt-0.5">
-          <svg class="w-4 h-4 text-primary/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+          <svg class="w-4 h-4 text-primary/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
           </svg>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <span class="font-medium truncate">{{ r.title }}</span>
-            <span v-if="r.space" class="shrink-0 text-[10px] font-semibold text-primary/50 bg-primary/6 px-1.5 py-0.5 rounded-md">{{ r.space }}</span>
+            <span v-if="r.space" class="shrink-0 text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">{{ r.space }}</span>
           </div>
-          <div v-if="r.section" class="text-xs text-primary/70 mt-0.5 truncate font-medium">
+          <div v-if="r.section" class="text-xs text-primary mt-0.5 truncate font-medium">
             <svg class="w-3 h-3 inline-block mr-0.5 -mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
             </svg>
             {{ r.section }}
           </div>
-          <p v-if="r.snippet" class="text-xs text-muted-foreground/60 mt-1 line-clamp-2 leading-relaxed" v-html="highlightSnippet(r.snippet, query)" />
+          <p v-if="r.snippet" class="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed" v-html="highlightSnippet(r.snippet, query)" />
         </div>
-        <svg class="w-3.5 h-3.5 text-muted-foreground/20 shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg class="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
         </svg>
       </RouterLink>
     </div>
 
     <!-- No Results -->
-    <div v-else-if="query && !loading" class="mt-6 text-center py-10 rounded-xl border border-dashed bg-muted/30">
-      <div class="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto mb-3">
-        <svg class="w-5 h-5 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+    <div v-else-if="query && !loading" class="mt-6 text-center py-10 rounded-xl border border-dashed bg-muted/40">
+      <div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+        <svg class="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
         </svg>
       </div>
       <p class="text-sm text-muted-foreground">No results for "<span class="font-semibold text-foreground">{{ query }}</span>"</p>
-      <p class="text-xs text-muted-foreground/50 mt-1.5">Try different keywords or browse by space below</p>
+      <p class="text-xs text-muted-foreground mt-1.5">Try different keywords or browse by space below</p>
     </div>
 
     <!-- Browse Sections -->
     <div v-if="!query && sections.length" class="mt-12">
-      <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground/40 mb-4">Browse by space</p>
+      <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Browse by space</p>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <RouterLink
@@ -105,11 +105,11 @@
             <span class="font-semibold text-[14px] text-foreground group-hover:text-primary transition-colors">
               {{ section.label }}
             </span>
-            <p class="text-xs text-muted-foreground/50 mt-0.5">
+            <p class="text-xs text-muted-foreground mt-0.5">
               {{ countPages(section) }} {{ countPages(section) === 1 ? 'page' : 'pages' }}
             </p>
           </div>
-          <svg class="w-4 h-4 text-muted-foreground/15 group-hover:text-primary/40 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <svg class="w-4 h-4 text-muted-foreground/30 group-hover:text-primary/60 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
           </svg>
         </RouterLink>
@@ -117,10 +117,10 @@
     </div>
 
     <!-- Keyboard hint -->
-    <div v-if="!query" class="mt-10 flex items-center justify-center gap-1.5 text-xs text-muted-foreground/35">
-      <kbd class="inline-flex h-5 items-center gap-0.5 rounded-md border bg-muted/40 px-1.5 font-mono text-[10px]">{{ isMac ? '⌘' : 'Ctrl' }}</kbd>
+    <div v-if="!query" class="mt-10 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+      <kbd class="inline-flex h-5 items-center gap-0.5 rounded-md border bg-muted px-1.5 font-mono text-[10px]">{{ isMac ? '⌘' : 'Ctrl' }}</kbd>
       <span>+</span>
-      <kbd class="inline-flex h-5 items-center gap-0.5 rounded-md border bg-muted/40 px-1.5 font-mono text-[10px]">K</kbd>
+      <kbd class="inline-flex h-5 items-center gap-0.5 rounded-md border bg-muted px-1.5 font-mono text-[10px]">K</kbd>
       <span class="ml-1">to search from anywhere</span>
     </div>
   </div>

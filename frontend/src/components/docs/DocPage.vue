@@ -3,25 +3,25 @@
     <!-- Loading skeleton -->
     <div v-if="store.loading" class="page-pad py-10">
       <div class="h-3 w-24 bg-muted rounded-full animate-pulse" />
-      <div class="h-7 w-2/3 bg-muted/70 rounded-lg mt-4 animate-pulse" />
+      <div class="h-7 w-2/3 bg-muted rounded-lg mt-4 animate-pulse" />
       <div class="h-px bg-border mt-6 mb-8" />
       <div class="space-y-3.5">
-        <div class="h-3.5 w-full bg-muted/40 rounded-full animate-pulse" />
-        <div class="h-3.5 w-[92%] bg-muted/40 rounded-full animate-pulse" />
-        <div class="h-3.5 w-5/6 bg-muted/35 rounded-full animate-pulse" />
-        <div class="h-3.5 w-3/4 bg-muted/30 rounded-full animate-pulse" />
+        <div class="h-3.5 w-full bg-muted rounded-full animate-pulse" />
+        <div class="h-3.5 w-[92%] bg-muted rounded-full animate-pulse" />
+        <div class="h-3.5 w-5/6 bg-muted rounded-full animate-pulse" />
+        <div class="h-3.5 w-3/4 bg-muted rounded-full animate-pulse" />
       </div>
       <div class="mt-8 space-y-3.5">
-        <div class="h-5 w-40 bg-muted/50 rounded-lg animate-pulse" />
-        <div class="h-3.5 w-full bg-muted/35 rounded-full animate-pulse" />
-        <div class="h-3.5 w-[88%] bg-muted/30 rounded-full animate-pulse" />
+        <div class="h-5 w-40 bg-muted rounded-lg animate-pulse" />
+        <div class="h-3.5 w-full bg-muted rounded-full animate-pulse" />
+        <div class="h-3.5 w-[88%] bg-muted rounded-full animate-pulse" />
       </div>
     </div>
 
     <!-- Error -->
     <div v-else-if="store.error" class="page-pad py-24 text-center">
-      <div class="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto mb-4">
-        <svg class="w-6 h-6 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+      <div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+        <svg class="w-6 h-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
         </svg>
       </div>
@@ -36,7 +36,7 @@
           <Breadcrumbs :crumbs="store.currentPage.breadcrumbs" />
 
           <!-- Search match banner -->
-          <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-accent border border-primary/15 text-xs text-accent-foreground">
+          <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-accent border border-primary/20 text-xs text-accent-foreground">
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
@@ -52,13 +52,13 @@
             {{ store.currentPage.title }}
           </h1>
 
-          <div class="mt-6 pt-6 border-t border-border/60">
+          <div class="mt-6 pt-6 border-t border-border-subtle">
             <ProseContent :html="store.currentPage.rendered_html" />
           </div>
 
           <!-- Footer -->
           <footer class="mt-12 pt-6 border-t">
-            <div class="flex items-center justify-between text-xs text-muted-foreground/40">
+            <div class="flex items-center justify-between text-xs text-muted-foreground">
               <span v-if="store.currentPage.last_synced">
                 Last updated {{ formatDate(store.currentPage.last_synced) }}
               </span>

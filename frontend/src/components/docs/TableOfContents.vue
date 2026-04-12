@@ -1,6 +1,6 @@
 <template>
   <nav v-if="headings.length" aria-label="Table of contents">
-    <p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40 mb-2">On this page</p>
+    <p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">On this page</p>
     <ul class="toc-list">
       <li v-for="h in headings" :key="h.id">
         <a
@@ -119,7 +119,7 @@ onBeforeUnmount(() => observer?.disconnect())
   padding: 3px 0 3px 10px;
   border-left: 1.5px solid transparent;
   color: var(--muted-foreground);
-  opacity: 0.6;
+  opacity: 0.7;
   transition: all 0.15s ease;
   white-space: nowrap;
   overflow: hidden;

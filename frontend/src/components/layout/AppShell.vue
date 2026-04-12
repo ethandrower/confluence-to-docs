@@ -1,12 +1,12 @@
 <template>
   <div class="min-h-screen flex flex-col">
     <!-- Header -->
-    <header class="sticky top-0 z-50 h-14 border-b border-border/70 bg-card shadow-[0_1px_3px_0_oklch(0_0_0/0.04)]">
+    <header class="sticky top-0 z-50 h-14 border-b bg-card shadow-[0_1px_3px_0_oklch(0_0_0/0.04)]">
       <div class="flex items-center h-full px-4 gap-3">
         <!-- Mobile menu trigger -->
         <Sheet v-model:open="mobileOpen">
           <SheetTrigger as-child>
-            <button class="lg:hidden p-1.5 -ml-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors" aria-label="Menu">
+            <button class="lg:hidden p-1.5 -ml-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Menu">
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
@@ -37,12 +37,12 @@
           <RouterLink
             to="/docs"
             class="px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors"
-            :class="isDocs ? 'text-primary bg-primary/8' : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'"
+            :class="isDocs ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
           >Docs</RouterLink>
           <RouterLink
             to="/tickets"
             class="px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors"
-            :class="isTickets ? 'text-primary bg-primary/8' : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'"
+            :class="isTickets ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
           >Tickets</RouterLink>
         </nav>
 
@@ -52,13 +52,13 @@
         <button
           @click="searchOpen = true"
           aria-label="Search documentation"
-          class="hidden sm:inline-flex items-center gap-2 h-8 w-52 px-3 rounded-lg border border-border/60 text-[13px] text-muted-foreground/50 bg-background hover:bg-muted/40 hover:text-muted-foreground hover:border-border transition-all"
+          class="hidden sm:inline-flex items-center gap-2 h-8 w-52 px-3 rounded-lg border border-border-subtle text-[13px] text-muted-foreground bg-background hover:bg-muted hover:text-muted-foreground hover:border-border transition-all"
         >
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
           </svg>
           <span class="flex-1 text-left truncate">Search...</span>
-          <kbd class="hidden md:inline-flex h-5 items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] text-muted-foreground/50">
+          <kbd class="hidden md:inline-flex h-5 items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] text-muted-foreground">
             {{ isMac ? '⌘' : '⌃' }}K
           </kbd>
         </button>
@@ -70,7 +70,7 @@
         </div>
 
         <!-- Search — mobile -->
-        <button @click="searchOpen = true" class="sm:hidden p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors" aria-label="Search">
+        <button @click="searchOpen = true" class="sm:hidden p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Search">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
           </svg>
