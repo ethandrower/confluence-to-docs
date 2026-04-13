@@ -1,20 +1,25 @@
 <template>
   <CommandDialog :open="open" @update:open="$emit('update:open', $event)">
-    <CommandInput placeholder="Type to search documentation..." />
-    <CommandList>
-      <CommandEmpty>
-        <div class="py-10 text-center">
-          <div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-            <svg class="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-            </svg>
-          </div>
-          <p class="text-sm font-medium text-muted-foreground">No results found</p>
-          <p class="text-xs text-muted-foreground mt-1">Try a different search term</p>
-        </div>
-      </CommandEmpty>
+    <!-- Custom search input — same pattern as DocSearch home page -->
+    <div class="flex h-12 items-center gap-2.5 border-b px-4">
+      <svg class="size-4 shrink-0 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+      </svg>
+      <input
+        ref="searchInputRef"
+        v-model="query"
+        type="text"
+        placeholder="Type to search documentation..."
+        class="flex h-11 w-full bg-transparent py-3 text-[15px] outline-hidden placeholder:text-muted-foreground/50"
+        @input="onInput"
+      />
+      <div v-if="loading" class="shrink-0">
+        <div class="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    </div>
 
-      <!-- Recent / initial state hint -->
+    <div class="max-h-[360px] overflow-y-auto">
+      <!-- Initial state -->
       <div v-if="!hasSearched" class="py-10 text-center">
         <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
           <svg class="w-5 h-5 text-primary/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -25,13 +30,14 @@
         <p class="text-xs text-muted-foreground mt-1">Start typing to find pages</p>
       </div>
 
-      <CommandGroup v-if="results.length" heading="Pages">
-        <CommandItem
+      <!-- Results -->
+      <div v-if="results.length" class="py-1">
+        <div class="px-4 py-1.5 text-xs font-semibold text-muted-foreground">Pages</div>
+        <button
           v-for="r in results"
           :key="r.slug"
-          :value="r.title"
-          @select="navigate(r.slug)"
-          class="cursor-pointer"
+          @click="navigate(r.slug)"
+          class="flex items-center gap-3 w-full px-4 py-2.5 text-left hover:bg-accent transition-colors cursor-pointer"
         >
           <div class="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
             <svg class="h-3.5 w-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -39,22 +45,28 @@
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <span class="block truncate font-medium">{{ r.title }}</span>
+            <span class="block truncate font-medium text-sm">{{ r.title }}</span>
             <span v-if="r.section" class="block text-xs text-primary/70 truncate mt-0.5">{{ r.section }}</span>
             <span v-if="r.snippet" class="block text-[11px] text-muted-foreground truncate mt-0.5">{{ r.snippet }}</span>
           </div>
-        </CommandItem>
-      </CommandGroup>
-    </CommandList>
+        </button>
+      </div>
+
+      <!-- No results -->
+      <div v-else-if="hasSearched && !loading" class="py-10 text-center">
+        <div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+          <svg class="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+        </div>
+        <p class="text-sm font-medium text-muted-foreground">No results found</p>
+        <p class="text-xs text-muted-foreground mt-1">Try a different search term</p>
+      </div>
+    </div>
 
     <!-- Footer -->
     <div class="flex items-center justify-between border-t px-4 py-2.5 text-[11px] text-muted-foreground">
       <div class="flex items-center gap-3">
-        <span class="inline-flex items-center gap-1">
-          <kbd class="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border bg-muted px-1 font-mono text-[10px]">&uarr;</kbd>
-          <kbd class="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border bg-muted px-1 font-mono text-[10px]">&darr;</kbd>
-          <span class="ml-0.5">navigate</span>
-        </span>
         <span class="inline-flex items-center gap-1">
           <kbd class="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border bg-muted px-1 font-mono text-[10px]">&crarr;</kbd>
           <span class="ml-0.5">open</span>
@@ -69,63 +81,42 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDocsStore } from '@/stores/docs.js'
 import { useDebouncedSearch } from '@/lib/useDebounce.js'
-import {
-  CommandDialog,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-} from '@/components/ui/command'
+import { CommandDialog } from '@/components/ui/command'
 
 const props = defineProps({ open: Boolean })
 const emit = defineEmits(['update:open'])
 const store = useDocsStore()
 const router = useRouter()
+const searchInputRef = ref(null)
 
-const currentQuery = ref('')
+const query = ref('')
 
-const { results, hasSearched, search: doSearch, reset } = useDebouncedSearch(async (q) => {
+const { results, loading, hasSearched, search: doSearch, reset } = useDebouncedSearch(async (q) => {
   await store.search(q)
   return store.searchResults
 }, 150)
 
-function onSearchInput(val) {
-  currentQuery.value = val || ''
-  doSearch(val)
+function onInput() {
+  doSearch(query.value)
 }
-
-let inputHandler = null
 
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     reset()
-    currentQuery.value = ''
-    // Attach listener after dialog renders
-    setTimeout(() => {
-      const input = document.querySelector('[cmdk-input]')
-      if (input && !inputHandler) {
-        inputHandler = (e) => onSearchInput(e.target.value)
-        input.addEventListener('input', inputHandler)
-      }
-    }, 50)
-  } else {
-    // Clean up listener on close
-    const input = document.querySelector('[cmdk-input]')
-    if (input && inputHandler) {
-      input.removeEventListener('input', inputHandler)
-      inputHandler = null
-    }
+    query.value = ''
+    nextTick(() => {
+      searchInputRef.value?.focus()
+    })
   }
 })
 
 function navigate(slug) {
   emit('update:open', false)
-  const q = currentQuery.value.trim()
+  const q = query.value.trim()
   router.push({
     name: 'doc-page',
     params: { slug },
@@ -133,7 +124,7 @@ function navigate(slug) {
   })
 }
 
-function onEsc(e) {
+function onKey(e) {
   if (e.key === 'Escape' && props.open) {
     e.preventDefault()
     e.stopPropagation()
@@ -141,6 +132,6 @@ function onEsc(e) {
   }
 }
 
-onMounted(() => document.addEventListener('keydown', onEsc, true))
-onBeforeUnmount(() => document.removeEventListener('keydown', onEsc, true))
+onMounted(() => document.addEventListener('keydown', onKey, true))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey, true))
 </script>
