@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import axios from 'axios'
 
 export const useDocsStore = defineStore('docs', () => {
+  const sections = ref([])
   const tree = ref([])
   const currentPage = ref(null)
   const searchResults = ref([])
@@ -10,11 +11,20 @@ export const useDocsStore = defineStore('docs', () => {
   const error = ref(null)
 
   async function fetchTree() {
-    if (tree.value.length > 0) return
+    if (sections.value.length > 0) return
     loading.value = true
     try {
       const res = await axios.get('/api/docs/')
-      tree.value = res.data.results
+      // New grouped response
+      if (res.data.sections) {
+        sections.value = res.data.sections
+        // Flatten for backward compat
+        tree.value = res.data.sections.flatMap(s => s.pages)
+      } else if (res.data.results) {
+        // Fallback to old format
+        tree.value = res.data.results
+        sections.value = [{ space_key: 'all', label: 'Documentation', pages: res.data.results }]
+      }
     } catch (e) {
       error.value = 'Failed to load navigation'
     } finally {
@@ -45,5 +55,5 @@ export const useDocsStore = defineStore('docs', () => {
     searchResults.value = res.data.results
   }
 
-  return { tree, currentPage, searchResults, loading, error, fetchTree, fetchPage, search }
+  return { sections, tree, currentPage, searchResults, loading, error, fetchTree, fetchPage, search }
 })

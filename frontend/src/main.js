@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router/index.js'
+import '@fontsource-variable/source-sans-3'
 import './assets/confluence-content.css'
 import './assets/main.css'
 

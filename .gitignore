@@ -27,3 +27,13 @@ media/
 
 # OS
 .DS_Store
+
+# Claude Code
+.claude/
+
+# Vite cache
+.vite/
+
+# Design specs & plans (local only)
+docs/superpowers/
+claude-ui-refactor-starter/
