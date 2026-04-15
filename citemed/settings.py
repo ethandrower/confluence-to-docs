@@ -144,6 +144,7 @@ EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Support <noreply@example.com>')
+SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='support@citemed.com')
 
 LOGGING = {
     'version': 1,

@@ -39,8 +39,6 @@ class DocPageDetailSerializer(serializers.ModelSerializer):
 
 
 class PortalUserSerializer(serializers.ModelSerializer):
-    can_submit_tickets = serializers.BooleanField(source='is_jsm_customer', read_only=True)
-
     class Meta:
         model = PortalUser
-        fields = ['id', 'email', 'name', 'can_submit_tickets']
+        fields = ['id', 'email', 'name']

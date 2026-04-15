@@ -42,8 +42,8 @@
           <RouterLink
             to="/tickets"
             class="px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors"
-            :class="isTickets ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
-          >Tickets</RouterLink>
+            :class="isContact ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
+          >Contact</RouterLink>
         </nav>
 
         <div class="flex-1" />
@@ -80,7 +80,7 @@
 
     <div class="flex flex-1 overflow-hidden">
       <!-- Sidebar — desktop -->
-      <aside class="hidden lg:block w-[var(--sidebar-width)] shrink-0 border-r bg-sidebar">
+      <aside v-if="!hideSidebar" class="hidden lg:block w-[var(--sidebar-width)] shrink-0 border-r bg-sidebar">
         <ScrollArea class="h-[calc(100vh-var(--nav-height))]">
           <div class="pt-3 pb-6">
             <slot name="sidebar" />
@@ -105,6 +105,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescri
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
 
+defineProps({ hideSidebar: Boolean })
 const route = useRoute()
 const auth = useAuthStore()
 const mobileOpen = ref(false)
@@ -112,7 +113,7 @@ const searchOpen = ref(false)
 const isMac = ref(false)
 
 const isDocs = computed(() => route.path.startsWith('/docs'))
-const isTickets = computed(() => route.path.startsWith('/tickets'))
+const isContact = computed(() => route.path === '/tickets')
 
 function onKey(e) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
