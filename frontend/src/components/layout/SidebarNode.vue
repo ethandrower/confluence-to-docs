@@ -17,15 +17,20 @@
         </svg>
       </button>
 
-      <RouterLink
-        :to="{ name: 'doc-page', params: { slug: page.slug } }"
+      <component
+        :is="page.is_folder ? 'span' : 'RouterLink'"
+        v-bind="page.is_folder ? {} : { to: { name: 'doc-page', params: { slug: page.slug } } }"
         :title="page.title"
         class="tree-label"
-        :class="isActive
-          ? 'text-primary font-semibold'
-          : 'text-muted-foreground hover:text-foreground'"
+        :class="[
+          page.is_folder ? 'tree-label--folder' : '',
+          isActive
+            ? 'text-primary font-semibold'
+            : 'text-muted-foreground hover:text-foreground'
+        ]"
         :data-sidebar-active="isActive || undefined"
-      >{{ page.title }}</RouterLink>
+        @click="page.is_folder && hasChildren ? (expanded = !expanded) : null"
+      >{{ displayTitle }}</component>
       <span
         v-if="hasChildren && !expanded"
         class="tree-badge"
@@ -51,7 +56,15 @@ const props = defineProps({ page: Object, depth: Number })
 const route = useRoute()
 const currentSlug = computed(() => route.params.slug)
 const hasChildren = computed(() => props.page.children?.length > 0)
-const isActive = computed(() => currentSlug.value === props.page.slug)
+const isActive = computed(() => !props.page.is_folder && currentSlug.value === props.page.slug)
+
+// Strip version prefixes like "v5.5.4 " or "V5.5.4 " from titles
+// when the page is inside a version subtree (cleaner sidebar display)
+const displayTitle = computed(() => {
+  const t = props.page.title
+  return t.replace(/^[Vv]\d+\.\d+(?:\.\d+)?\s+[-–]\s*/, '')  // "V5.5.4 - current version" → "current version"
+          .replace(/^[Vv]\d+\.\d+(?:\.\d+)?\s+/, '')           // "v5.5.4 Quickstart" → "Quickstart"
+})
 const isInSubtree = computed(() => !isActive.value && subtreeContains(props.page, currentSlug.value))
 const childCount = computed(() => {
   if (!hasChildren.value) return 0
@@ -131,6 +144,16 @@ watch(currentSlug, (slug) => {
   overflow: hidden;
   text-overflow: ellipsis;
   transition: color 0.1s;
+}
+
+/* Folder labels: not clickable as links, slightly different style */
+.tree-label--folder {
+  cursor: default;
+  font-weight: 550;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  opacity: 0.75;
 }
 
 /* Slightly smaller text at deep levels */
