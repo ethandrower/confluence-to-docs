@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import axios from 'axios'
 
 export const useDocsStore = defineStore('docs', () => {
@@ -10,18 +10,26 @@ export const useDocsStore = defineStore('docs', () => {
   const loading = ref(false)
   const error = ref(null)
 
+  // Version state: keyed by space_key → selected version label (e.g. "v5.5.8")
+  const selectedVersions = ref({})
+
   async function fetchTree() {
     if (sections.value.length > 0) return
     loading.value = true
     try {
       const res = await axios.get('/api/docs/')
-      // New grouped response
       if (res.data.sections) {
         sections.value = res.data.sections
-        // Flatten for backward compat
         tree.value = res.data.sections.flatMap(s => s.pages)
+
+        // Auto-select latest version for any space that has versions
+        for (const section of res.data.sections) {
+          if (section.versions?.length) {
+            const latest = section.versions.find(v => v.is_latest) || section.versions[0]
+            selectedVersions.value[section.space_key] = latest.label
+          }
+        }
       } else if (res.data.results) {
-        // Fallback to old format
         tree.value = res.data.results
         sections.value = [{ space_key: 'all', label: 'Documentation', pages: res.data.results }]
       }
@@ -30,6 +38,19 @@ export const useDocsStore = defineStore('docs', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  function selectVersion(spaceKey, versionLabel) {
+    selectedVersions.value[spaceKey] = versionLabel
+  }
+
+  function getSelectedVersion(spaceKey) {
+    return selectedVersions.value[spaceKey] || null
+  }
+
+  function getVersionsForSpace(spaceKey) {
+    const section = sections.value.find(s => s.space_key === spaceKey)
+    return section?.versions || []
   }
 
   async function fetchPage(slug) {
@@ -55,5 +76,10 @@ export const useDocsStore = defineStore('docs', () => {
     searchResults.value = res.data.results
   }
 
-  return { sections, tree, currentPage, searchResults, loading, error, fetchTree, fetchPage, search }
+  return {
+    sections, tree, currentPage, searchResults, loading, error,
+    selectedVersions,
+    fetchTree, fetchPage, search,
+    selectVersion, getSelectedVersion, getVersionsForSpace,
+  }
 })
