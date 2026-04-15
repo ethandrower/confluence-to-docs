@@ -7,8 +7,8 @@
 /*
  * Design system: CiteMed Documentation
  *
- * Palette: Warm neutrals with rich emerald accent.
- * Confident, professional, warm — not timid or washed out.
+ * Palette: CiteMed brand blue (#3578FF) on cool neutral grays.
+ * Clean, professional, trustworthy — matches citemed_web identity.
  *
  * Type: Inter Variable for UI, Source Sans 3 for reading.
  * Spacing: 4px grid. Radius: 8px default.
@@ -23,36 +23,36 @@
   --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
   --font-reading: 'Source Sans 3 Variable', 'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif;
 
-  /* Rich warm palette — deeper emerald, warmer stone */
+  /* CiteMed brand palette — blue primary, cool neutrals */
   --radius: 0.5rem;
-  --background: oklch(0.975 0.004 70);
-  --foreground: oklch(0.12 0.02 50);
-  --card: oklch(0.993 0.002 70);
-  --card-foreground: oklch(0.12 0.02 50);
-  --popover: oklch(0.993 0.002 70);
-  --popover-foreground: oklch(0.12 0.02 50);
-  --primary: oklch(0.42 0.12 165);
-  --primary-foreground: oklch(0.98 0.005 165);
-  --secondary: oklch(0.96 0.005 60);
-  --secondary-foreground: oklch(0.22 0.02 50);
-  --muted: oklch(0.94 0.006 60);
-  --muted-foreground: oklch(0.40 0.015 50);
-  --accent: oklch(0.92 0.03 165);
-  --accent-foreground: oklch(0.18 0.02 50);
+  --background: oklch(0.98 0.004 265);
+  --foreground: oklch(0.13 0.015 260);
+  --card: oklch(0.995 0.002 265);
+  --card-foreground: oklch(0.13 0.015 260);
+  --popover: oklch(0.995 0.002 265);
+  --popover-foreground: oklch(0.13 0.015 260);
+  --primary: oklch(0.52 0.20 260);
+  --primary-foreground: oklch(0.98 0.01 260);
+  --secondary: oklch(0.96 0.005 260);
+  --secondary-foreground: oklch(0.22 0.015 260);
+  --muted: oklch(0.94 0.006 260);
+  --muted-foreground: oklch(0.40 0.015 260);
+  --accent: oklch(0.95 0.03 260);
+  --accent-foreground: oklch(0.18 0.015 260);
   --destructive: oklch(0.53 0.22 25);
-  --border: oklch(0.87 0.012 60);
-  --border-subtle: oklch(0.91 0.008 60);
-  --input: oklch(0.87 0.012 60);
-  --ring: oklch(0.42 0.12 165);
-  --accent-hover: oklch(0.88 0.04 165);
-  --sidebar: oklch(0.97 0.005 60);
-  --sidebar-foreground: oklch(0.12 0.02 50);
-  --sidebar-primary: oklch(0.42 0.12 165);
-  --sidebar-primary-foreground: oklch(0.98 0.005 165);
-  --sidebar-accent: oklch(0.92 0.03 165);
-  --sidebar-accent-foreground: oklch(0.18 0.02 50);
-  --sidebar-border: oklch(0.87 0.012 60);
-  --sidebar-ring: oklch(0.42 0.12 165);
+  --border: oklch(0.88 0.010 260);
+  --border-subtle: oklch(0.91 0.008 260);
+  --input: oklch(0.88 0.010 260);
+  --ring: oklch(0.52 0.20 260);
+  --accent-hover: oklch(0.92 0.04 260);
+  --sidebar: oklch(0.975 0.005 265);
+  --sidebar-foreground: oklch(0.13 0.015 260);
+  --sidebar-primary: oklch(0.52 0.20 260);
+  --sidebar-primary-foreground: oklch(0.98 0.01 260);
+  --sidebar-accent: oklch(0.95 0.03 260);
+  --sidebar-accent-foreground: oklch(0.18 0.015 260);
+  --sidebar-border: oklch(0.88 0.010 260);
+  --sidebar-ring: oklch(0.52 0.20 260);
 }
 
 html {
@@ -84,7 +84,7 @@ button { font: inherit; cursor: pointer; }
 *:hover { scrollbar-color: oklch(0 0 0 / 0.1) transparent; }
 
 ::selection {
-  background: oklch(0.42 0.12 165 / 0.18);
+  background: oklch(0.52 0.20 260 / 0.18);
 }
 
 @theme inline {

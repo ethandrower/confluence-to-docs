@@ -118,7 +118,7 @@ onBeforeUnmount(() => observer?.disconnect())
   line-height: 1.5;
   padding: 3px 8px;
   border-radius: 4px;
-  color: oklch(0.35 0.015 50);
+  color: oklch(0.35 0.012 260);
   transition: all 0.15s ease;
   white-space: nowrap;
   overflow: hidden;

@@ -143,7 +143,7 @@ const { results, loading, search: doSearch } = useDebouncedSearch(async (q) => {
 const sections = computed(() => store.sections || [])
 
 const sectionColors = [
-  'oklch(0.42 0.12 165)',  // emerald
+  'oklch(0.52 0.20 260)',  // brand blue
   'oklch(0.44 0.10 210)',  // teal-blue
   'oklch(0.48 0.12 55)',   // warm sand
   'oklch(0.45 0.12 145)',  // forest

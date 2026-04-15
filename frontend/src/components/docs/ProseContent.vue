@@ -343,7 +343,7 @@ const EMOJI = {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   margin: 1.25rem 0;
-  border: 1px solid oklch(0.92 0.006 60);
+  border: 1px solid oklch(0.92 0.006 260);
   border-radius: 10px;
 }
 .confluence-content .table-wrap table {
@@ -360,19 +360,19 @@ const EMOJI = {
   border-radius: 5px;
   font-size: 0.75rem;
   font-weight: 500;
-  background: oklch(0.96 0.006 60);
-  color: oklch(0.38 0.015 50);
-  border: 1px solid oklch(0.93 0.006 60);
+  background: oklch(0.96 0.006 260);
+  color: oklch(0.38 0.012 260);
+  border: 1px solid oklch(0.93 0.006 260);
 }
 
 /* Image placeholder */
 .confluence-content .img-placeholder {
   border-radius: 10px;
-  border: 1px dashed oklch(0.90 0.006 60);
-  background: oklch(0.98 0.003 60);
+  border: 1px dashed oklch(0.90 0.006 260);
+  background: oklch(0.98 0.003 260);
   padding: 1.25rem;
   font-size: 0.8125rem;
-  color: oklch(0.55 0.015 50);
+  color: oklch(0.55 0.012 260);
   text-align: center;
   margin: 1rem 0;
 }
@@ -385,17 +385,17 @@ const EMOJI = {
   right: 8px;
   padding: 3px 10px;
   font-size: 11px;
-  color: oklch(0.6 0.01 50);
-  background: oklch(0.22 0.015 50);
-  border: 1px solid oklch(0.30 0.015 50);
+  color: oklch(0.6 0.01 260);
+  background: oklch(0.22 0.012 260);
+  border: 1px solid oklch(0.30 0.012 260);
   border-radius: 6px;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
 }
 .confluence-content pre:hover .copy-btn { opacity: 1; }
-.confluence-content pre .copy-btn:hover { background: oklch(0.28 0.015 50); }
-.confluence-content pre .copy-btn.copied { color: oklch(0.65 0.13 160); }
+.confluence-content pre .copy-btn:hover { background: oklch(0.28 0.012 260); }
+.confluence-content pre .copy-btn.copied { color: oklch(0.65 0.18 260); }
 
 /* Heading anchor */
 .confluence-content .anchor-link {
@@ -407,6 +407,6 @@ const EMOJI = {
   transition: color 0.15s;
 }
 .confluence-content .group:hover .anchor-link {
-  color: oklch(0.44 0.11 170 / 0.4);
+  color: oklch(0.52 0.20 260 / 0.4);
 }
 </style>

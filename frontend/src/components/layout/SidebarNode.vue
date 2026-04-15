@@ -93,12 +93,12 @@ watch(currentSlug, (slug) => {
 }
 
 .tree-item--active {
-  --tree-line-color: oklch(0.42 0.12 165 / 0.35);
-  --tree-node-color: oklch(0.42 0.12 165);
+  --tree-line-color: oklch(0.52 0.20 260 / 0.35);
+  --tree-node-color: oklch(0.52 0.20 260);
 }
 
 .tree-item--in-path {
-  --tree-line-color: oklch(0.42 0.12 165 / 0.2);
+  --tree-line-color: oklch(0.52 0.20 260 / 0.2);
 }
 
 /* Row layout */
@@ -203,13 +203,13 @@ watch(currentSlug, (slug) => {
 /* Active node: bigger + colored */
 .tree-children > .tree-item--active::after {
   --tree-node: 7px;
-  background: var(--tree-node-color, oklch(0.42 0.12 165));
-  box-shadow: 0 0 0 3px oklch(0.42 0.12 165 / 0.12);
+  background: var(--tree-node-color, oklch(0.52 0.20 260));
+  box-shadow: 0 0 0 3px oklch(0.52 0.20 260 / 0.12);
 }
 
 /* In-path node: slightly bigger */
 .tree-children > .tree-item--in-path::after {
   --tree-node: 6px;
-  background: oklch(0.42 0.12 165 / 0.4);
+  background: oklch(0.52 0.20 260 / 0.4);
 }
 </style>

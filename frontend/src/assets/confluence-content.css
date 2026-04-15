@@ -8,7 +8,7 @@
   font-family: var(--font-reading);
   font-size: 16px;
   line-height: 1.8;
-  color: oklch(0.18 0.015 50);
+  color: oklch(0.18 0.012 260);
   max-width: var(--content-max-width, 860px);
 }
 
@@ -21,7 +21,7 @@
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 1.75rem 0 0.625rem;
-  color: oklch(0.12 0.02 50);
+  color: oklch(0.13 0.015 260);
 }
 
 .confluence-content h2 {
@@ -32,8 +32,8 @@
   line-height: 1.3;
   margin: 2rem 0 0.625rem;
   padding-bottom: 0.5rem;
-  border-bottom: 2px solid oklch(0.42 0.12 165 / 0.15);
-  color: oklch(0.12 0.02 50);
+  border-bottom: 2px solid oklch(0.52 0.20 260 / 0.15);
+  color: oklch(0.13 0.015 260);
 }
 
 .confluence-content h3 {
@@ -42,9 +42,9 @@
   font-weight: 620;
   line-height: 1.35;
   margin: 1.75rem 0 0.5rem;
-  color: oklch(0.16 0.015 50);
+  color: oklch(0.16 0.012 260);
   padding-left: 0.75rem;
-  border-left: 3px solid oklch(0.42 0.12 165 / 0.25);
+  border-left: 3px solid oklch(0.52 0.20 260 / 0.25);
 }
 
 .confluence-content h4 {
@@ -53,7 +53,7 @@
   font-weight: 600;
   line-height: 1.4;
   margin: 1.75rem 0 0.5rem;
-  color: oklch(0.28 0.015 50);
+  color: oklch(0.28 0.012 260);
 }
 
 /* ── Body text ─────────────────────────────────────────────── */
@@ -80,7 +80,7 @@
 
 .confluence-content strong {
   font-weight: 620;
-  color: oklch(0.12 0.02 50);
+  color: oklch(0.13 0.015 260);
 }
 
 /* ── Definition-style paragraphs ──────────────────────────── */
@@ -90,7 +90,7 @@
 .confluence-content .def-entry {
   padding-left: 0.875rem;
   margin: 0.75rem 0;
-  border-left: 2px solid oklch(0.42 0.12 165 / 0.2);
+  border-left: 2px solid oklch(0.52 0.20 260 / 0.2);
 }
 
 .confluence-content .def-entry strong:first-child {
@@ -98,7 +98,7 @@
   font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: oklch(0.42 0.12 165);
+  color: oklch(0.52 0.20 260);
 }
 
 /* ── Rich list items ──────────────────────────────────────── */
@@ -113,34 +113,34 @@
 .confluence-content .rich-list > li {
   padding: 0.5rem 0 0.5rem 0.875rem;
   margin-bottom: 0.25rem;
-  border-left: 2px solid oklch(0.92 0.006 60);
+  border-left: 2px solid oklch(0.92 0.006 260);
   transition: border-color 0.15s;
 }
 
 .confluence-content .rich-list > li:hover {
-  border-color: oklch(0.42 0.12 165 / 0.3);
+  border-color: oklch(0.52 0.20 260 / 0.3);
 }
 
 .confluence-content .rich-list > li > strong:first-child {
   font-family: var(--font-ui);
-  color: oklch(0.20 0.02 50);
+  color: oklch(0.20 0.015 260);
   font-weight: 650;
 }
 
 /* ── Links ─────────────────────────────────────────────────── */
 
 .confluence-content a {
-  color: oklch(0.42 0.12 165);
+  color: oklch(0.52 0.20 260);
   text-decoration: underline;
-  text-decoration-color: oklch(0.42 0.12 165 / 0.25);
+  text-decoration-color: oklch(0.52 0.20 260 / 0.25);
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
   transition: text-decoration-color 0.15s ease, color 0.15s ease;
 }
 
 .confluence-content a:hover {
-  text-decoration-color: oklch(0.42 0.12 165 / 0.8);
-  color: oklch(0.35 0.12 165);
+  text-decoration-color: oklch(0.52 0.20 260 / 0.8);
+  color: oklch(0.45 0.20 260);
 }
 
 /* ── Images ────────────────────────────────────────────────── */
@@ -168,15 +168,15 @@
   font-size: 0.75rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: oklch(0.35 0.015 50);
+  color: oklch(0.35 0.012 260);
   padding: 10px 14px;
-  background: oklch(0.965 0.006 60);
+  background: oklch(0.965 0.006 260);
   border-bottom: 2px solid var(--border);
 }
 
 .confluence-content td {
   padding: 10px 14px;
-  border-bottom: 1px solid oklch(0.93 0.005 60);
+  border-bottom: 1px solid oklch(0.93 0.005 260);
   vertical-align: top;
 }
 
@@ -185,7 +185,7 @@
 }
 
 .confluence-content tr:hover td {
-  background: oklch(0.98 0.005 60);
+  background: oklch(0.98 0.005 260);
 }
 
 /* ── Code ──────────────────────────────────────────────────── */
@@ -195,15 +195,15 @@
 .confluence-content td code {
   font-family: 'Menlo', 'Monaco', ui-monospace, monospace;
   font-size: 0.8em;
-  background: oklch(0.96 0.006 60);
+  background: oklch(0.96 0.006 260);
   padding: 2px 7px;
   border-radius: 5px;
-  color: oklch(0.38 0.12 165);
-  border: 1px solid oklch(0.93 0.006 60);
+  color: oklch(0.48 0.20 260);
+  border: 1px solid oklch(0.93 0.006 260);
 }
 
 .confluence-content pre {
-  background: oklch(0.15 0.015 50);
+  background: oklch(0.15 0.012 260);
   border-radius: 10px;
   padding: 1rem 1.25rem;
   overflow-x: auto;
@@ -214,7 +214,7 @@
   font-family: 'Menlo', 'Monaco', ui-monospace, monospace;
   font-size: 0.8125rem;
   line-height: 1.7;
-  color: oklch(0.88 0.01 50);
+  color: oklch(0.88 0.01 260);
   background: none;
   padding: 0;
   border-radius: 0;
@@ -224,11 +224,11 @@
 /* ── Blockquotes ───────────────────────────────────────────── */
 
 .confluence-content blockquote {
-  border-left: 3px solid oklch(0.42 0.12 165 / 0.3);
+  border-left: 3px solid oklch(0.52 0.20 260 / 0.3);
   padding: 0.5rem 0 0.5rem 1rem;
   margin: 1.25rem 0;
-  color: oklch(0.33 0.015 50);
-  background: oklch(0.985 0.003 60);
+  color: oklch(0.33 0.012 260);
+  background: oklch(0.985 0.003 260);
   border-radius: 0 8px 8px 0;
 }
 
@@ -238,7 +238,7 @@
 
 .confluence-content hr {
   border: none;
-  border-top: 1px solid oklch(0.92 0.006 60);
+  border-top: 1px solid oklch(0.92 0.006 260);
   margin: 1.5rem 0;
 }
 
@@ -255,7 +255,7 @@
 
 .confluence-content .panel p:last-child { margin-bottom: 0; }
 .confluence-content .panel-note    { background: oklch(0.97 0.015 210); border-color: oklch(0.48 0.10 210); }
-.confluence-content .panel-info    { background: oklch(0.97 0.02 165); border-color: oklch(0.50 0.12 165); }
+.confluence-content .panel-info    { background: oklch(0.97 0.02 260); border-color: oklch(0.55 0.18 260); }
 .confluence-content .panel-warning { background: oklch(0.975 0.025 80); border-color: oklch(0.62 0.15 70); }
 .confluence-content .panel-tip     { background: oklch(0.97 0.02 145); border-color: oklch(0.45 0.12 145); }
 
@@ -270,13 +270,13 @@
 }
 .confluence-content .task-item input[type="checkbox"] {
   margin-top: 4px;
-  accent-color: oklch(0.42 0.12 165);
+  accent-color: oklch(0.52 0.20 260);
 }
 
 /* ── Expand ────────────────────────────────────────────────── */
 
 .confluence-content .confluence-expand {
-  border: 1px solid oklch(0.92 0.006 60);
+  border: 1px solid oklch(0.92 0.006 260);
   border-radius: 10px;
   margin: 1.25rem 0;
   overflow: hidden;
@@ -287,15 +287,15 @@
   font-weight: 500;
   font-size: 0.875rem;
   cursor: pointer;
-  background: oklch(0.98 0.003 60);
+  background: oklch(0.98 0.003 260);
   transition: background 0.15s;
 }
 .confluence-content .confluence-expand-title:hover {
-  background: oklch(0.97 0.004 60);
+  background: oklch(0.97 0.004 260);
 }
 .confluence-content .confluence-expand-content {
   padding: 0.75rem 0.875rem;
-  border-top: 1px solid oklch(0.93 0.006 60);
+  border-top: 1px solid oklch(0.93 0.006 260);
 }
 
 .confluence-content .toc-placeholder { display: none; }
