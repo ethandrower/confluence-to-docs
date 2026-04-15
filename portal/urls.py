@@ -14,7 +14,5 @@ urlpatterns = [
     path('auth/logout/', auth.logout, name='auth-logout'),
 
     # Tickets
-    path('tickets/', tickets.tickets, name='tickets'),
-    path('tickets/request-types/', tickets.request_types, name='request-types'),
-    path('tickets/<str:ticket_id>/', tickets.ticket_detail, name='ticket-detail'),
+    path('tickets/submit/', tickets.submit_ticket, name='submit-ticket'),
 ]

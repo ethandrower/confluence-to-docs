@@ -87,7 +87,6 @@ def verify_magic_link(request):
 
     return JsonResponse({
         'user': {'id': user.pk, 'email': user.email, 'name': user.name},
-        'can_submit_tickets': False,
     })
 
 
@@ -106,7 +105,6 @@ def me(request):
 
     return JsonResponse({
         'user': {'id': user.pk, 'email': user.email, 'name': user.name},
-        'can_submit_tickets': False,
     })
 
 
