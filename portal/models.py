@@ -19,6 +19,7 @@ class DocPage(models.Model):
     space_key = models.CharField(max_length=64)
     last_synced = models.DateTimeField(auto_now=True)
     is_published = models.BooleanField(default=True)
+    is_folder = models.BooleanField(default=False)
     position = models.IntegerField(default=0)
     # TextField works on both SQLite and Postgres.
     # On Postgres the signal populates it via SearchVector; on SQLite it's plain text.

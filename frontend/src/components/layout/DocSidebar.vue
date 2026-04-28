@@ -45,11 +45,40 @@
           <span class="ml-auto font-normal text-[10px] tabular-nums opacity-50">{{ countPages(section) }}</span>
         </button>
 
-        <!-- Pages -->
+        <!-- Version switcher (if space has versions) -->
+        <VersionSwitcher
+          v-if="section.versions?.length"
+          :space-key="section.space_key"
+          :space-label="section.label"
+        />
+
+        <!-- Version docs -->
         <Transition name="sidebar-expand">
-          <ul v-show="!collapsed[section.space_key]" class="space-y-px px-2">
-            <SidebarNode v-for="page in section.pages" :key="page.id" :page="page" :depth="0" />
-          </ul>
+          <div v-show="!collapsed[section.space_key]">
+            <ul v-if="getVersionPages(section).length" class="space-y-px px-2">
+              <SidebarNode
+                v-for="page in getVersionPages(section)"
+                :key="page.id"
+                :page="page"
+                :depth="0"
+              />
+            </ul>
+
+            <!-- General pages (non-version) -->
+            <template v-if="section.versions?.length && section.pages.length">
+              <div class="mx-4 my-2 border-t" />
+              <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">General</div>
+            </template>
+
+            <ul v-if="section.pages.length" class="space-y-px px-2">
+              <SidebarNode
+                v-for="page in section.pages"
+                :key="page.id"
+                :page="page"
+                :depth="0"
+              />
+            </ul>
+          </div>
         </Transition>
       </div>
     </template>
@@ -61,6 +90,7 @@ import { reactive, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDocsStore } from '@/stores/docs.js'
 import SidebarNode from './SidebarNode.vue'
+import VersionSwitcher from './VersionSwitcher.vue'
 
 const store = useDocsStore()
 const route = useRoute()
@@ -80,15 +110,32 @@ function toggleSection(key) {
   collapsed[key] = !collapsed[key]
 }
 
+/**
+ * Get the selected version's pre-built page tree.
+ * Returns empty array for non-versioned spaces.
+ */
+function getVersionPages(section) {
+  if (!section.versions?.length) return section.pages
+
+  const selectedLabel = store.getSelectedVersion(section.space_key)
+  if (!selectedLabel) return []
+
+  const selectedVersion = section.versions.find(v => v.label === selectedLabel)
+  return selectedVersion?.pages || []
+}
+
 function countPages(section) {
+  const versionPages = getVersionPages(section)
+  const generalPages = section.versions?.length ? section.pages : []
   let count = 0
-  function walk(pages) {
-    for (const p of pages) {
+  function walk(list) {
+    for (const p of list) {
       count++
       if (p.children) walk(p.children)
     }
   }
-  walk(section.pages)
+  walk(versionPages)
+  walk(generalPages)
   return count
 }
 </script>
