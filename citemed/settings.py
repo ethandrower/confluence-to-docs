@@ -10,8 +10,28 @@ env = environ.Env(
 environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY', default='dev-secret-key-change-in-production')
-DEBUG = env('DEBUG', default=True)
+DEBUG = env.bool('DEBUG', default=True)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
+
+# Behind Dokku's nginx proxy: treat X-Forwarded-Proto as the source of truth
+# for whether the connection is HTTPS. Required for SECURE_SSL_REDIRECT and
+# secure cookie flags to work correctly.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# CSRF: trust the production origin(s) for unsafe requests. Set in env on deploy.
+# Example: CSRF_TRUSTED_ORIGINS=https://docs.example.com
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+
+# Cookie hardening — only enforced when DEBUG is off so local dev (http) still works.
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30  # 30 days
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'same-origin'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -27,6 +47,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise serves static files in production (must come right after SecurityMiddleware).
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -73,6 +95,16 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Pull Vue's built assets into Django's static pipeline so WhiteNoise serves
+# them with proper caching headers. Built by `npm run build` inside frontend/.
+_FRONTEND_DIST = BASE_DIR / 'frontend' / 'dist'
+STATICFILES_DIRS = [_FRONTEND_DIST] if _FRONTEND_DIST.exists() else []
+
+# WhiteNoise: compress + hash filenames in production for cache busting.
+# Falls back to plain storage when DEBUG (cleaner error messages during dev).
+if not env('DEBUG', default=True):
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = env('MEDIA_ROOT', default=str(BASE_DIR / 'media'))
@@ -136,14 +168,27 @@ _os.environ['ATLASSIAN_CLOUD_ID'] = ATLASSIAN_CLOUD_ID
 PORTAL_MAGIC_LINK_EXPIRY_MINUTES = 15
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
-# Email
-EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = env('EMAIL_HOST', default='')
-EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+# Email — Mailgun when MAILGUN_ACCESS_KEY is set, otherwise console (dev/tests).
+# Mirrors the citemed_web pattern so we don't introduce a second mental model.
+MAILGUN_ACCESS_KEY = env('MAILGUN_ACCESS_KEY', default='')
+MAILGUN_SERVER_NAME = env('MAILGUN_SERVER_NAME', default='')
+
+if MAILGUN_ACCESS_KEY:
+    EMAIL_BACKEND = 'django_mailgun.MailgunBackend'
+else:
+    # SMTP fallback if EMAIL_HOST is set, else console (default for local dev).
+    EMAIL_BACKEND = env(
+        'EMAIL_BACKEND',
+        default='django.core.mail.backends.console.EmailBackend',
+    )
+    EMAIL_HOST = env('EMAIL_HOST', default='')
+    EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+    EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+    EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Support <noreply@example.com>')
+SERVER_EMAIL = env('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
 SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='support@citemed.com')
 
 LOGGING = {

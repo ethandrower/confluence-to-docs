@@ -1,0 +1,56 @@
+{
+  "name": "CiteMed Docs Portal",
+  "description": "Confluence-synced documentation portal with magic-link auth and email contact form.",
+  "scripts": {},
+  "env": {
+    "SECRET_KEY": {
+      "description": "Django SECRET_KEY. Generate with: python -c 'import secrets; print(secrets.token_urlsafe(64))'",
+      "generator": "secret"
+    },
+    "DEBUG": {
+      "description": "Production must be False.",
+      "value": "False"
+    },
+    "ALLOWED_HOSTS": {
+      "description": "Comma-separated hostnames this app responds to (e.g. docs.example.com)."
+    },
+    "CSRF_TRUSTED_ORIGINS": {
+      "description": "Comma-separated origins trusted for CSRF (e.g. https://docs.example.com)."
+    },
+    "FRONTEND_URL": {
+      "description": "Public URL — used to build magic-link URLs in emails (e.g. https://docs.example.com)."
+    },
+    "CONFLUENCE_DOMAIN": {
+      "description": "Atlassian instance host, no protocol (e.g. citemed.atlassian.net)."
+    },
+    "CONFLUENCE_EMAIL": {
+      "description": "Email of the Atlassian user whose API token is used for sync."
+    },
+    "CONFLUENCE_API_TOKEN": {
+      "description": "Atlassian API token from id.atlassian.com/manage-profile/security/api-tokens."
+    },
+    "ATLASSIAN_CLOUD_ID": {
+      "description": "Cloud ID for the Atlassian site (required by Trinity client)."
+    },
+    "MAILGUN_ACCESS_KEY": {
+      "description": "Mailgun API key. When set, EMAIL_BACKEND is switched to django_mailgun.MailgunBackend."
+    },
+    "MAILGUN_SERVER_NAME": {
+      "description": "Mailgun sending domain (e.g. mg.citemedical.com)."
+    },
+    "DEFAULT_FROM_EMAIL": {
+      "description": "Visible From address (e.g. \"CiteMed Support <support@citemedical.com>\")."
+    },
+    "SUPPORT_EMAIL": {
+      "description": "Destination for the contact form (e.g. support@citemed.com).",
+      "value": "support@citemed.com"
+    }
+  },
+  "buildpacks": [
+    { "url": "https://github.com/heroku/heroku-buildpack-nodejs" },
+    { "url": "https://github.com/heroku/heroku-buildpack-python" }
+  ],
+  "addons": [
+    { "plan": "dokku-postgres" }
+  ]
+}
