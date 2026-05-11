@@ -16,6 +16,7 @@ const router = createRouter({
     {
       path: '/docs',
       component: () => import('@/views/DocsView.vue'),
+      meta: { requiresAuth: true },
       children: [
         {
           path: '',
