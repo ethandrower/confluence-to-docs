@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DocPage, DocImage, PortalUser, MagicLinkToken
+from .models import DocPage, DocImage, PortalUser, MagicLinkToken, ContactSubmission
 
 
 @admin.register(DocPage)
@@ -44,3 +44,11 @@ class MagicLinkTokenAdmin(admin.ModelAdmin):
     list_display = ['user', 'created_at', 'expires_at', 'used']
     list_filter = ['used']
     readonly_fields = ['token', 'created_at']
+
+
+@admin.register(ContactSubmission)
+class ContactSubmissionAdmin(admin.ModelAdmin):
+    list_display = ['created_at', 'email', 'category', 'subject', 'status']
+    list_filter = ['status', 'category', 'created_at']
+    search_fields = ['email', 'name', 'subject', 'message']
+    readonly_fields = ['name', 'email', 'category', 'subject', 'message', 'ip_address', 'created_at', 'sent_at', 'status', 'error']

@@ -3,6 +3,7 @@ import re
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.db import connection, models
+from portal.decorators import require_portal_user
 from portal.models import DocPage
 from portal.serializers import DocPageTreeSerializer, DocPageDetailSerializer
 
@@ -129,6 +130,7 @@ def _filter_tree(pages, promote_ids, drop_ids):
 
 
 @require_GET
+@require_portal_user
 def page_tree(request):
     """Return the full page tree grouped by space, with version info."""
     spaces = sorted(set(
@@ -184,6 +186,7 @@ def page_tree(request):
 
 
 @require_GET
+@require_portal_user
 def page_detail(request, slug):
     try:
         page = DocPage.objects.get(slug=slug, is_published=True)
@@ -242,6 +245,7 @@ def _find_section_heading(text, query):
 
 
 @require_GET
+@require_portal_user
 def search_docs(request):
     q = request.GET.get('q', '').strip()
     if not q:

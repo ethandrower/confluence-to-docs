@@ -65,7 +65,15 @@
 
         <!-- User / Login -->
         <div class="hidden sm:flex items-center gap-2 ml-1">
-          <span v-if="auth.user" class="text-xs text-muted-foreground truncate max-w-[120px]">{{ auth.user.email }}</span>
+          <template v-if="auth.user">
+            <span class="text-xs text-muted-foreground truncate max-w-[120px]" :title="auth.user.email">{{ auth.user.email }}</span>
+            <button
+              @click="signOut"
+              class="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Sign out
+            </button>
+          </template>
           <RouterLink v-else to="/login" class="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">Log in</RouterLink>
         </div>
 
@@ -99,7 +107,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -107,7 +115,13 @@ import SearchCommand from './SearchCommand.vue'
 
 defineProps({ hideSidebar: Boolean })
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
+
+async function signOut() {
+  await auth.logout()
+  router.push({ name: 'login' })
+}
 const mobileOpen = ref(false)
 const searchOpen = ref(false)
 const isMac = ref(false)

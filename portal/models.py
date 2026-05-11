@@ -68,6 +68,38 @@ class MagicLinkToken(models.Model):
         return not self.used and self.expires_at > timezone.now()
 
 
+class ContactSubmission(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    name = models.CharField(max_length=256)
+    email = models.EmailField()
+    category = models.CharField(max_length=32)
+    subject = models.CharField(max_length=512)
+    message = models.TextField()
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    error = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f'{self.email} — {self.subject} ({self.status})'
+
+
 @receiver(post_save, sender=DocPage)
 def update_search_vector(sender, instance, **kwargs):
     if _is_postgres():
