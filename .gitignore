@@ -37,3 +37,4 @@ media/
 # Design specs & plans (local only)
 docs/superpowers/
 claude-ui-refactor-starter/
+db.sqlite3.bak*

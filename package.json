@@ -1,0 +1,12 @@
+{
+  "name": "citemed-docs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Top-level package.json so the Heroku/Dokku Node.js buildpack picks up the build step. Actual frontend deps live in frontend/package.json.",
+  "scripts": {
+    "heroku-postbuild": "cd frontend && npm ci --include=dev && npm run build"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
