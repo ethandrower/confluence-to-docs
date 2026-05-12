@@ -9,6 +9,14 @@ from django.urls import path, reverse
 from .models import DocPage, DocImage, PortalUser, MagicLinkToken, ContactSubmission
 
 
+# ── Branding ──────────────────────────────────────────────────────────────
+# Replace Django's defaults so the admin reads as part of the CiteMed product
+# instead of a vanilla Django shell.
+admin.site.site_header = 'CiteMed Support Portal'
+admin.site.site_title = 'CiteMed Admin'
+admin.site.index_title = 'Portal administration'
+
+
 @admin.register(DocPage)
 class DocPageAdmin(admin.ModelAdmin):
     list_display = ['title', 'slug', 'confluence_version', 'last_synced', 'is_published']
@@ -93,4 +101,7 @@ class ContactSubmissionAdmin(admin.ModelAdmin):
     list_display = ['created_at', 'email', 'category', 'subject', 'status']
     list_filter = ['status', 'category', 'created_at']
     search_fields = ['email', 'name', 'subject', 'message']
-    readonly_fields = ['name', 'email', 'category', 'subject', 'message', 'ip_address', 'created_at', 'sent_at', 'status', 'error']
+    readonly_fields = [
+        'name', 'email', 'category', 'subject', 'message',
+        'ip_address', 'created_at', 'sent_at', 'status', 'error',
+    ]

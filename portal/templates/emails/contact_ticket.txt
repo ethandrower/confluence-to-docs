@@ -1,0 +1,28 @@
+CiteMed — Support Inbox
+=========================================
+
+[{{ category_label|upper }}]  #{{ submission_id }}
+
+{{ subject }}
+
+—
+
+From:     {{ customer_name }}
+Email:    {{ customer_email }}
+Received: {{ submitted_at }}
+
+—
+
+MESSAGE
+-----------------------------------------
+
+{{ message }}
+
+-----------------------------------------
+
+Reply directly to this email and your response will go to
+{{ customer_email }} — the Reply-To header is set for you.
+
+—
+Submitted via the CiteMed Support Portal contact form.
+Submission #{{ submission_id }}

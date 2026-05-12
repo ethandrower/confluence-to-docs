@@ -1,10 +1,10 @@
 import json
 import logging
-from html import escape
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -29,21 +29,19 @@ CONTACT_RATE_WINDOW = 60 * 60
 
 
 def _build_bodies(submission, category_label):
-    text_body = (
-        f'Name: {submission.name}\n'
-        f'Email: {submission.email}\n'
-        f'Category: {category_label}\n'
-        f'\n'
-        f'{submission.message}'
+    ctx = {
+        'customer_name': submission.name,
+        'customer_email': submission.email,
+        'category_label': category_label,
+        'subject': submission.subject,
+        'message': submission.message,
+        'submission_id': submission.pk,
+        'submitted_at': submission.created_at.strftime('%b %-d, %Y at %H:%M UTC'),
+    }
+    return (
+        render_to_string('emails/contact_ticket.txt', ctx),
+        render_to_string('emails/contact_ticket.html', ctx),
     )
-    html_body = (
-        f'<p><strong>Name:</strong> {escape(submission.name)}<br>'
-        f'<strong>Email:</strong> <a href="mailto:{escape(submission.email)}">{escape(submission.email)}</a><br>'
-        f'<strong>Category:</strong> {escape(category_label)}</p>'
-        f'<hr>'
-        f'<p style="white-space: pre-wrap;">{escape(submission.message)}</p>'
-    )
-    return text_body, html_body
 
 
 @csrf_exempt
@@ -101,7 +99,17 @@ def submit_ticket(request):
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[settings.SUPPORT_EMAIL],
             reply_to=[email],
-            headers={'X-Portal-Submission-Id': str(submission.pk)},
+            headers={
+                'X-Portal-Submission-Id': str(submission.pk),
+                # Same tracking-off rationale as the magic-link email:
+                # the tracking pixel causes Gmail to show "loading
+                # external images" before render. We don't need open
+                # tracking for an internal staff notification anyway.
+                # Mailgun maps these X-Mailgun-* SMTP headers to its
+                # o:tracking-* API options.
+                'X-Mailgun-Track-Opens': 'no',
+                'X-Mailgun-Track-Clicks': 'no',
+            },
         )
         msg.attach_alternative(html_body, 'text/html')
         msg.send()

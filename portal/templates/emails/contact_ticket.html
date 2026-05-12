@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light">
+<title>{{ category_label }} — {{ subject }}</title>
+<!--[if !mso]><!-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--<![endif]-->
+</head>
+<body style="margin:0; padding:0; background-color:#fafbfc; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; color:#0f172a; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+
+<!-- Preheader -->
+<div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#fafbfc; opacity:0;">
+  {{ category_label }} from {{ customer_name }} &lt;{{ customer_email }}&gt;: {{ subject }}
+</div>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#fafbfc" style="background-color:#fafbfc;">
+  <tr>
+    <td align="center" style="padding:40px 16px 32px 16px;">
+
+      <!-- Letterhead -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;">
+        <tr>
+          <td style="padding:0 4px 12px 4px; border-bottom:1px solid #3578FF;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+              <tr>
+                <td align="left" style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:17px; font-weight:700; color:#0f172a; letter-spacing:-0.02em; line-height:1;">
+                  CiteMed
+                </td>
+                <td align="right" style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:11px; font-weight:500; color:#64748b; letter-spacing:0.08em; text-transform:uppercase; line-height:1;">
+                  Support Inbox
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Card -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#ffffff" style="max-width:600px; background-color:#ffffff; border:1px solid #e2e8f0; border-top:none;">
+
+        <!-- Category pill + submission ID -->
+        <tr>
+          <td style="padding:32px 36px 0 36px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+              <tr>
+                <td align="left">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td bgcolor="#eef4ff" style="background-color:#eef4ff; border-radius:4px; padding:5px 10px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:11px; font-weight:600; color:#1e40af; letter-spacing:0.05em; text-transform:uppercase; line-height:1;">
+                        {{ category_label }}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td align="right" style="font-family: 'SF Mono', Consolas, Menlo, monospace; font-size:11px; color:#94a3b8; letter-spacing:0.02em; line-height:1;">
+                  #{{ submission_id }}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Subject -->
+        <tr>
+          <td style="padding:16px 36px 24px 36px;">
+            <h1 style="margin:0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:20px; line-height:1.35; font-weight:600; color:#0f172a; letter-spacing:-0.015em;">
+              {{ subject }}
+            </h1>
+          </td>
+        </tr>
+
+        <!-- Hairline -->
+        <tr>
+          <td style="padding:0 36px;">
+            <div style="height:1px; background-color:#e2e8f0; line-height:1px; font-size:1px;">&nbsp;</div>
+          </td>
+        </tr>
+
+        <!-- Metadata table -->
+        <tr>
+          <td style="padding:22px 36px 26px 36px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+              <tr>
+                <td width="88" valign="top" style="padding:0 0 8px 0; font-size:11px; font-weight:600; color:#64748b; letter-spacing:0.06em; text-transform:uppercase; line-height:1.4;">
+                  From
+                </td>
+                <td valign="top" style="padding:0 0 8px 0; font-size:14px; font-weight:500; color:#0f172a; line-height:1.4;">
+                  {{ customer_name }}
+                </td>
+              </tr>
+              <tr>
+                <td width="88" valign="top" style="padding:0 0 8px 0; font-size:11px; font-weight:600; color:#64748b; letter-spacing:0.06em; text-transform:uppercase; line-height:1.4;">
+                  Email
+                </td>
+                <td valign="top" style="padding:0 0 8px 0; font-size:14px; line-height:1.4;">
+                  <a href="mailto:{{ customer_email }}" style="color:#3578FF; text-decoration:none; font-weight:500;">{{ customer_email }}</a>
+                </td>
+              </tr>
+              <tr>
+                <td width="88" valign="top" style="padding:0; font-size:11px; font-weight:600; color:#64748b; letter-spacing:0.06em; text-transform:uppercase; line-height:1.4;">
+                  Received
+                </td>
+                <td valign="top" style="padding:0; font-size:14px; color:#334155; line-height:1.4;">
+                  {{ submitted_at }}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Hairline -->
+        <tr>
+          <td style="padding:0 36px;">
+            <div style="height:1px; background-color:#e2e8f0; line-height:1px; font-size:1px;">&nbsp;</div>
+          </td>
+        </tr>
+
+        <!-- Message body -->
+        <tr>
+          <td style="padding:24px 36px 8px 36px;">
+            <p style="margin:0 0 12px 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:11px; font-weight:600; color:#64748b; letter-spacing:0.06em; text-transform:uppercase; line-height:1;">
+              Message
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 36px 32px 36px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+              <tr>
+                <td style="border-left:3px solid #3578FF; background-color:#f8fafc; padding:18px 20px;">
+                  <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:14px; line-height:1.65; color:#0f172a; white-space:pre-wrap;">{{ message }}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Reply hint -->
+        <tr>
+          <td style="padding:0 36px 36px 36px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f0f7ff" style="background-color:#f0f7ff; border:1px solid #c7ddff; border-radius:6px;">
+              <tr>
+                <td style="padding:14px 18px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:1.5; color:#1e3a8a;">
+                  <strong style="font-weight:600;">Reply directly</strong> to this email and your response will go to
+                  <a href="mailto:{{ customer_email }}" style="color:#1e40af; text-decoration:underline; font-weight:600;">{{ customer_email }}</a>.
+                  The Reply-To header is set for you.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+      </table>
+
+      <!-- Footer -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;">
+        <tr>
+          <td align="center" style="padding:24px 4px 0 4px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:11px; line-height:1.6; color:#94a3b8; letter-spacing:0.01em;">
+            Submitted via the CiteMed Support Portal contact form &middot; Submission #{{ submission_id }}
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

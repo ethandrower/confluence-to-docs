@@ -170,7 +170,7 @@ _os.environ['ATLASSIAN_API_TOKEN'] = CONFLUENCE_API_TOKEN
 _os.environ['ATLASSIAN_CLOUD_ID'] = ATLASSIAN_CLOUD_ID
 
 # Portal
-PORTAL_MAGIC_LINK_EXPIRY_MINUTES = 15
+PORTAL_MAGIC_LINK_EXPIRY_MINUTES = env.int('PORTAL_MAGIC_LINK_EXPIRY_MINUTES', default=60)
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
 # Email — Mailgun when MAILGUN_ACCESS_KEY is set, otherwise console (dev/tests).
