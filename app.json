@@ -56,5 +56,11 @@
   ],
   "addons": [
     { "plan": "dokku-postgres" }
+  ],
+  "cron": [
+    {
+      "command": "python manage.py cleanup_expired_tokens",
+      "schedule": "0 3 * * *"
+    }
   ]
 }

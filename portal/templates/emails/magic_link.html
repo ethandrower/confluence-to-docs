@@ -76,14 +76,12 @@
           </td>
         </tr>
 
-        <!-- Plain URL fallback -->
+        <!-- Discreet fallback link — same href as the button, but no exposed URL -->
         <tr>
-          <td style="padding:0 44px 36px 44px;">
-            <p style="margin:0 0 8px 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:11px; font-weight:600; color:#64748b; letter-spacing:0.06em; text-transform:uppercase;">
-              Or paste this URL into your browser
-            </p>
-            <p style="margin:0; font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace; font-size:12px; line-height:1.55; word-break:break-all; color:#334155; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:10px 12px;">
-              <a href="{{ magic_url }}" style="color:#3578FF; text-decoration:none;">{{ magic_url }}</a>
+          <td style="padding:0 44px 32px 44px;">
+            <p style="margin:0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:1.5; color:#64748b;">
+              Button not working?
+              <a href="{{ magic_url }}" style="color:#3578FF; text-decoration:underline;">Click here to sign in</a>.
             </p>
           </td>
         </tr>
