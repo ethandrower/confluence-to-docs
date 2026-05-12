@@ -3,7 +3,6 @@ import logging
 from html import escape
 
 from django.conf import settings
-from django.core.cache import cache
 from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse
 from django.utils import timezone
@@ -11,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from portal.models import ContactSubmission
+from portal.rate_limit import client_ip, is_rate_limited
 
 logger = logging.getLogger(__name__)
 
@@ -23,29 +23,9 @@ CATEGORY_LABELS = {
     'other': 'Other',
 }
 
-# Rate limit: max submissions per IP per window.
-RATE_LIMIT_MAX = 5
-RATE_LIMIT_WINDOW_SECONDS = 60 * 60  # 1 hour
-
-
-def _client_ip(request):
-    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR')
-
-
-def _is_rate_limited(ip):
-    if not ip:
-        return False
-    key = f'contact-submit:{ip}'
-    count = cache.get(key, 0)
-    if count >= RATE_LIMIT_MAX:
-        return True
-    # cache.incr requires key to exist; use add+incr pattern.
-    if not cache.add(key, 1, RATE_LIMIT_WINDOW_SECONDS):
-        cache.incr(key)
-    return False
+# Max contact-form submissions per IP per hour.
+CONTACT_RATE_MAX = 5
+CONTACT_RATE_WINDOW = 60 * 60
 
 
 def _build_bodies(submission, category_label):
@@ -74,8 +54,8 @@ def submit_ticket(request):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid request body'}, status=400)
 
-    ip = _client_ip(request)
-    if _is_rate_limited(ip):
+    ip = client_ip(request)
+    if is_rate_limited('contact-submit', ip, CONTACT_RATE_MAX, CONTACT_RATE_WINDOW):
         logger.warning('Contact form rate limit hit for ip=%s', ip)
         return JsonResponse(
             {'error': 'Too many requests. Please try again later.'},

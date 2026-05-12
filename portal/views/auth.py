@@ -10,7 +10,17 @@ from django.utils.decorators import method_decorator
 import json
 import logging
 
+from portal.rate_limit import client_ip, is_rate_limited
+
 logger = logging.getLogger(__name__)
+
+# Per-IP: cap requests from one source (prevents bot floods, Mailgun bill abuse).
+# Per-email: cap requests targeting one mailbox (prevents using the form to
+# harass a specific person with login emails they didn't ask for).
+MAGIC_LINK_IP_MAX = 10
+MAGIC_LINK_IP_WINDOW = 60 * 60  # 1 hour
+MAGIC_LINK_EMAIL_MAX = 5
+MAGIC_LINK_EMAIL_WINDOW = 60 * 60
 
 
 @csrf_exempt
@@ -24,6 +34,25 @@ def request_magic_link(request):
 
     if not email or '@' not in email:
         return JsonResponse({'error': 'Valid email required'}, status=400)
+
+    # Rate limit BEFORE creating any DB rows or sending email. Two buckets:
+    # one by source IP, one by target email — checked independently. Either
+    # tripping returns a generic 429 (so we don't reveal whether the email
+    # has been used before / give an enumeration oracle).
+    ip = client_ip(request)
+    ip_limited = is_rate_limited('magic-link-ip', ip, MAGIC_LINK_IP_MAX, MAGIC_LINK_IP_WINDOW)
+    email_limited = is_rate_limited(
+        'magic-link-email', email, MAGIC_LINK_EMAIL_MAX, MAGIC_LINK_EMAIL_WINDOW
+    )
+    if ip_limited or email_limited:
+        logger.warning(
+            'Magic-link rate limit hit ip=%s email=%s ip_limited=%s email_limited=%s',
+            ip, email, ip_limited, email_limited,
+        )
+        return JsonResponse(
+            {'error': 'Too many requests. Please try again later.'},
+            status=429,
+        )
 
     from portal.models import PortalUser, MagicLinkToken
 

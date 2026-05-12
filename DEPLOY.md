@@ -37,6 +37,7 @@ dokku config:set citemed-docs \
   ALLOWED_HOSTS=docs.citemed.com \
   CSRF_TRUSTED_ORIGINS=https://docs.citemed.com \
   FRONTEND_URL=https://docs.citemed.com \
+  ADMIN_PATH='<random-9-char-string>' \
   CONFLUENCE_DOMAIN=citemed.atlassian.net \
   CONFLUENCE_EMAIL=<sync-user-email> \
   CONFLUENCE_API_TOKEN=<token> \

@@ -14,6 +14,10 @@
     "ALLOWED_HOSTS": {
       "description": "Comma-separated hostnames this app responds to (e.g. docs.example.com)."
     },
+    "ADMIN_PATH": {
+      "description": "URL path for Django admin (no slashes). Defaults to 'admin'. Set to something unguessable in production to keep the admin out of bot scans.",
+      "value": "admin"
+    },
     "CSRF_TRUSTED_ORIGINS": {
       "description": "Comma-separated origins trusted for CSRF (e.g. https://docs.example.com)."
     },

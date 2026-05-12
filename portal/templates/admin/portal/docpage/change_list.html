@@ -1,0 +1,14 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="{% url 'admin:portal_docpage_sync_confluence' %}"
+       class="addlink"
+       style="background-image: none;"
+       onclick="return confirm('Kick off a full Confluence sync now? It will run in the background and may take several minutes.');">
+      {% trans "Sync from Confluence" %}
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}

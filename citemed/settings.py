@@ -13,6 +13,11 @@ SECRET_KEY = env('SECRET_KEY', default='dev-secret-key-change-in-production')
 DEBUG = env.bool('DEBUG', default=True)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
+# Django admin URL path (without leading/trailing slashes). Override in
+# production with something unguessable to keep the admin out of bot scans
+# of /admin/. Defaults to 'admin' so local dev URLs don't change.
+ADMIN_PATH = env('ADMIN_PATH', default='admin').strip('/')
+
 # Behind Dokku's nginx proxy: treat X-Forwarded-Proto as the source of truth
 # for whether the connection is HTTPS. Required for SECURE_SSL_REDIRECT and
 # secure cookie flags to work correctly.
