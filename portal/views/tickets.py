@@ -1,16 +1,16 @@
 import json
 import logging
-from html import escape
 
 from django.conf import settings
-from django.core.cache import cache
 from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from portal.models import ContactSubmission
+from portal.rate_limit import client_ip, is_rate_limited
 
 logger = logging.getLogger(__name__)
 
@@ -23,47 +23,25 @@ CATEGORY_LABELS = {
     'other': 'Other',
 }
 
-# Rate limit: max submissions per IP per window.
-RATE_LIMIT_MAX = 5
-RATE_LIMIT_WINDOW_SECONDS = 60 * 60  # 1 hour
-
-
-def _client_ip(request):
-    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR')
-
-
-def _is_rate_limited(ip):
-    if not ip:
-        return False
-    key = f'contact-submit:{ip}'
-    count = cache.get(key, 0)
-    if count >= RATE_LIMIT_MAX:
-        return True
-    # cache.incr requires key to exist; use add+incr pattern.
-    if not cache.add(key, 1, RATE_LIMIT_WINDOW_SECONDS):
-        cache.incr(key)
-    return False
+# Max contact-form submissions per IP per hour.
+CONTACT_RATE_MAX = 5
+CONTACT_RATE_WINDOW = 60 * 60
 
 
 def _build_bodies(submission, category_label):
-    text_body = (
-        f'Name: {submission.name}\n'
-        f'Email: {submission.email}\n'
-        f'Category: {category_label}\n'
-        f'\n'
-        f'{submission.message}'
+    ctx = {
+        'customer_name': submission.name,
+        'customer_email': submission.email,
+        'category_label': category_label,
+        'subject': submission.subject,
+        'message': submission.message,
+        'submission_id': submission.pk,
+        'submitted_at': submission.created_at.strftime('%b %-d, %Y at %H:%M UTC'),
+    }
+    return (
+        render_to_string('emails/contact_ticket.txt', ctx),
+        render_to_string('emails/contact_ticket.html', ctx),
     )
-    html_body = (
-        f'<p><strong>Name:</strong> {escape(submission.name)}<br>'
-        f'<strong>Email:</strong> <a href="mailto:{escape(submission.email)}">{escape(submission.email)}</a><br>'
-        f'<strong>Category:</strong> {escape(category_label)}</p>'
-        f'<hr>'
-        f'<p style="white-space: pre-wrap;">{escape(submission.message)}</p>'
-    )
-    return text_body, html_body
 
 
 @csrf_exempt
@@ -74,8 +52,8 @@ def submit_ticket(request):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid request body'}, status=400)
 
-    ip = _client_ip(request)
-    if _is_rate_limited(ip):
+    ip = client_ip(request)
+    if is_rate_limited('contact-submit', ip, CONTACT_RATE_MAX, CONTACT_RATE_WINDOW):
         logger.warning('Contact form rate limit hit for ip=%s', ip)
         return JsonResponse(
             {'error': 'Too many requests. Please try again later.'},
@@ -121,7 +99,17 @@ def submit_ticket(request):
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[settings.SUPPORT_EMAIL],
             reply_to=[email],
-            headers={'X-Portal-Submission-Id': str(submission.pk)},
+            headers={
+                'X-Portal-Submission-Id': str(submission.pk),
+                # Same tracking-off rationale as the magic-link email:
+                # the tracking pixel causes Gmail to show "loading
+                # external images" before render. We don't need open
+                # tracking for an internal staff notification anyway.
+                # Mailgun maps these X-Mailgun-* SMTP headers to its
+                # o:tracking-* API options.
+                'X-Mailgun-Track-Opens': 'no',
+                'X-Mailgun-Track-Clicks': 'no',
+            },
         )
         msg.attach_alternative(html_body, 'text/html')
         msg.send()

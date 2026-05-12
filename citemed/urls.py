@@ -26,12 +26,13 @@ def spa_index(request):
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path(f'{settings.ADMIN_PATH}/', admin.site.urls),
     path('api/', include('portal.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Catch-all for SPA routes. MUST come last. The regex explicitly excludes
 # paths that are handled by Django so we don't shadow them.
+_admin_prefix = settings.ADMIN_PATH.replace('.', r'\.')
 urlpatterns += [
-    re_path(r'^(?!api/|admin/|static/|media/).*$', spa_index),
+    re_path(rf'^(?!api/|{_admin_prefix}/|static/|media/).*$', spa_index),
 ]

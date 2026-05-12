@@ -38,8 +38,12 @@ onMounted(async () => {
   try {
     await auth.verifyToken(token)
     loading.value = false
-    const redirect = route.query.redirect || '/docs'
-    router.push(redirect)
+    // Reject anything but a strictly internal path (must start with "/"
+    // and not "//", which browsers treat as protocol-relative external).
+    // Prevents using the verify URL as an open-redirect to attacker pages.
+    const raw = route.query.redirect
+    const safe = typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//')
+    router.push(safe ? raw : '/docs')
   } catch (e) {
     loading.value = false
     error.value = e.response?.data?.error || 'This link has expired or already been used.'

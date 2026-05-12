@@ -1,0 +1,20 @@
+{{ company_name }} — {{ product_name }}
+=========================================
+
+SIGN-IN REQUEST
+
+Your one-time link to access {{ product_name }}.
+
+Click the link below to securely sign in. It is valid for the next
+{{ expiry_minutes }} minutes and can be used once.
+
+    {{ magic_url }}
+
+—
+
+Didn't request this email? You can safely ignore it. Without access
+to your inbox, no one else can sign in as you.
+
+—
+Sent to {{ recipient_email }}
+This is an automated message. Please do not reply.

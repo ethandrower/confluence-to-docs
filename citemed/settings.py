@@ -13,6 +13,11 @@ SECRET_KEY = env('SECRET_KEY', default='dev-secret-key-change-in-production')
 DEBUG = env.bool('DEBUG', default=True)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
+# Django admin URL path (without leading/trailing slashes). Override in
+# production with something unguessable to keep the admin out of bot scans
+# of /admin/. Defaults to 'admin' so local dev URLs don't change.
+ADMIN_PATH = env('ADMIN_PATH', default='admin').strip('/')
+
 # Behind Dokku's nginx proxy: treat X-Forwarded-Proto as the source of truth
 # for whether the connection is HTTPS. Required for SECURE_SSL_REDIRECT and
 # secure cookie flags to work correctly.
@@ -165,7 +170,7 @@ _os.environ['ATLASSIAN_API_TOKEN'] = CONFLUENCE_API_TOKEN
 _os.environ['ATLASSIAN_CLOUD_ID'] = ATLASSIAN_CLOUD_ID
 
 # Portal
-PORTAL_MAGIC_LINK_EXPIRY_MINUTES = 15
+PORTAL_MAGIC_LINK_EXPIRY_MINUTES = env.int('PORTAL_MAGIC_LINK_EXPIRY_MINUTES', default=60)
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
 # Email — Mailgun when MAILGUN_ACCESS_KEY is set, otherwise console (dev/tests).

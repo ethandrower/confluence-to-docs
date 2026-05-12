@@ -66,6 +66,22 @@
         <!-- User / Login -->
         <div class="hidden sm:flex items-center gap-2 ml-1">
           <template v-if="auth.user">
+            <!-- Admin badge — only renders when the logged-in portal user
+                 matches an active Django superuser. Backend gates this
+                 entirely so non-admins never see the badge or the URL. -->
+            <a
+              v-if="auth.user.is_admin && auth.user.admin_url"
+              :href="auth.user.admin_url"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold uppercase tracking-wider text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors"
+              title="Open Django admin"
+            >
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z" />
+              </svg>
+              Admin
+            </a>
             <span class="text-xs text-muted-foreground truncate max-w-[120px]" :title="auth.user.email">{{ auth.user.email }}</span>
             <button
               @click="signOut"
