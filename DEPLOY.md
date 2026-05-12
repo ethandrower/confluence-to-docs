@@ -39,10 +39,10 @@ dokku config:set citemed-docs \
   FRONTEND_URL=https://docs.citemed.com \
   ADMIN_PATH='<random-9-char-string>' \
   CONFLUENCE_DOMAIN=citemed.atlassian.net \
-  CONFLUENCE_EMAIL=<sync-user-email> \
-  CONFLUENCE_API_TOKEN=<token> \
+  CONFLUENCE_EMAIL=placeholder@example.com \
+  CONFLUENCE_API_TOKEN=placeholder \
   CONFLUENCE_SPACE_KEY=CITEMED \
-  ATLASSIAN_CLOUD_ID=<cloud-id> \
+  ATLASSIAN_CLOUD_ID=placeholder \
   MAILGUN_ACCESS_KEY=<mailgun-key> \
   MAILGUN_SERVER_NAME=<mailgun-domain> \
   DEFAULT_FROM_EMAIL='CiteMed Support <support@citemedical.com>' \
@@ -54,6 +54,41 @@ To reuse Mailgun creds from another Dokku app on the same host:
 ```bash
 dokku config:show <other-app> | grep MAILGUN
 ```
+
+### About the Confluence env vars
+
+The four `CONFLUENCE_*` / `ATLASSIAN_CLOUD_ID` values above are intentionally set to placeholders for the initial deploy. **The portal serves docs from the database, not live Confluence on each request** — pages are populated by the `sync_from_mcp` management command and then read locally. So a freshly deployed instance with placeholder Confluence creds works for everything *except* re-syncing.
+
+Before running `manage.py sync_from_mcp` on the deployed app, swap in the real values:
+
+```bash
+dokku config:set citemed-docs \
+  CONFLUENCE_EMAIL=<real-sync-user-email> \
+  CONFLUENCE_API_TOKEN=<real-token> \
+  ATLASSIAN_CLOUD_ID=<real-cloud-id>
+```
+
+Get a token at [id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens). Cloud ID is at `https://citemed.atlassian.net/_edge/tenant_info`.
+
+### Initial database population
+
+A freshly provisioned Postgres has zero pages. Two paths:
+
+1. **Sync from Confluence** (recommended once creds are set):
+   ```bash
+   dokku run citemed-docs python manage.py sync_from_mcp
+   ```
+2. **Restore from a local snapshot** (faster, lets us serve the existing 385 pages immediately):
+   ```bash
+   # On your laptop, dump local SQLite to a Postgres-compatible SQL file:
+   .venv/bin/python manage.py dumpdata --indent 2 portal > /tmp/portal-snapshot.json
+
+   # Copy it to the Hetzner host:
+   scp /tmp/portal-snapshot.json root@116.203.82.103:/tmp/
+
+   # Load it inside the app container:
+   dokku run citemed-docs python manage.py loaddata /tmp/portal-snapshot.json
+   ```
 
 ## Deploy
 
