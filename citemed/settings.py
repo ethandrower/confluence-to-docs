@@ -106,23 +106,38 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 _FRONTEND_DIST = BASE_DIR / 'frontend' / 'dist'
 STATICFILES_DIRS = [_FRONTEND_DIST] if _FRONTEND_DIST.exists() else []
 
-# WhiteNoise: compress + hash filenames in production for cache busting.
-# Falls back to plain storage when DEBUG (cleaner error messages during dev).
-if not env('DEBUG', default=True):
-    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
 MEDIA_URL = '/media/'
 MEDIA_ROOT = env('MEDIA_ROOT', default=str(BASE_DIR / 'media'))
 
-# S3 storage — enabled automatically when AWS_STORAGE_BUCKET_NAME is set.
-# Supports standard AWS S3 and S3-compatible services (Cloudflare R2 etc.)
-# via AWS_S3_ENDPOINT_URL. Falls back to local MEDIA_ROOT in development.
+# ── Storage backends (Django 4.2+ unified STORAGES dict) ────────────────
+# Default storage  → filesystem in dev, S3 when AWS_STORAGE_BUCKET_NAME is set.
+# Static storage   → plain in dev, WhiteNoise compressed+manifest in prod.
+#
+# Django 4.2 made STORAGES and the legacy STATICFILES_STORAGE mutually
+# exclusive — defining both at once raises ImproperlyConfigured. We always
+# set STORAGES (with conditional inner backends) and never set the legacy
+# key, so dev + prod, S3 + non-S3 combinations all work without a clash.
 _S3_BUCKET = env('AWS_STORAGE_BUCKET_NAME', default='')
+_USE_WHITENOISE = not env.bool('DEBUG', default=True)
+
+STORAGES = {
+    'default': {
+        'BACKEND': (
+            'storages.backends.s3boto3.S3Boto3Storage' if _S3_BUCKET
+            else 'django.core.files.storage.FileSystemStorage'
+        ),
+    },
+    'staticfiles': {
+        'BACKEND': (
+            'whitenoise.storage.CompressedManifestStaticFilesStorage' if _USE_WHITENOISE
+            else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+        ),
+    },
+}
+
 if _S3_BUCKET:
-    STORAGES = {
-        'default': {'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage'},
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-    }
+    # Supports standard AWS S3 and S3-compatible services (R2/MinIO etc.)
+    # via AWS_S3_ENDPOINT_URL.
     AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
     AWS_STORAGE_BUCKET_NAME = _S3_BUCKET
