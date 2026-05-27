@@ -179,10 +179,16 @@ ATLASSIAN_CLOUD_ID = env('ATLASSIAN_CLOUD_ID', default='')
 
 # Inject trinity's expected env vars at settings load time so its module-level
 # URL constants are populated before any import of trinity.confluence.*
+# Per Trinity's docs, ATLASSIAN_JIRA_URL is the base URL for BOTH Jira and
+# Confluence (single Atlassian instance) — without it, trinity builds URLs
+# like '/wiki/rest/api/content' with no scheme and requests bails.
 import os as _os
 _os.environ['ATLASSIAN_EMAIL'] = CONFLUENCE_EMAIL
 _os.environ['ATLASSIAN_API_TOKEN'] = CONFLUENCE_API_TOKEN
 _os.environ['ATLASSIAN_CLOUD_ID'] = ATLASSIAN_CLOUD_ID
+_os.environ['ATLASSIAN_JIRA_URL'] = (
+    f'https://{CONFLUENCE_DOMAIN}' if CONFLUENCE_DOMAIN else ''
+)
 
 # Portal
 PORTAL_MAGIC_LINK_EXPIRY_MINUTES = env.int('PORTAL_MAGIC_LINK_EXPIRY_MINUTES', default=60)
