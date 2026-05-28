@@ -24,28 +24,20 @@
   <tr>
     <td align="center" style="padding:56px 16px 40px 16px;">
 
-      <!-- Branded header band — reproduces the [cite]med logo as text
-           (white on the brand navy) so it always renders, even when the
-           recipient's client blocks images. -->
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;">
+      <!-- Card -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#ffffff" style="max-width:560px; background-color:#ffffff; border:1px solid #e2e8f0; border-radius:12px;">
+        <!-- Logo — top-left of the card, brand navy, text-based -->
         <tr>
-          <td align="center" bgcolor="#2d5296" style="background-color:#2d5296; border-radius:12px 12px 0 0; padding:26px 0; line-height:1;">
-            <span style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:24px; font-weight:600; color:#ffffff; letter-spacing:-0.015em; line-height:1; vertical-align:middle;">
-              <span style="font-weight:400; color:#aac0e6;">[</span>cite<span style="font-weight:400; color:#aac0e6;">]</span>med
+          <td align="left" style="padding:40px 44px 0 44px;">
+            <span style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:22px; font-weight:600; color:#2d5296; letter-spacing:-0.015em; line-height:1;">
+              <span style="font-weight:400; color:#8aa4cf;">[</span>cite<span style="font-weight:400; color:#8aa4cf;">]</span>med
             </span>
           </td>
         </tr>
-      </table>
-
-      <!-- Card -->
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#ffffff" style="max-width:560px; background-color:#ffffff; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 12px 12px;">
         <tr>
-          <td style="padding:44px 44px 8px 44px;">
-            <p style="margin:0 0 20px 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:11px; font-weight:600; color:#3578FF; letter-spacing:0.12em; text-transform:uppercase; line-height:1;">
-              Sign-in request
-            </p>
+          <td style="padding:28px 44px 8px 44px;">
             <h1 style="margin:0 0 16px 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:26px; line-height:1.25; font-weight:700; color:#0f172a; letter-spacing:-0.02em;">
-              Your one-time link to access {{ product_name }}
+              Your one-time link for {{ product_name }}
             </h1>
             <p style="margin:0 0 32px 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:15px; line-height:1.6; color:#334155;">
               Click the button below to securely sign in. The link is valid for
@@ -60,7 +52,7 @@
           <td align="left" style="padding:0 44px 32px 44px;">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td bgcolor="#3578FF" style="background-color:#3578FF; border-radius:6px; mso-padding-alt:0;">
+                <td bgcolor="#2d5296" style="background-color:#2d5296; border-radius:6px; mso-padding-alt:0;">
                   <a href="{{ magic_url }}"
                      style="display:inline-block; padding:14px 28px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:6px; letter-spacing:-0.005em; mso-text-raise:2px;">
                     Sign in to {{ product_name }} &nbsp;&rarr;
@@ -76,7 +68,7 @@
           <td style="padding:0 44px 32px 44px;">
             <p style="margin:0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:1.5; color:#64748b;">
               Button not working?
-              <a href="{{ magic_url }}" style="color:#3578FF; text-decoration:underline;">Click here to sign in</a>.
+              <a href="{{ magic_url }}" style="color:#2d5296; text-decoration:underline;">Click here to sign in</a>.
             </p>
           </td>
         </tr>
