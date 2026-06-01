@@ -69,41 +69,60 @@ def rewrite_internal_links(html_str, link_map):
     /docs/ links) are left untouched.
     """
     stats = {'resolved': 0, 'unwrapped': 0}
-    if not html_str or _WIKI_MARKER not in html_str:
+    if not html_str:
+        return html_str, stats
+
+    # Slugs that are still valid link targets (published + allowed pages).
+    valid_slugs = {slug for slug, _title in link_map.values()}
+
+    # Run if there are Confluence links to resolve OR existing /docs/ links
+    # that might now point at a page that was deleted/hidden after resolution.
+    if _WIKI_MARKER not in html_str and '/docs/' not in html_str:
         return html_str, stats
 
     # Wrap so we have a single root to parse and to serialize back from.
     frag = lxml_html.fragment_fromstring(html_str, create_parent='cm-root')
 
+    def _unwrap(a, visible):
+        if not visible or _BARE_URL_TEXT_RE.match(visible):
+            # Label is a raw URL (or empty) — drop the element entirely;
+            # leaving a naked URL as text is worse than nothing.
+            a.drop_tree()
+        else:
+            # Keep the meaningful link text, drop only the dead <a>.
+            a.drop_tag()
+        stats['unwrapped'] += 1
+
     # Collect first — mutating (drop_tag) while iterating the tree is unsafe.
     anchors = list(frag.iterfind('.//a'))
     for a in anchors:
         href = a.get('href', '')
-        if not href or _WIKI_MARKER not in href:
+        if not href:
             continue
         visible = (a.text_content() or '').strip()
-        m = _PAGE_ID_RE.search(href)
-        if m and m.group(1) in link_map:
-            slug, title = link_map[m.group(1)]
-            a.set('href', f"/docs/{slug}")
-            # Confluence often exports the raw URL as the anchor text. If the
-            # label is a bare URL (or empty), replace it with the target page's
-            # title so the reader sees "Protocol Set-Up", not a wiki URL.
-            if not visible or _BARE_URL_TEXT_RE.match(visible):
-                for child in list(a):
-                    a.remove(child)
-                a.text = title
-            stats['resolved'] += 1
-        else:
-            # Unresolvable Confluence link → unwrap.
-            if not visible or _BARE_URL_TEXT_RE.match(visible):
-                # Label is a raw URL (or empty) — drop the element entirely;
-                # leaving a naked Confluence URL as text is worse than nothing.
-                a.drop_tree()
+
+        if _WIKI_MARKER in href:
+            m = _PAGE_ID_RE.search(href)
+            if m and m.group(1) in link_map:
+                slug, title = link_map[m.group(1)]
+                a.set('href', f"/docs/{slug}")
+                # Confluence often exports the raw URL as the anchor text. If
+                # the label is a bare URL (or empty), replace it with the
+                # target page's title so the reader sees "Protocol Set-Up".
+                if not visible or _BARE_URL_TEXT_RE.match(visible):
+                    for child in list(a):
+                        a.remove(child)
+                    a.text = title
+                stats['resolved'] += 1
             else:
-                # Keep the meaningful link text, drop only the dead <a>.
-                a.drop_tag()
-            stats['unwrapped'] += 1
+                _unwrap(a, visible)
+
+        elif href.startswith('/docs/'):
+            # Already-resolved internal link — verify its target still exists.
+            # (A page it pointed to may have since been deleted or hidden.)
+            slug = href[len('/docs/'):].split('#')[0].split('?')[0].strip('/')
+            if slug and slug not in valid_slugs:
+                _unwrap(a, visible)
 
     if stats['resolved'] == 0 and stats['unwrapped'] == 0:
         return html_str, stats
