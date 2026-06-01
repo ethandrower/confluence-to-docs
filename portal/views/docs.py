@@ -214,6 +214,9 @@ def page_detail(request, slug):
     except DocPage.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
     data = DocPageDetailSerializer(page).data
+    # Private S3 bucket — sign image URLs fresh per request (see media_signing).
+    from portal.media_signing import sign_media_urls
+    data['rendered_html'] = sign_media_urls(data.get('rendered_html', ''))
     return JsonResponse(data)
 
 
