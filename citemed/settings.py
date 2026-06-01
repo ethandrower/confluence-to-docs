@@ -143,10 +143,22 @@ if _S3_BUCKET:
     AWS_STORAGE_BUCKET_NAME = _S3_BUCKET
     AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', default='us-east-1')
     AWS_S3_ENDPOINT_URL = env('AWS_S3_ENDPOINT_URL', default=None)  # Set for R2/MinIO
-    AWS_DEFAULT_ACL = 'public-read'
+
+    # The citemed-docku bucket has ACLs disabled (bucket-owner-enforced) and
+    # Block-Public-Access fully on. Sending any ACL raises
+    # AccessControlListNotSupported, so we must NOT set one. Objects are NOT
+    # publicly readable via direct S3 URLs (403) — they're served through a
+    # CloudFront distribution instead. Set AWS_S3_CUSTOM_DOMAIN to the
+    # CloudFront domain so storage URLs (and the <img> srcs the sync writes)
+    # point at the CDN rather than the private bucket.
+    AWS_DEFAULT_ACL = None
     AWS_S3_FILE_OVERWRITE = False
-    AWS_QUERYSTRING_AUTH = False
-    MEDIA_URL = env('MEDIA_URL', default=f'https://{_S3_BUCKET}.s3.amazonaws.com/')
+    AWS_QUERYSTRING_AUTH = env.bool('AWS_QUERYSTRING_AUTH', default=False)
+    AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN', default='') or None
+    if AWS_S3_CUSTOM_DOMAIN:
+        MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/'
+    else:
+        MEDIA_URL = env('MEDIA_URL', default=f'https://{_S3_BUCKET}.s3.amazonaws.com/')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
