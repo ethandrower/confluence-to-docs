@@ -194,6 +194,13 @@ _os.environ['ATLASSIAN_JIRA_URL'] = (
 PORTAL_MAGIC_LINK_EXPIRY_MINUTES = env.int('PORTAL_MAGIC_LINK_EXPIRY_MINUTES', default=60)
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
+# Which Confluence spaces this portal surfaces. Empty list = all spaces
+# (dev default). In production we set DOCS_ALLOWED_SPACES=ECD so only the
+# customer-facing Evidence Cloud docs show — internal spaces (Engineering,
+# Operations, Collective) stay hidden. Kept separate from each page's
+# is_published flag so a future Confluence re-sync can't clobber this intent.
+DOCS_ALLOWED_SPACES = env.list('DOCS_ALLOWED_SPACES', default=[])
+
 # Email — Mailgun when MAILGUN_ACCESS_KEY is set, otherwise console (dev/tests).
 # Mirrors the citemed_web pattern so we don't introduce a second mental model.
 MAILGUN_ACCESS_KEY = env('MAILGUN_ACCESS_KEY', default='')

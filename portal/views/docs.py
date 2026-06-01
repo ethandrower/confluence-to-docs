@@ -1,11 +1,33 @@
 import re
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.db import connection, models
 from portal.decorators import require_portal_user
 from portal.models import DocPage
 from portal.serializers import DocPageTreeSerializer, DocPageDetailSerializer
+
+
+def allowed_spaces():
+    """
+    Space keys this portal is allowed to surface, from DOCS_ALLOWED_SPACES.
+    Empty setting = no restriction (all spaces visible) — the dev default.
+    """
+    return set(getattr(settings, 'DOCS_ALLOWED_SPACES', []) or [])
+
+
+def published_pages():
+    """
+    Base queryset for everything the portal serves: published pages, scoped
+    to the allowed spaces. Single source of truth so page_tree, search, and
+    page_detail can never drift out of sync on what's visible.
+    """
+    qs = DocPage.objects.filter(is_published=True)
+    spaces = allowed_spaces()
+    if spaces:
+        qs = qs.filter(space_key__in=spaces)
+    return qs
 
 
 SPACE_LABELS = {
@@ -134,14 +156,13 @@ def _filter_tree(pages, promote_ids, drop_ids):
 def page_tree(request):
     """Return the full page tree grouped by space, with version info."""
     spaces = sorted(set(
-        DocPage.objects.filter(is_published=True)
-        .values_list('space_key', flat=True)
+        published_pages().values_list('space_key', flat=True)
     ))
 
     sections = []
     for space_key in spaces:
-        roots = DocPage.objects.filter(
-            parent__isnull=True, is_published=True, space_key=space_key
+        roots = published_pages().filter(
+            parent__isnull=True, space_key=space_key
         ).order_by('position', 'title')
         data = DocPageTreeSerializer(roots, many=True).data
 
@@ -189,7 +210,7 @@ def page_tree(request):
 @require_portal_user
 def page_detail(request, slug):
     try:
-        page = DocPage.objects.get(slug=slug, is_published=True)
+        page = published_pages().get(slug=slug)
     except DocPage.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
     data = DocPageDetailSerializer(page).data
@@ -254,16 +275,14 @@ def search_docs(request):
     if connection.vendor == 'postgresql':
         from django.contrib.postgres.search import SearchQuery, SearchRank
         query = SearchQuery(q)
-        pages = DocPage.objects.annotate(
+        pages = published_pages().annotate(
             rank=SearchRank('search_vector', query)
         ).filter(
-            search_vector=query, is_published=True
+            search_vector=query
         ).order_by('-rank')[:20]
     else:
         from django.db.models import Q
-        pages = DocPage.objects.filter(
-            is_published=True
-        ).filter(
+        pages = published_pages().filter(
             Q(title__icontains=q) | Q(raw_storage__icontains=q)
         )[:20]
 
