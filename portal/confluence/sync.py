@@ -225,6 +225,49 @@ def sync_space(space_key, full=True, since=None):
     return {'synced': synced, 'skipped': skipped, 'errors': errors}
 
 
+def _extract_proxy_image_url(filename):
+    """
+    Some pages (imported from GitBook) reference images not as real Confluence
+    attachments but as an image-proxy "filename" of the form:
+        image?url=<percent-encoded-CDN-url>&w=...&q=...
+    These never resolve as attachments. Extract and return the real CDN URL so
+    we can fetch + re-host it; return None for ordinary attachment filenames.
+    """
+    if 'url=' not in filename:
+        return None
+    qs = filename.split('?', 1)[1] if '?' in filename else filename
+    real = urllib.parse.parse_qs(qs).get('url', [None])[0]
+    if real and real.startswith(('http://', 'https://')):
+        return real
+    return None
+
+
+def _download_external_image(url):
+    """Fetch an external image URL. Returns (content_bytes, content_type, name) or None."""
+    import requests
+    try:
+        resp = requests.get(url, timeout=30)
+        ctype = resp.headers.get('Content-Type', '')
+        if resp.status_code != 200 or not ctype.startswith('image/'):
+            logger.warning(f"    External image fetch failed ({resp.status_code} {ctype}): {url[:80]}")
+            return None
+        # Build a clean, unique, storage-safe filename. GitBook paths encode
+        # slashes (%2F), so decode first; use the parent segment (the unique
+        # upload id, e.g. .../uploads/<id>/image.png) to avoid collisions.
+        decoded = urllib.parse.unquote(urllib.parse.urlparse(url).path)
+        parts = [p for p in decoded.split('/') if p]
+        leaf = parts[-1] if parts else 'image'
+        if len(parts) >= 2:
+            leaf = f'{parts[-2]}_{leaf}'
+        ext = '.' + ctype.split('/', 1)[1].split(';')[0] if '/' in ctype else ''
+        if ext and not leaf.lower().endswith(ext.lower()):
+            leaf += ext
+        return resp.content, ctype, _sanitize_attachment_filename(leaf)
+    except Exception as e:
+        logger.warning(f"    External image fetch error for {url[:80]}: {e}")
+        return None
+
+
 def _sync_attachments(client, page, confluence_id, page_data):
     """
     Download image attachments from Confluence and upload to the configured
@@ -232,6 +275,11 @@ def _sync_attachments(client, page, confluence_id, page_data):
 
     After upload, rewrites the placeholder src URLs in rendered_html to the
     actual storage URL so images serve correctly regardless of backend.
+
+    Handles two source types:
+      1. Real Confluence attachments (downloaded via the REST API).
+      2. Image-proxy "filenames" (e.g. GitBook-imported `image?url=<cdn>` refs)
+         — fetched directly from the embedded CDN URL and re-hosted.
     """
     import re
     from django.core.files.storage import default_storage
@@ -277,14 +325,21 @@ def _sync_attachments(client, page, confluence_id, page_data):
             continue
 
         try:
-            response = client.download_attachment(confluence_id, filename)
-            if response is None:
-                logger.warning(f"    Attachment not found: {filename} on page {confluence_id}")
-                continue
+            proxy_url = _extract_proxy_image_url(filename)
+            if proxy_url:
+                fetched = _download_external_image(proxy_url)
+                if fetched is None:
+                    continue
+                content, content_type, safe_name = fetched
+            else:
+                response = client.download_attachment(confluence_id, filename)
+                if response is None:
+                    logger.warning(f"    Attachment not found: {filename} on page {confluence_id}")
+                    continue
+                content = response.content
+                content_type = response.headers.get('Content-Type', 'image/png')
+                safe_name = _sanitize_attachment_filename(filename)
 
-            content = response.content
-            content_type = response.headers.get('Content-Type', 'image/png')
-            safe_name = _sanitize_attachment_filename(filename)
             storage_path = f'confluence/{confluence_id}/{safe_name}'
 
             # Save to storage backend (local or S3 depending on settings)
