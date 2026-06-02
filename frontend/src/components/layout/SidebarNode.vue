@@ -6,11 +6,11 @@
         @click.stop="expanded = !expanded"
         class="tree-toggle"
         :class="isActive || isInSubtree ? 'text-primary/70' : 'text-muted-foreground/30 hover:text-muted-foreground'"
-        :aria-label="expanded ? 'Collapse' : 'Expand'"
+        :aria-label="isExpanded ? 'Collapse' : 'Expand'"
       >
         <svg
           class="w-3 h-3 transition-transform duration-150"
-          :class="expanded ? 'rotate-90' : ''"
+          :class="isExpanded ? 'rotate-90' : ''"
           fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
         >
           <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
@@ -32,17 +32,18 @@
         @click="page.is_folder && hasChildren ? (expanded = !expanded) : null"
       >{{ displayTitle }}</component>
       <span
-        v-if="hasChildren && !expanded"
+        v-if="hasChildren && !isExpanded"
         class="tree-badge"
       >{{ childCount }}</span>
     </div>
 
-    <ul v-if="expanded && hasChildren" class="tree-children">
+    <ul v-if="isExpanded && hasChildren" class="tree-children">
       <SidebarNode
         v-for="child in page.children"
         :key="child.id"
         :page="child"
         :depth="depth + 1"
+        :filtering="filtering"
       />
     </ul>
   </li>
@@ -52,7 +53,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-const props = defineProps({ page: Object, depth: Number })
+const props = defineProps({ page: Object, depth: Number, filtering: Boolean })
 const route = useRoute()
 const currentSlug = computed(() => route.params.slug)
 const hasChildren = computed(() => props.page.children?.length > 0)
@@ -84,6 +85,9 @@ function subtreeContains(page, slug) {
 // Depth 3+ starts collapsed unless you're navigating within it
 const inPath = subtreeContains(props.page, currentSlug.value)
 const expanded = ref(props.depth < 3 ? inPath : inPath)
+
+// While a filter is active, every branch is forced open so matches are visible.
+const isExpanded = computed(() => props.filtering || expanded.value)
 
 watch(currentSlug, (slug) => {
   if (subtreeContains(props.page, slug)) expanded.value = true
@@ -122,6 +126,19 @@ watch(currentSlug, (slug) => {
   border-radius: 6px;
   margin: 0 4px;
   transition: background-color 0.1s;
+}
+
+/* Active page: a solid accent bar on the row's left edge — an unmistakable
+   "you are here" marker that reads as a controlled register entry. */
+.tree-item--active > .tree-row::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
 }
 
 .tree-toggle {

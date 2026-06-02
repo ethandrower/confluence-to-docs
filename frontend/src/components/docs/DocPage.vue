@@ -80,25 +80,17 @@
               <ProseContent :html="store.currentPage.rendered_html" />
             </div>
 
-            <!-- Footer -->
-            <footer class="mt-12 pt-6 border-t">
-              <div class="flex items-center justify-between text-xs text-muted-foreground">
-                <span v-if="store.currentPage.last_synced">
-                  Last updated {{ formatDate(store.currentPage.last_synced) }}
-                </span>
-                <a
-                  :href="`#`"
-                  @click.prevent="scrollToTop"
-                  class="inline-flex items-center gap-1 hover:text-muted-foreground transition-colors"
-                >
-                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
-                  </svg>
-                  Back to top
-                </a>
-              </div>
-            </footer>
           </div>
+
+          <!-- Back to top — spans the full article width, aligned right. -->
+          <footer class="doc-foot">
+            <button type="button" @click="scrollToTop" class="doc-prov-top">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+              </svg>
+              Back to top
+            </button>
+          </footer>
         </article>
 
         <!-- TOC -->
@@ -281,6 +273,35 @@ watch(() => props.slug, loadPage, { immediate: true })
 }
 .doc-meta-source .doc-meta-icon { opacity: 0.9; }
 
+/* ── Back-to-top footer (full article width, right-aligned) ──────────── */
+.doc-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 3.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-ui);
+}
+.doc-prov-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition: color 0.15s, background 0.15s;
+}
+.doc-prov-top:hover {
+  color: var(--foreground);
+  background: var(--muted);
+}
+.doc-prov-top:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* ── Print / PDF: controlled-document layout ─────────────────────────────
    Auditors export pages as evidence. Strip the app chrome and present a
    clean document with a provenance footer (title · version · date · URL)
@@ -325,6 +346,9 @@ watch(() => props.slug, loadPage, { immediate: true })
     color: #555;
     word-break: break-all;
   }
+
+  /* Drop the back-to-top button from printed copies */
+  .doc-foot { display: none !important; }
 
   /* Avoid awkward breaks */
   .confluence-content h1, .confluence-content h2, .confluence-content h3 {

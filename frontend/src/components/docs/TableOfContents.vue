@@ -1,8 +1,16 @@
 <template>
-  <nav v-if="headings.length" aria-label="Table of contents">
-    <p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">On this page</p>
-    <ul class="toc-list">
-      <li v-for="h in headings" :key="h.id">
+  <nav v-if="headings.length" aria-label="Table of contents" class="toc">
+    <p class="toc-title">On this page</p>
+    <ul class="toc-list" ref="listRef">
+      <!-- Progress rail: a thumb tracks the active heading down the list -->
+      <span class="toc-rail" aria-hidden="true" />
+      <span
+        v-if="thumb.visible"
+        class="toc-rail-thumb"
+        aria-hidden="true"
+        :style="{ transform: `translateY(${thumb.top}px)`, height: `${thumb.height}px` }"
+      />
+      <li v-for="h in headings" :key="h.id" :ref="el => setItemRef(h.id, el)">
         <a
           :href="`#${h.id}`"
           @click.prevent="scrollTo(h.id)"
@@ -11,6 +19,7 @@
             h.level === 3 ? 'toc-link--nested' : '',
             activeId === h.id ? 'toc-link--active' : ''
           ]"
+          :aria-current="activeId === h.id ? 'location' : undefined"
         >{{ h.text }}</a>
       </li>
     </ul>
@@ -18,98 +27,178 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 
 const props = defineProps({ html: String })
 const activeId = ref('')
 const headings = ref([])
+const listRef = ref(null)
+const itemEls = new Map()
+const thumb = reactive({ top: 0, height: 0, visible: false })
+
+function setItemRef(id, el) {
+  if (el) itemEls.set(id, el)
+  else itemEls.delete(id)
+}
+
+function slugify(text) {
+  return text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
+}
 
 function parseHeadings() {
-  // Parse from rendered DOM instead of creating throwaway elements
   const content = document.querySelector('.confluence-content')
-  if (!content) {
-    // Fallback: parse from HTML string
-    if (!props.html || typeof document === 'undefined') { headings.value = []; return }
-    const div = document.createElement('div')
-    div.innerHTML = props.html
-    headings.value = [...div.querySelectorAll('h2, h3')]
-      .map(h => {
-        let text = h.textContent.replace(/^#\s*/, '').trim()
-        return {
-          id: h.id || text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
-          text,
-          level: parseInt(h.tagName[1])
-        }
-      })
-      .filter(h => h.text && !h.text.includes('Image unavailable') && h.text.length > 1)
+  if (!content) { headings.value = []; return }
+
+  const found = []
+  for (const h of content.querySelectorAll('h2, h3')) {
+    // Strip the anchor "#" prefix that ProseContent adds
+    const text = h.textContent.replace(/^#\s*/, '').trim()
+    if (!text || text.includes('Image unavailable') || text.length < 2) continue
+    // Guarantee a DOM id so getElementById / scrollTo always resolve.
+    if (!h.id) {
+      let base = slugify(text) || 'section'
+      let id = base, n = 2
+      while (document.getElementById(id)) id = `${base}-${n++}`
+      h.id = id
+    }
+    found.push({ id: h.id, text, level: parseInt(h.tagName[1]) })
+  }
+  headings.value = found
+}
+
+function getScroller() {
+  return document.querySelector('main') || document.scrollingElement || document.documentElement
+}
+
+// Deterministic active-section detection: the current section is the LAST
+// heading whose top has scrolled above a fixed threshold line. This is stable
+// in both scroll directions and never goes stale (unlike enter-only observers).
+const THRESHOLD = 96 // px below the scroller's top edge
+
+function computeActive() {
+  const root = getScroller()
+  if (!root || !headings.value.length) return
+
+  // Bottom of page: force-activate the last heading so trailing short
+  // sections (which never reach the threshold line) still highlight.
+  if (root.scrollTop + root.clientHeight >= root.scrollHeight - 4) {
+    setActive(headings.value[headings.value.length - 1].id)
     return
   }
-  headings.value = [...content.querySelectorAll('h2, h3')]
-    .map(h => {
-      // Strip the anchor "#" prefix that ProseContent adds
-      let text = h.textContent.replace(/^#\s*/, '').trim()
-      return {
-        id: h.id || text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
-        text,
-        level: parseInt(h.tagName[1])
-      }
-    })
-    // Filter out image placeholders and empty headings
-    .filter(h => h.text && !h.text.includes('Image unavailable') && h.text.length > 1)
+
+  const rootTop = root.getBoundingClientRect().top
+  let current = headings.value[0].id
+  for (const h of headings.value) {
+    const el = document.getElementById(h.id)
+    if (!el) continue
+    const top = el.getBoundingClientRect().top - rootTop
+    if (top <= THRESHOLD) current = h.id
+    else break // headings are in document order — nothing after qualifies
+  }
+  setActive(current)
+}
+
+function setActive(id) {
+  if (activeId.value !== id) {
+    activeId.value = id
+    nextTick(updateThumb)
+  }
+}
+
+function updateThumb() {
+  const el = itemEls.get(activeId.value)
+  const list = listRef.value
+  if (!el || !list) { thumb.visible = false; return }
+  thumb.top = el.offsetTop
+  thumb.height = el.offsetHeight
+  thumb.visible = true
 }
 
 function scrollTo(id) {
   const el = document.getElementById(id)
   if (!el) return
-  const main = el.closest('main')
-  if (main) {
-    const top = el.offsetTop - 24
-    main.scrollTo({ top, behavior: 'smooth' })
+  const root = getScroller()
+  if (root && root !== document.documentElement) {
+    const top = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - 24
+    root.scrollTo({ top, behavior: 'smooth' })
   } else {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+  setActive(id)
 }
 
-let observer = null
-
-function setupObserver() {
-  observer?.disconnect()
-  // Use the scrolling main container as root, not viewport
-  const main = document.querySelector('main')
-  observer = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) activeId.value = e.target.id
-      }
-    },
-    { root: main || null, rootMargin: '-24px 0px -80% 0px' }
-  )
-  headings.value.forEach(h => {
-    const el = document.getElementById(h.id)
-    if (el) observer.observe(el)
-  })
+let ticking = false
+function onScroll() {
+  if (ticking) return
+  ticking = true
+  requestAnimationFrame(() => { computeActive(); ticking = false })
 }
 
-watch(() => props.html, async () => {
+let scroller = null
+function bindScroll() {
+  unbindScroll()
+  scroller = getScroller()
+  const target = scroller === document.documentElement ? window : scroller
+  target?.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('resize', onScroll, { passive: true })
+}
+function unbindScroll() {
+  const target = scroller === document.documentElement ? window : scroller
+  target?.removeEventListener('scroll', onScroll)
+  window.removeEventListener('resize', onScroll)
+}
+
+async function refresh() {
   await nextTick()
   parseHeadings()
-  setTimeout(setupObserver, 100)
-})
-
-onMounted(async () => {
   await nextTick()
-  parseHeadings()
-  setTimeout(setupObserver, 200)
-})
+  bindScroll()
+  computeActive()
+  updateThumb()
+}
 
-onBeforeUnmount(() => observer?.disconnect())
+watch(() => props.html, () => { setTimeout(refresh, 80) })
+onMounted(() => setTimeout(refresh, 150))
+onBeforeUnmount(unbindScroll)
 </script>
 
 <style scoped>
+.toc-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted-foreground);
+  margin-bottom: 10px;
+}
+
 .toc-list {
+  position: relative;
   list-style: none;
-  padding: 0;
+  padding: 0 0 0 12px;
   margin: 0;
+}
+
+/* Static rail behind the links */
+.toc-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+/* Moving thumb that marks the active section */
+.toc-rail-thumb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .toc-link {
@@ -119,7 +208,7 @@ onBeforeUnmount(() => observer?.disconnect())
   padding: 3px 8px;
   border-radius: 4px;
   color: oklch(0.35 0.012 260);
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -130,6 +219,11 @@ onBeforeUnmount(() => observer?.disconnect())
   background: var(--muted);
 }
 
+.toc-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
 .toc-link--nested {
   padding-left: 20px;
   font-size: 11.5px;
@@ -138,7 +232,6 @@ onBeforeUnmount(() => observer?.disconnect())
 .toc-link--active {
   color: var(--primary);
   font-weight: 600;
-  background: var(--accent);
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {

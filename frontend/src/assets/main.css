@@ -17,7 +17,7 @@
 :root {
   --nav-height: 56px;
   --sidebar-width: 320px;
-  --content-max-width: 860px;
+  --content-max-width: 768px; /* ~78ch in Source Sans 3 — optimal regulatory-prose measure */
 
   /* Font stacks */
   --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;

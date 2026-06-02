@@ -1,5 +1,9 @@
 <template>
   <div class="min-h-screen flex flex-col">
+    <!-- Skip link — first focusable element, lets keyboard users jump past
+         the nav straight to the document body (WCAG 2.4.1). -->
+    <a href="#main-content" class="skip-link">Skip to content</a>
+
     <!-- Header -->
     <header class="sticky top-0 z-50 h-14 border-b bg-card shadow-[0_1px_3px_0_oklch(0_0_0/0.04)]">
       <div class="flex items-center h-full px-4 gap-3">
@@ -104,7 +108,7 @@
 
     <div class="flex flex-1 overflow-hidden">
       <!-- Sidebar — desktop -->
-      <aside v-if="!hideSidebar" class="hidden lg:block w-[var(--sidebar-width)] shrink-0 border-r bg-sidebar">
+      <aside v-if="!hideSidebar" aria-label="Documentation navigation" class="hidden lg:block w-[var(--sidebar-width)] shrink-0 border-r bg-sidebar">
         <ScrollArea class="h-[calc(100vh-var(--nav-height))]">
           <div class="pt-3 pb-6">
             <slot name="sidebar" />
@@ -112,7 +116,7 @@
         </ScrollArea>
       </aside>
 
-      <main class="flex-1 min-w-0 overflow-y-auto h-[calc(100vh-var(--nav-height))]">
+      <main id="main-content" tabindex="-1" class="flex-1 min-w-0 overflow-y-auto h-[calc(100vh-var(--nav-height))]">
         <slot name="content" />
       </main>
     </div>
@@ -158,3 +162,30 @@ onMounted(() => {
 })
 onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </script>
+
+<style scoped>
+/* Visually hidden until focused, then pinned top-left over the header. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  transform: translateY(-150%);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.18);
+  transition: transform 0.15s ease;
+}
+.skip-link:focus-visible,
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+main:focus-visible { outline: none; }
+</style>

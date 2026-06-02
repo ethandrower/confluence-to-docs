@@ -242,22 +242,87 @@
   margin: 1.5rem 0;
 }
 
-/* ── Panels ────────────────────────────────────────────────── */
+/* ── Callout panels ────────────────────────────────────────── */
+/* Confluence note/info/warning/tip macros, rendered as clinical-grade
+   callouts with a leading icon. The icon glyph is a masked SVG tinted with
+   the panel's accent colour, so it inherits per-type theming for free. */
 
 .confluence-content .panel {
+  position: relative;
   border-radius: 10px;
-  padding: 1rem 1.125rem;
+  padding: 0.875rem 1.125rem 0.875rem 2.875rem;
   margin: 1.5rem 0;
-  border-left: 4px solid;
+  border: 1px solid;
+  border-left-width: 4px;
   font-size: 0.9375rem;
   line-height: 1.65;
 }
 
 .confluence-content .panel p:last-child { margin-bottom: 0; }
-.confluence-content .panel-note    { background: oklch(0.97 0.015 210); border-color: oklch(0.48 0.10 210); }
-.confluence-content .panel-info    { background: oklch(0.97 0.02 260); border-color: oklch(0.55 0.18 260); }
-.confluence-content .panel-warning { background: oklch(0.975 0.025 80); border-color: oklch(0.62 0.15 70); }
-.confluence-content .panel-tip     { background: oklch(0.97 0.02 145); border-color: oklch(0.45 0.12 145); }
+
+.confluence-content .panel::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor; /* overridden per-type below */
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
+  -webkit-mask-size: contain;
+          mask-size: contain;
+}
+
+/* Note — pencil/document */
+.confluence-content .panel-note {
+  background: oklch(0.975 0.008 260);
+  border-color: oklch(0.86 0.012 260);
+  border-left-color: oklch(0.55 0.03 260);
+}
+.confluence-content .panel-note::before {
+  background-color: oklch(0.48 0.03 260);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z'/%3E%3C/svg%3E");
+}
+
+/* Info — circled i */
+.confluence-content .panel-info {
+  background: oklch(0.975 0.02 260);
+  border-color: oklch(0.85 0.04 260);
+  border-left-color: oklch(0.55 0.18 260);
+}
+.confluence-content .panel-info::before {
+  background-color: oklch(0.52 0.18 260);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z'/%3E%3C/svg%3E");
+}
+
+/* Warning — triangle exclamation */
+.confluence-content .panel-warning {
+  background: oklch(0.98 0.03 80);
+  border-color: oklch(0.86 0.06 80);
+  border-left-color: oklch(0.62 0.15 70);
+}
+.confluence-content .panel-warning::before {
+  background-color: oklch(0.58 0.15 60);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z'/%3E%3C/svg%3E");
+}
+
+/* Tip — check circle */
+.confluence-content .panel-tip {
+  background: oklch(0.975 0.02 150);
+  border-color: oklch(0.85 0.05 150);
+  border-left-color: oklch(0.48 0.12 150);
+}
+.confluence-content .panel-tip::before {
+  background-color: oklch(0.45 0.12 150);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'/%3E%3C/svg%3E");
+}
 
 /* ── Tasks ─────────────────────────────────────────────────── */
 
