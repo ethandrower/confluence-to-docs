@@ -108,6 +108,44 @@ def sync_space(space_key, full=True, since=None):
         except Exception as e:
             logger.error(f"  Failed to fetch body for {confluence_id}: {e}")
 
+    # ── Confluence "folder" nodes ────────────────────────────────────────
+    # list_space_pages returns only type=page content, so Confluence folders
+    # (a newer non-page container type) are never yielded — but they DO appear
+    # in the ancestor chains of the pages beneath them. Synthesize a DocPage
+    # for each missing ancestor so the tree is complete: parents resolve and
+    # module-grouping folders (e.g. "V5.5.4 Literature Module") render. These
+    # carry no body and are flagged is_folder=True. Without this, every page
+    # under a folder is orphaned from its container and the version/module
+    # grouping silently collapses on a clean database.
+    fetched_ids = {str(p['id']) for p in all_pages}
+    synthetic_folders = {}
+    for full in page_bodies.values():
+        ancestors = full.get('ancestors', [])
+        for idx, a in enumerate(ancestors):
+            cid = str(a['id'])
+            if cid in fetched_ids or cid in synthetic_folders:
+                continue
+            synthetic_folders[cid] = {
+                'id': cid,
+                'title': a.get('title', 'Untitled'),
+                'version': {'number': 1},
+                'ancestors': ancestors[:idx],
+                '_is_folder': True,
+            }
+    for cid, fdata in synthetic_folders.items():
+        page_bodies[cid] = fdata
+        all_pages.append({
+            'id': cid,
+            'title': fdata['title'],
+            'version': fdata['version'],
+            'ancestors': fdata['ancestors'],
+        })
+    if synthetic_folders:
+        logger.info(
+            f"Synthesized {len(synthetic_folders)} Confluence folder node(s): "
+            + ", ".join(sorted(f['title'] for f in synthetic_folders.values()))
+        )
+
     # Sort pages so parents are always processed before children
     # (fewer ancestors = higher in the tree = process first)
     def ancestor_depth(page_data):
@@ -123,6 +161,7 @@ def sync_space(space_key, full=True, since=None):
         title = page_data.get('title', 'Untitled')
         version_number = page_data.get('version', {}).get('number', 1)
         full_page = page_bodies.get(confluence_id, {})
+        is_folder = bool(full_page.get('_is_folder'))
 
         try:
             existing = DocPage.objects.filter(confluence_id=confluence_id).first()
@@ -131,8 +170,6 @@ def sync_space(space_key, full=True, since=None):
                 skipped += 1
                 continue
 
-            body = full_page.get('body', {}).get('storage', {}).get('value', '')
-
             # Resolve parent — safe now because we sorted parents-first
             parent_obj = None
             ancestors = full_page.get('ancestors', [])
@@ -140,12 +177,18 @@ def sync_space(space_key, full=True, since=None):
                 parent_confluence_id = str(ancestors[-1]['id'])
                 parent_obj = DocPage.objects.filter(confluence_id=parent_confluence_id).first()
 
-            page_image_resolver = lambda filename, cid=confluence_id: get_image_url(cid, filename)
-            page_transformer = StorageTransformer(
-                image_resolver=page_image_resolver,
-                page_slug_resolver=page_slug_resolver,
-            )
-            rendered = page_transformer.transform(body)
+            # Folder nodes are containers only — no body, no attachments.
+            if is_folder:
+                body = ''
+                rendered = ''
+            else:
+                body = full_page.get('body', {}).get('storage', {}).get('value', '')
+                page_image_resolver = lambda filename, cid=confluence_id: get_image_url(cid, filename)
+                page_transformer = StorageTransformer(
+                    image_resolver=page_image_resolver,
+                    page_slug_resolver=page_slug_resolver,
+                )
+                rendered = page_transformer.transform(body)
 
             slug = make_unique_slug(title, confluence_id, existing.slug if existing else None)
             title_to_slug[title] = slug
@@ -162,11 +205,13 @@ def sync_space(space_key, full=True, since=None):
                     'version': (existing.version + 1) if existing else 1,
                     'space_key': space_key,
                     'is_published': True,
+                    'is_folder': is_folder,
                     'position': i,
                 }
             )
 
-            _sync_attachments(client, page, confluence_id, full_page)
+            if not is_folder:
+                _sync_attachments(client, page, confluence_id, full_page)
 
             synced += 1
             action = 'Created' if created else 'Updated'
