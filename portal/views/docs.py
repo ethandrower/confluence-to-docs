@@ -27,17 +27,37 @@ def published_pages():
     spaces = allowed_spaces()
     if spaces:
         qs = qs.filter(space_key__in=spaces)
+    if EXCLUDE_TITLES:
+        qs = qs.exclude(title__in=EXCLUDE_TITLES)
     return qs
 
 
 SPACE_LABELS = {
-    'ECD': 'Evidence Cloud',
+    'ECD': 'Evidence Cloud - Altus Release',
     'Ops': 'Operations',
     'ECC': 'Collective',
     'Engineerin': 'Engineering',
     'CHO': 'CiteMed Home',
     'GTM': 'Go To Market',
 }
+
+# Pages hidden from the portal entirely (internal docs that shouldn't surface
+# to customers / auditors). Matched on exact title.
+EXCLUDE_TITLES = {
+    'Retrospective: V6.0.1',
+    'SOP for Managing User Documentation in Confluence and Jira',
+}
+
+# Display-title overrides — rename a page in the portal without touching
+# Confluence. Keyed by the page's Confluence title.
+TITLE_OVERRIDES = {
+    'Customer Release Notes for Evidence Cloud': 'Release Notes',
+}
+
+
+def display_title(page):
+    """Portal-facing title for a page, applying TITLE_OVERRIDES."""
+    return TITLE_OVERRIDES.get(page.title, page.title)
 
 # Pages whose direct children are version roots.
 # Title pattern → matched exactly.
@@ -203,7 +223,24 @@ def page_tree(request):
 
         sections.append(section)
 
+    # Apply display-title overrides across the whole structure.
+    for section in sections:
+        _apply_title_overrides(section['pages'])
+        for v in section.get('versions', []):
+            _apply_title_overrides(v.get('pages', []))
+
     return JsonResponse({'sections': sections})
+
+
+def _apply_title_overrides(pages):
+    """Recursively apply TITLE_OVERRIDES to a serialized page tree (in place)."""
+    if not TITLE_OVERRIDES:
+        return
+    for p in pages:
+        if p.get('title') in TITLE_OVERRIDES:
+            p['title'] = TITLE_OVERRIDES[p['title']]
+        if p.get('children'):
+            _apply_title_overrides(p['children'])
 
 
 @require_GET
@@ -214,6 +251,7 @@ def page_detail(request, slug):
     except DocPage.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
     data = DocPageDetailSerializer(page).data
+    data['title'] = display_title(page)
     # Private S3 bucket — sign image URLs fresh per request (see media_signing).
     from portal.media_signing import sign_media_urls
     data['rendered_html'] = sign_media_urls(data.get('rendered_html', ''))
@@ -297,7 +335,7 @@ def search_docs(request):
         space_label = SPACE_LABELS.get(p.space_key, p.space_key)
         results.append({
             'slug': p.slug,
-            'title': p.title,
+            'title': display_title(p),
             'snippet': snippet,
             'section': section,
             'space': space_label,

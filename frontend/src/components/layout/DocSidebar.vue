@@ -64,10 +64,10 @@
               />
             </ul>
 
-            <!-- General pages (non-version) -->
+            <!-- Other Documentation (non-version pages) -->
             <template v-if="section.versions?.length && section.pages.length">
               <div class="mx-4 my-2 border-t" />
-              <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">General</div>
+              <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Other Documentation</div>
             </template>
 
             <ul v-if="section.pages.length" class="space-y-px px-2">
