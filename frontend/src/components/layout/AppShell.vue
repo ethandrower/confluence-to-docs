@@ -65,6 +65,7 @@
 
         <!-- User / Login -->
         <div class="hidden sm:flex items-center gap-2 ml-1">
+          <ThemeToggle />
           <template v-if="auth.user">
             <!-- Admin badge — only renders when the logged-in portal user
                  matches an active Django superuser. Backend gates this
@@ -128,6 +129,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
+import ThemeToggle from './ThemeToggle.vue'
 
 defineProps({ hideSidebar: Boolean })
 const route = useRoute()
@@ -164,13 +166,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 .wordmark {
   font-family: var(--font-ui);
   font-weight: 700;
-  color: #2d5296; /* brand navy — same as the logo */
+  color: var(--primary); /* brand navy #0C377B (light) / luminous blue (dark) */
   letter-spacing: -0.02em;
   line-height: 1;
 }
 .wm-bracket {
   font-weight: 500;
-  color: #8aa4cf; /* lighter navy tint for the brackets */
+  color: var(--brand-accent); /* brighter brand blue for the brackets */
 }
 .wm-support {
   margin-left: 0.4em;

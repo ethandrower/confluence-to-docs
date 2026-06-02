@@ -19,40 +19,80 @@
   --sidebar-width: 320px;
   --content-max-width: 768px; /* ~78ch in Source Sans 3 — optimal regulatory-prose measure */
 
-  /* Font stacks */
-  --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  /* Font stacks — Archivo is the CiteMed brand typeface (UI + headings);
+     Source Sans 3 stays for long-form doc body (humanist = more readable). */
+  --font-ui: 'Archivo Variable', 'Archivo', system-ui, -apple-system, sans-serif;
   --font-reading: 'Source Sans 3 Variable', 'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif;
 
-  /* CiteMed brand palette — blue primary, cool neutrals */
-  --radius: 0.5rem;
-  --background: oklch(0.98 0.004 265);
-  --foreground: oklch(0.13 0.015 260);
-  --card: oklch(0.995 0.002 265);
-  --card-foreground: oklch(0.13 0.015 260);
-  --popover: oklch(0.995 0.002 265);
-  --popover-foreground: oklch(0.13 0.015 260);
-  --primary: oklch(0.52 0.20 260);
-  --primary-foreground: oklch(0.98 0.01 260);
-  --secondary: oklch(0.96 0.005 260);
-  --secondary-foreground: oklch(0.22 0.015 260);
-  --muted: oklch(0.94 0.006 260);
-  --muted-foreground: oklch(0.40 0.015 260);
-  --accent: oklch(0.95 0.03 260);
-  --accent-foreground: oklch(0.18 0.015 260);
-  --destructive: oklch(0.53 0.22 25);
-  --border: oklch(0.88 0.010 260);
-  --border-subtle: oklch(0.91 0.008 260);
-  --input: oklch(0.88 0.010 260);
-  --ring: oklch(0.52 0.20 260);
-  --accent-hover: oklch(0.92 0.04 260);
-  --sidebar: oklch(0.975 0.005 265);
-  --sidebar-foreground: oklch(0.13 0.015 260);
-  --sidebar-primary: oklch(0.52 0.20 260);
-  --sidebar-primary-foreground: oklch(0.98 0.01 260);
-  --sidebar-accent: oklch(0.95 0.03 260);
-  --sidebar-accent-foreground: oklch(0.18 0.015 260);
-  --sidebar-border: oklch(0.88 0.010 260);
-  --sidebar-ring: oklch(0.52 0.20 260);
+  /* ── CiteMed brand palette (light, default) ──────────────────────────
+     Mapped from the official Figma brand system:
+       Grey 1 #F5F6FA · Grey 2 #E6EBF5 · Grey 3 #E4E8F0 · Grey 4 #DBE2F0
+       Grey 7 #626A7A · Grey 10 #242A35 · Brand navy #0C377B
+       Dull Blue 2 #DEEBFA · Bright Blue #3578FF */
+  --radius: 0.625rem;
+  --background: #F5F6FA;          /* Grey 1 — app surface */
+  --foreground: #242A35;          /* Grey 10 — primary text */
+  --card: #FFFFFF;
+  --card-foreground: #242A35;
+  --popover: #FFFFFF;
+  --popover-foreground: #242A35;
+  --primary: #0C377B;             /* brand navy */
+  --primary-foreground: #FFFFFF;
+  --secondary: #E6EBF5;           /* Grey 2 */
+  --secondary-foreground: #2D3442;
+  --muted: #F5F6FA;               /* Grey 1 */
+  --muted-foreground: #626A7A;    /* Grey 7 */
+  --accent: #DEEBFA;              /* Dull Blue 2 — tinted active/hover */
+  --accent-foreground: #0C377B;
+  --destructive: #C0392B;
+  --border: #E4E8F0;              /* Grey 3 */
+  --border-subtle: #EBEEF4;
+  --input: #DBE2F0;               /* Grey 4 */
+  --ring: #3578FF;                /* Bright Blue — focus */
+  --accent-hover: #C2D3F2;        /* Dull Blue 3 */
+  --brand-accent: #3578FF;        /* Bright Blue — links / highlights */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #242A35;
+  --sidebar-primary: #0C377B;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #DEEBFA;
+  --sidebar-accent-foreground: #0C377B;
+  --sidebar-border: #EBEEF4;
+  --sidebar-ring: #3578FF;
+}
+
+/* ── Dark theme (opt-in via .dark on <html>) ─────────────────────────── */
+.dark {
+  --background: #1A1F27;
+  --foreground: #F5F6FA;          /* Grey 1 */
+  --card: #242A35;                /* Grey 10 */
+  --card-foreground: #F5F6FA;
+  --popover: #2D3442;             /* Grey 9 */
+  --popover-foreground: #F5F6FA;
+  --primary: #3578FF;             /* Bright Blue — luminous on dark */
+  --primary-foreground: #FFFFFF;
+  --secondary: #2D3442;           /* Grey 9 */
+  --secondary-foreground: #E6EBF5;
+  --muted: #242A35;
+  --muted-foreground: #A4ABBD;    /* Grey 5 */
+  --accent: #25324A;              /* blue-tinted dark surface */
+  --accent-foreground: #DEEBFA;
+  --destructive: #E15A4B;
+  --border: #343C49;
+  --border-subtle: #2D3442;
+  --input: #343C49;
+  --ring: #3578FF;
+  --accent-hover: #2C3A55;
+  --brand-accent: #75B5FF;        /* Bright Blue 1 — links on dark */
+  --sidebar: #181A1E;             /* Black */
+  --sidebar-foreground: #F5F6FA;
+  --sidebar-primary: #3578FF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #25324A;
+  --sidebar-accent-foreground: #DEEBFA;
+  --sidebar-border: #2D3442;
+  --sidebar-ring: #3578FF;
+  color-scheme: dark;
 }
 
 html {
@@ -71,9 +111,11 @@ body {
   font-size: 15px;
   line-height: 1.6;
   color: var(--foreground);
+  background: var(--background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'cv11', 'ss01';
+  letter-spacing: -0.006em; /* Archivo reads slightly tighter, per brand scale */
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -84,11 +126,12 @@ button { font: inherit; cursor: pointer; }
 *:hover { scrollbar-color: oklch(0 0 0 / 0.1) transparent; }
 
 ::selection {
-  background: oklch(0.52 0.20 260 / 0.18);
+  background: color-mix(in srgb, var(--brand-accent) 22%, transparent);
 }
 
 @theme inline {
-  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Archivo Variable', 'Archivo', system-ui, -apple-system, sans-serif;
+  --color-brand-accent: var(--brand-accent);
   --font-mono: 'Menlo', 'Monaco', 'Consolas', ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
