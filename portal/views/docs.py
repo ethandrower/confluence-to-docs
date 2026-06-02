@@ -45,7 +45,7 @@ SPACE_LABELS = {
 # to customers / auditors). Matched on exact title.
 EXCLUDE_TITLES = {
     'Retrospective: V6.0.1',
-    'SOP for Managing User Documentation in Confluence and Jira',
+    'SOP for Managing User Documentation in Confluence and Jira Knowledge Base',
 }
 
 # Display-title overrides — rename a page in the portal without touching
@@ -108,6 +108,19 @@ POLICY_TITLES = [
     'Data Security',
     'CiteMed TRIAL SERVICES TERMS 030526',
 ]
+
+# Per-space shaping of the "Other Documentation" group (everything outside the
+# versioned docs). Keeps it to a flat, audit-friendly set instead of mirroring
+# Confluence's deep wrapper nesting.
+#   unwrap: container pages removed while their children are promoted up a level
+#   hide:   pages (+ their subtrees) dropped from Other Documentation entirely
+# Result for ECD: just "Release Notes" and "Policies" at the top level.
+OTHER_DOC_UNWRAP = {
+    'ECD': ['25985282', '251297800'],  # Evidence Cloud Documentation; Customer Resource Center & Quick Start Guide
+}
+OTHER_DOC_HIDE = {
+    'ECD': ['27525123', '688979973'],  # User Documentation per Release Version; SOP … Knowledge Base
+}
 
 
 def _detect_versions_explicit(space_key):
@@ -335,8 +348,16 @@ def page_tree(request):
 
             # "Other Documentation" = pages not claimed by any version subtree.
             # Drop the whole container_ids set (version roots + their subtrees +
-            # any pinned pages) so they don't double up below the versions.
-            section['pages'] = _filter_tree(data, set(), container_ids)
+            # any pinned pages) so they don't double up below the versions, then
+            # unwrap structural containers and hide non-customer pages so only
+            # the curated set (e.g. Release Notes + Policies) remains, flat.
+            def _ids_for(cids):
+                return set(DocPage.objects.filter(
+                    space_key=space_key, confluence_id__in=cids
+                ).values_list('id', flat=True))
+            other_promote = _ids_for(OTHER_DOC_UNWRAP.get(space_key, []))
+            other_drop = container_ids | _ids_for(OTHER_DOC_HIDE.get(space_key, []))
+            section['pages'] = _filter_tree(data, other_promote, other_drop)
 
         # Cluster policy pages under a synthetic "Policies" group.
         section['pages'] = _cluster_policies(section['pages'])
@@ -464,19 +485,21 @@ def search_docs(request):
     if not q:
         return JsonResponse({'results': []})
 
-    if connection.vendor == 'postgresql':
-        from django.contrib.postgres.search import SearchQuery, SearchRank
-        query = SearchQuery(q)
-        pages = published_pages().annotate(
-            rank=SearchRank('search_vector', query)
-        ).filter(
-            search_vector=query
-        ).order_by('-rank')[:20]
-    else:
-        from django.db.models import Q
-        pages = published_pages().filter(
-            Q(title__icontains=q) | Q(raw_storage__icontains=q)
-        )[:20]
+    # Database-agnostic search. The previous Postgres branch ran SearchRank/@@
+    # against `search_vector`, but that column is a plain TextField (not a
+    # tsvector), so on Postgres it errored and search returned nothing in prod.
+    # icontains over title + body is reliable on both backends and more than
+    # fast enough for this corpus. Title matches rank above body-only matches.
+    from django.db.models import Q, Case, When, IntegerField
+    pages = published_pages().filter(
+        Q(title__icontains=q) | Q(raw_storage__icontains=q)
+    ).annotate(
+        _title_hit=Case(
+            When(title__icontains=q, then=0),
+            default=1,
+            output_field=IntegerField(),
+        )
+    ).order_by('_title_hit', 'title')[:20]
 
     results = []
     for p in pages:
