@@ -20,7 +20,7 @@ class DocPageDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DocPage
-        fields = ['id', 'confluence_id', 'title', 'slug', 'rendered_html', 'breadcrumbs', 'siblings', 'last_synced']
+        fields = ['id', 'confluence_id', 'title', 'slug', 'rendered_html', 'breadcrumbs', 'siblings', 'last_synced', 'confluence_version']
 
     def get_breadcrumbs(self, obj):
         crumbs = []

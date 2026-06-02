@@ -71,6 +71,115 @@ VERSION_LABEL_RE = re.compile(r'[Vv](\d+\.\d+(?:\.\d+)?)')
 # Regex for legacy version pages like "(v1.0) Evidence Cloud Documentation"
 LEGACY_VERSION_RE = re.compile(r'^\(v(\d+\.\d+(?:\.\d+)?)\)\s+')
 
+# ── Explicit version config ──────────────────────────────────────────────
+# When a space appears here we use these exact version roots + labels instead
+# of the title-regex heuristic. Needed because release names like "Altus
+# Release" carry no "vX.Y" token, so the heuristic can't see them.
+#   confluence_id : the version's root page
+#   label         : exact label shown in the switcher
+#   unwrap_to     : (optional) show the children of THIS descendant as the
+#                   version's top level — lets us skip wrapper pages and
+#                   surface the modules directly ("clustered per module")
+#   is_latest     : marks the default/latest version
+# pinned_top: pages (by confluence_id) hoisted to the top of the latest version.
+VERSION_CONFIG = {
+    'ECD': {
+        'versions': [
+            {
+                'confluence_id': '689274891',          # Altus Release (May, 2026)
+                'label': 'Altus Release',
+                'unwrap_to': '78184449',               # CiteMed Evidence Cloud → its 4 modules
+                'is_latest': True,
+            },
+            {
+                'confluence_id': '371032142',          # V5.5.4 - current version
+                'label': 'V5.5.4 User Documentation',
+            },
+        ],
+        'pinned_top': ['696516613'],                   # Getting Started → top of latest
+    },
+}
+
+# Root-level pages to gather under a synthetic "Policies" group in the
+# "Other Documentation" area, mirroring how Confluence clusters them.
+POLICY_TITLES = [
+    'Customer Service Policy',
+    'Upgrade Policy',
+    'Data Security',
+    'CiteMed TRIAL SERVICES TERMS 030526',
+]
+
+
+def _detect_versions_explicit(space_key):
+    """
+    Build versions from VERSION_CONFIG[space_key] — explicit roots + labels.
+
+    Each version's `pages` are the serialized descendants of its root (or, when
+    `unwrap_to` is set, the children of that descendant — surfacing modules
+    directly). `pinned_top` pages are hoisted to the front of the latest
+    version. Returns (versions_list, container_ids_set) where container_ids are
+    all pages that belong to a version subtree (so page_tree drops them from
+    the "Other Documentation" group).
+    """
+    cfg = VERSION_CONFIG[space_key]
+    versions = []
+    container_ids = set()
+
+    def _subtree_ids(page):
+        ids = {page.id}
+        for c in page.children.all():
+            ids |= _subtree_ids(c)
+        return ids
+
+    for vc in cfg['versions']:
+        root = DocPage.objects.filter(
+            confluence_id=vc['confluence_id'], space_key=space_key, is_published=True
+        ).first()
+        if not root:
+            continue
+        # Everything under the root is "claimed" by this version.
+        container_ids |= _subtree_ids(root)
+
+        # Where the version's visible tree starts (skip wrapper pages).
+        display_root = root
+        if vc.get('unwrap_to'):
+            inner = DocPage.objects.filter(
+                confluence_id=vc['unwrap_to'], is_published=True
+            ).first()
+            if inner:
+                display_root = inner
+
+        top = list(display_root.children.filter(is_published=True).order_by('position', 'title'))
+        pages = DocPageTreeSerializer(top, many=True).data
+
+        versions.append({
+            'label': vc['label'],
+            'title': root.title,
+            'slug': root.slug,
+            'confluence_id': root.confluence_id,
+            'page_id': root.id,
+            'is_latest': bool(vc.get('is_latest')),
+            'pages': pages,
+        })
+
+    if not versions:
+        return [], set()
+
+    # Hoist pinned pages (e.g. Getting Started) to the top of the latest version.
+    latest = next((v for v in versions if v['is_latest']), versions[0])
+    for cid in reversed(cfg.get('pinned_top', [])):
+        pin = DocPage.objects.filter(
+            confluence_id=cid, space_key=space_key, is_published=True
+        ).first()
+        if not pin:
+            continue
+        container_ids |= _subtree_ids(pin)
+        pinned_data = DocPageTreeSerializer([pin], many=True).data
+        # Avoid duplicating if already present, then prepend.
+        latest['pages'] = pinned_data + [p for p in latest['pages'] if p['id'] != pin.id]
+
+    return versions, container_ids
+
 
 def _detect_versions(space_key):
     """
@@ -82,6 +191,10 @@ def _detect_versions(space_key):
       ancestors up to the space root — these are structural pages the frontend
       should hide when version mode is active.
     """
+    # Explicit config takes precedence over the title heuristic.
+    if space_key in VERSION_CONFIG:
+        return _detect_versions_explicit(space_key)
+
     versions = []
     container_ids = set()
 
@@ -205,8 +318,12 @@ def page_tree(request):
             # remove the structural wrapper but keep non-version children
             promote_ids = container_ids - version_root_ids
 
-            # Build per-version page trees from each version root's children
+            # Build per-version page trees from each version root's children.
+            # Explicit-config versions already carry their (unwrapped + pinned)
+            # pages — don't clobber them; only build for heuristic versions.
             for v in versions:
+                if v.get('pages') is not None:
+                    continue
                 try:
                     version_root = DocPage.objects.get(pk=v['page_id'])
                     version_children = version_root.children.filter(
@@ -216,10 +333,13 @@ def page_tree(request):
                 except DocPage.DoesNotExist:
                     v['pages'] = []
 
-            # Filter general pages:
-            # - promote ancestor containers (keep their non-version children)
-            # - drop version roots entirely (their content is in v['pages'])
-            section['pages'] = _filter_tree(data, promote_ids, version_root_ids)
+            # "Other Documentation" = pages not claimed by any version subtree.
+            # Drop the whole container_ids set (version roots + their subtrees +
+            # any pinned pages) so they don't double up below the versions.
+            section['pages'] = _filter_tree(data, set(), container_ids)
+
+        # Cluster policy pages under a synthetic "Policies" group.
+        section['pages'] = _cluster_policies(section['pages'])
 
         sections.append(section)
 
@@ -230,6 +350,37 @@ def page_tree(request):
             _apply_title_overrides(v.get('pages', []))
 
     return JsonResponse({'sections': sections})
+
+
+def _cluster_policies(pages):
+    """
+    Group top-level policy pages under a synthetic, non-navigable 'Policies'
+    folder node (mirrors the Policies folder in Confluence, which our sync
+    can't import as a page). Order is preserved; the group is inserted where
+    the first policy page was.
+    """
+    if not POLICY_TITLES:
+        return pages
+    policy_nodes, rest, insert_at = [], [], None
+    for i, p in enumerate(pages):
+        if p.get('title') in POLICY_TITLES:
+            if insert_at is None:
+                insert_at = len(rest)
+            policy_nodes.append(p)
+        else:
+            rest.append(p)
+    if not policy_nodes:
+        return pages
+    group = {
+        'id': 'group-policies',
+        'title': 'Policies',
+        'slug': '',
+        'is_folder': True,
+        'children': policy_nodes,
+        'position': 9999,
+    }
+    rest.insert(insert_at if insert_at is not None else len(rest), group)
+    return rest
 
 
 def _apply_title_overrides(pages):
