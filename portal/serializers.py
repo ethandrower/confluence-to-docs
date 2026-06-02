@@ -7,7 +7,7 @@ class DocPageTreeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DocPage
-        fields = ['id', 'confluence_id', 'title', 'slug', 'parent', 'children', 'position', 'is_folder']
+        fields = ['id', 'confluence_id', 'title', 'slug', 'parent', 'children', 'position', 'is_folder', 'last_synced']
 
     def get_children(self, obj):
         children = obj.children.filter(is_published=True).order_by('position', 'title')

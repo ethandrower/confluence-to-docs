@@ -1,127 +1,96 @@
 <template>
-  <div class="px-6 lg:px-10 py-10 max-w-3xl">
-    <!-- Hero -->
-    <div class="mb-10 bg-primary/[0.06] rounded-xl p-6 -mx-2">
-      <div class="flex items-center gap-2.5 mb-3">
-        <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-          <svg class="w-4 h-4 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+  <div class="home">
+    <div class="home-inner">
+      <!-- Version banner -->
+      <div v-if="primaryVersions.length" class="ver-banner">
+        <svg class="ver-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z" />
+        </svg>
+        <span class="ver-text">
+          You're viewing the <strong>{{ isLatestSelected ? 'latest' : 'selected' }}</strong> release
+        </span>
+        <div class="ver-switch">
+          <button class="ver-pill" @click="verOpen = !verOpen" :aria-expanded="verOpen" aria-haspopup="listbox">
+            {{ selectedVersionLabel }}
+            <svg class="w-3 h-3" :class="verOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+          </button>
+          <Transition name="ver-drop">
+            <ul v-if="verOpen" class="ver-menu" role="listbox">
+              <li v-for="v in primaryVersions" :key="v.label">
+                <button
+                  role="option"
+                  :aria-selected="v.label === selectedVersionLabel"
+                  class="ver-opt"
+                  :class="v.label === selectedVersionLabel ? 'ver-opt--active' : ''"
+                  @click="switchVersion(v)"
+                >
+                  <span>{{ v.label }}</span>
+                  <span v-if="v.is_latest" class="ver-latest">latest</span>
+                </button>
+              </li>
+            </ul>
+          </Transition>
+        </div>
+      </div>
+
+      <!-- Hero -->
+      <section class="hero">
+        <div class="hero-mark" aria-hidden="true">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
           </svg>
         </div>
-        <span class="text-xs font-bold uppercase tracking-wider text-primary">CiteMed Support</span>
-      </div>
-      <h1 class="text-[1.75rem] font-bold tracking-tight text-foreground leading-tight">
-        Documentation
-      </h1>
-      <p class="mt-2.5 text-[15px] leading-relaxed text-muted-foreground">
-        Find answers, guides, and policies across all CiteMed spaces.
-      </p>
-    </div>
-
-    <!-- Search -->
-    <div class="relative group">
-      <div class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" aria-hidden="true">
-        <svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-        </svg>
-      </div>
-      <input
-        type="search"
-        v-model="query"
-        @input="onInput"
-        aria-label="Search documentation"
-        placeholder="Search documentation..."
-        class="w-full h-12 pl-11 pr-4 rounded-xl border bg-card text-[15px] placeholder:text-muted-foreground/60 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
-        autofocus
-      />
-      <div v-if="loading" class="absolute right-4 top-1/2 -translate-y-1/2">
-        <div class="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    </div>
-
-    <!-- Search Results -->
-    <div v-if="results.length" class="mt-3 rounded-xl border bg-card shadow-md overflow-hidden divide-y divide-border-subtle">
-      <RouterLink
-        v-for="r in results"
-        :key="r.slug"
-        :to="{ name: 'doc-page', params: { slug: r.slug }, query: query.trim() ? { q: query.trim() } : undefined }"
-        class="flex gap-3 px-4 py-3.5 text-sm text-foreground hover:bg-accent transition-colors"
-      >
-        <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-          <svg class="w-4 h-4 text-primary/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-          </svg>
+        <div class="hero-body">
+          <h1 class="hero-title">CiteMed documentation</h1>
+          <p class="hero-sub">
+            Guides, module references, and release notes for Evidence Cloud. Browse by
+            module below, or search to find an answer fast.
+          </p>
+          <button class="hero-search" @click="openSearch">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+            <span>Search the documentation…</span>
+            <kbd>{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
+          </button>
         </div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="font-medium truncate">{{ r.title }}</span>
-            <span v-if="r.space" class="shrink-0 text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">{{ r.space }}</span>
-          </div>
-          <div v-if="r.section" class="text-xs text-primary mt-0.5 truncate font-medium">
-            <svg class="w-3 h-3 inline-block mr-0.5 -mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-            </svg>
-            {{ r.section }}
-          </div>
-          <p v-if="r.snippet" class="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed" v-html="highlightSnippet(r.snippet, query)" />
-        </div>
-        <svg class="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-        </svg>
-      </RouterLink>
-    </div>
+      </section>
 
-    <!-- No Results -->
-    <div v-else-if="query && !loading" class="mt-6 text-center py-10 rounded-xl border border-dashed bg-muted/40">
-      <div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-        <svg class="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-        </svg>
-      </div>
-      <p class="text-sm text-muted-foreground">No results for "<span class="font-semibold text-foreground">{{ query }}</span>"</p>
-      <p class="text-xs text-muted-foreground mt-1.5">Try different keywords or browse by space below</p>
-    </div>
-
-    <!-- Browse Sections -->
-    <div v-if="!query && sections.length" class="mt-12">
-      <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Browse by space</p>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <RouterLink
-          v-for="(section, i) in sections"
-          :key="section.space_key"
-          :to="section.pages[0]?.slug ? { name: 'doc-page', params: { slug: section.pages[0].slug } } : '/docs'"
-          class="group relative flex items-center gap-4 p-4 rounded-xl border bg-card hover:shadow-lg hover:border-primary/25 hover:-translate-y-px transition-all duration-200"
-        >
-          <div
-            class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-            :style="{ background: sectionColors[i % sectionColors.length] }"
+      <!-- Browse by module -->
+      <section v-if="modules.length" class="block">
+        <p class="block-label">Browse by module</p>
+        <div class="module-grid">
+          <RouterLink
+            v-for="(m, i) in modules"
+            :key="m.id"
+            :to="{ name: 'doc-page', params: { slug: m.slug } }"
+            class="module-card"
+            :style="{ '--delay': i * 40 + 'ms' }"
           >
-            <svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <component :is="'path'" stroke-linecap="round" stroke-linejoin="round" :d="sectionIcons[i % sectionIcons.length]" />
-            </svg>
-          </div>
-          <div class="min-w-0 flex-1">
-            <span class="font-semibold text-[14px] text-foreground group-hover:text-primary transition-colors">
-              {{ section.label }}
+            <span class="module-chip" aria-hidden="true">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
+                <path stroke-linecap="round" stroke-linejoin="round" :d="m.icon" />
+              </svg>
             </span>
-            <p class="text-xs text-muted-foreground mt-0.5">
-              {{ countPages(section) }} {{ countPages(section) === 1 ? 'page' : 'pages' }}
-            </p>
-          </div>
-          <svg class="w-4 h-4 text-muted-foreground/30 group-hover:text-primary/60 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-          </svg>
-        </RouterLink>
-      </div>
-    </div>
+            <span class="module-title">{{ m.title }}</span>
+            <span class="module-desc">{{ m.desc }}</span>
+            <span class="module-meta">{{ m.count }} {{ m.count === 1 ? 'page' : 'pages' }}</span>
+          </RouterLink>
+        </div>
+      </section>
 
-    <!-- Keyboard hint -->
-    <div v-if="!query" class="mt-10 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-      <kbd class="inline-flex h-5 items-center gap-0.5 rounded-md border bg-muted px-1.5 font-mono text-[10px]">{{ isMac ? '⌘' : 'Ctrl' }}</kbd>
-      <span>+</span>
-      <kbd class="inline-flex h-5 items-center gap-0.5 rounded-md border bg-muted px-1.5 font-mono text-[10px]">K</kbd>
-      <span class="ml-1">to search from anywhere</span>
+      <!-- Recently updated -->
+      <section v-if="recent.length" class="block">
+        <p class="block-label">Recently updated</p>
+        <ul class="recent-list">
+          <li v-for="r in recent" :key="r.slug">
+            <RouterLink :to="{ name: 'doc-page', params: { slug: r.slug } }" class="recent-row">
+              <svg class="recent-icon w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+              <span class="recent-title">{{ r.title }}</span>
+              <span class="recent-date">{{ relativeDate(r.last_synced) }}</span>
+            </RouterLink>
+          </li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>
@@ -129,60 +98,382 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useDocsStore } from '@/stores/docs.js'
-import { useDebouncedSearch } from '@/lib/useDebounce.js'
 
 const store = useDocsStore()
-const query = ref('')
 const isMac = ref(false)
+const verOpen = ref(false)
 
-const { results, loading, search: doSearch } = useDebouncedSearch(async (q) => {
-  await store.search(q)
-  return store.searchResults
-})
+// Professional, consistent line-icon set (Heroicons outline) per module.
+const ICONS = {
+  rocket: 'M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
+  shield: 'M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z',
+  book: 'M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25',
+  library: 'M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0 0 12 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75Z',
+  gear: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.281Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+  doc: 'M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z',
+}
 
-const sections = computed(() => store.sections || [])
+// Curated descriptions + icons by module name (case-insensitive). Falls back
+// to a generic doc icon for any module not listed.
+const MODULE_META = {
+  'getting started': { icon: ICONS.rocket, desc: 'Setup, onboarding, and account access' },
+  'vigilance module': { icon: ICONS.shield, desc: 'Post-market surveillance, safety signals, PSUR' },
+  'literature module': { icon: ICONS.book, desc: 'Search, screening, and appraisal' },
+  'citesource module': { icon: ICONS.library, desc: 'Reference library, lists, and export' },
+  'admin module': { icon: ICONS.gear, desc: 'Users, permissions, and configuration' },
+}
 
-const sectionColors = [
-  'oklch(0.52 0.20 260)',  // brand blue
-  'oklch(0.44 0.10 210)',  // teal-blue
-  'oklch(0.48 0.12 55)',   // warm sand
-  'oklch(0.45 0.12 145)',  // forest
-  'oklch(0.50 0.13 70)',   // amber
-  'oklch(0.43 0.10 185)',  // deep teal
-]
+function metaFor(title) {
+  const key = (title || '').toLowerCase().replace(/^v?\d+\.\d+(?:\.\d+)?\s+/, '').trim()
+  return MODULE_META[key] || { icon: ICONS.doc, desc: 'Guides and reference' }
+}
 
-const sectionIcons = [
-  'M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z',
-  'M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6',
-  'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z',
-  'M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z',
-  'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z',
-  'M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z',
-]
-
-function countPages(section) {
+function stripVersionPrefix(t) {
+  return (t || '').replace(/^[Vv]\d+\.\d+(?:\.\d+)?\s+[-–]\s*/, '').replace(/^[Vv]\d+\.\d+(?:\.\d+)?\s+/, '')
+}
+function firstSlug(node) {
+  for (const c of node.children || []) {
+    if (c.slug && !c.is_folder) return c.slug
+    const d = firstSlug(c)
+    if (d) return d
+  }
+  return ''
+}
+function countTree(list) {
   let n = 0
-  function walk(pages) { for (const p of pages) { n++; if (p.children) walk(p.children) } }
-  walk(section.pages)
+  for (const p of list || []) { n += 1; n += countTree(p.children) }
   return n
 }
 
-function onInput() {
-  doSearch(query.value)
+// The primary versioned space (Evidence Cloud).
+const primarySection = computed(() =>
+  store.sections.find(s => s.versions?.length) || store.sections[0] || null
+)
+const primaryVersions = computed(() => primarySection.value?.versions || [])
+const selectedVersionLabel = computed(() =>
+  primarySection.value ? store.getSelectedVersion(primarySection.value.space_key) : null
+)
+const isLatestSelected = computed(() =>
+  primaryVersions.value.find(v => v.label === selectedVersionLabel.value)?.is_latest ?? true
+)
+
+function selectedVersionPages() {
+  const s = primarySection.value
+  if (!s) return []
+  if (!s.versions?.length) return s.pages || []
+  const v = s.versions.find(x => x.label === selectedVersionLabel.value) || s.versions[0]
+  return v?.pages || []
 }
 
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+// Module cards = top-level pages of the selected version.
+const modules = computed(() =>
+  selectedVersionPages()
+    .map(p => {
+      const meta = metaFor(p.title)
+      return {
+        id: p.id,
+        title: stripVersionPrefix(p.title),
+        slug: p.slug && !p.is_folder ? p.slug : firstSlug(p),
+        count: countTree(p.children),
+        icon: meta.icon,
+        desc: meta.desc,
+      }
+    })
+    .filter(m => m.slug)
+)
+
+// Recently updated — flatten everything visible, newest first.
+const recent = computed(() => {
+  const flat = []
+  function walk(list) {
+    for (const p of list || []) {
+      if (p.slug && !p.is_folder && p.last_synced) flat.push(p)
+      walk(p.children)
+    }
+  }
+  for (const s of store.sections) {
+    walk(s.pages)
+    for (const v of s.versions || []) walk(v.pages)
+  }
+  const seen = new Set()
+  return flat
+    .filter(p => (seen.has(p.slug) ? false : seen.add(p.slug)))
+    .sort((a, b) => new Date(b.last_synced) - new Date(a.last_synced))
+    .slice(0, 5)
+    .map(p => ({ slug: p.slug, title: stripVersionPrefix(p.title), last_synced: p.last_synced }))
+})
+
+function relativeDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const days = Math.round((Date.now() - d.getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days} days ago`
+  if (days < 30) return `${Math.floor(days / 7)} week${days < 14 ? '' : 's'} ago`
+  if (days < 365) return `${Math.floor(days / 30)} month${days < 60 ? '' : 's'} ago`
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
-function highlightSnippet(text, q) {
-  if (!q || !text) return escapeHtml(text || '')
-  const safe = escapeHtml(text)
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return safe.replace(new RegExp(`(${escapeHtml(escaped)})`, 'gi'), '<mark>$1</mark>')
+function switchVersion(v) {
+  if (primarySection.value) store.selectVersion(primarySection.value.space_key, v.label)
+  verOpen.value = false
+}
+function openSearch() {
+  window.dispatchEvent(new CustomEvent('citemed:open-search'))
 }
 
 onMounted(() => {
   isMac.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgentData?.platform || navigator.userAgent)
 })
 </script>
+
+<style scoped>
+.home { padding: 28px clamp(1.5rem, 4vw, 3rem) 64px; }
+.home-inner { max-width: 880px; margin: 0 auto; }
+
+/* ── Version banner ── */
+.ver-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin-bottom: 22px;
+}
+.ver-icon { width: 16px; height: 16px; color: var(--primary); flex-shrink: 0; }
+.ver-text strong { color: var(--foreground); font-weight: 600; }
+.ver-switch { margin-left: auto; position: relative; }
+.ver-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 12.5px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.dark .ver-pill { color: var(--accent-foreground); }
+.ver-pill:hover { border-color: var(--accent-hover); }
+.ver-pill svg { transition: transform 0.15s; }
+.ver-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 220px;
+  list-style: none;
+  margin: 0;
+  padding: 5px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  box-shadow: 0 10px 30px oklch(0 0 0 / 0.12);
+}
+.ver-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--foreground);
+  transition: background 0.12s;
+}
+.ver-opt:hover { background: var(--accent); }
+.ver-opt--active { color: var(--primary); font-weight: 600; }
+.dark .ver-opt--active { color: var(--accent-foreground); }
+.ver-latest {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-accent) 14%, transparent);
+  padding: 1px 7px;
+  border-radius: 5px;
+}
+.ver-drop-enter-active, .ver-drop-leave-active { transition: opacity 0.14s, transform 0.14s; }
+.ver-drop-enter-from, .ver-drop-leave-to { opacity: 0; transform: translateY(-4px); }
+
+/* ── Hero ── */
+.hero {
+  display: flex;
+  gap: 18px;
+  padding: 26px;
+  border-radius: 14px;
+  background: var(--primary);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--brand-accent) 40%, transparent), transparent 55%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.hero-mark {
+  position: relative;
+  z-index: 1;
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+.hero-body { position: relative; z-index: 1; min-width: 0; }
+.hero-title {
+  font-family: var(--font-ui);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 2px 0 0;
+  color: #fff;
+}
+.hero-sub {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 60ch;
+}
+.hero-search {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  max-width: 380px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13.5px;
+  transition: background 0.15s;
+}
+.hero-search:hover { background: rgba(255, 255, 255, 0.18); }
+.hero-search span { flex: 1; text-align: left; }
+.hero-search kbd {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* ── Blocks ── */
+.block { margin-top: 34px; }
+.block-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin: 0 0 14px;
+}
+
+/* ── Module grid ── */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.module-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'chip title' 'chip desc' 'chip meta';
+  column-gap: 13px;
+  row-gap: 2px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: border-color 0.16s, box-shadow 0.16s, transform 0.16s;
+  animation: card-in 0.4s ease both;
+  animation-delay: var(--delay, 0ms);
+}
+.module-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  box-shadow: 0 6px 20px oklch(0 0 0 / 0.06);
+  transform: translateY(-2px);
+}
+.module-chip {
+  grid-area: chip;
+  align-self: start;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--primary);
+}
+.dark .module-chip { color: var(--accent-foreground); }
+.module-title {
+  grid-area: title;
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+.module-desc {
+  grid-area: desc;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+  margin-top: 1px;
+}
+.module-meta {
+  grid-area: meta;
+  margin-top: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Recently updated ── */
+.recent-list { list-style: none; margin: 0; padding: 0; border-radius: 12px; border: 1px solid var(--border); background: var(--card); overflow: hidden; }
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.12s;
+}
+.recent-list li:last-child .recent-row { border-bottom: none; }
+.recent-row:hover { background: var(--accent); }
+.recent-icon { color: var(--muted-foreground); flex-shrink: 0; }
+.recent-title { font-size: 13.5px; color: var(--foreground); font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-date { margin-left: auto; font-size: 12px; color: var(--muted-foreground); flex-shrink: 0; }
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .module-card { animation: none; }
+}
+</style>

@@ -53,6 +53,43 @@ export const useDocsStore = defineStore('docs', () => {
     return section?.versions || []
   }
 
+  // Find a node by slug anywhere in the loaded trees (sections + versions).
+  function findNode(slug) {
+    function walk(list) {
+      for (const p of list || []) {
+        if (p.slug === slug) return p
+        const found = walk(p.children)
+        if (found) return found
+      }
+      return null
+    }
+    for (const s of sections.value) {
+      let f = walk(s.pages)
+      if (f) return f
+      for (const v of s.versions || []) {
+        f = walk(v.pages)
+        if (f) return f
+      }
+    }
+    return null
+  }
+
+  // First real (non-folder) descendant of a container page — used to redirect
+  // away from empty root/folder pages to their first child.
+  function firstChildSlug(slug) {
+    const node = findNode(slug)
+    if (!node) return null
+    function firstLeaf(n) {
+      for (const c of n.children || []) {
+        if (c.slug && !c.is_folder) return c.slug
+        const deeper = firstLeaf(c)
+        if (deeper) return deeper
+      }
+      return null
+    }
+    return firstLeaf(node)
+  }
+
   async function fetchPage(slug) {
     loading.value = true
     error.value = null
@@ -81,5 +118,6 @@ export const useDocsStore = defineStore('docs', () => {
     selectedVersions,
     fetchTree, fetchPage, search,
     selectVersion, getSelectedVersion, getVersionsForSpace,
+    findNode, firstChildSlug,
   }
 })

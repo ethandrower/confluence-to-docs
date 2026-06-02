@@ -73,7 +73,7 @@
         <div class="flex-1" />
 
         <!-- Actions -->
-        <RouterLink to="/docs" class="topbar-btn hidden sm:inline-flex">
+        <RouterLink to="/docs" class="topbar-btn topbar-btn--primary hidden sm:inline-flex">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
           </svg>
@@ -153,15 +153,24 @@ async function signOut() {
 const mobileOpen = ref(false)
 const searchOpen = ref(false)
 
-// Breadcrumb built from the route + current page (shown in the top bar).
+// Structural wrapper pages that are hidden from the nav — keep them out of
+// the breadcrumb too, so it stays short and meaningful.
+const WRAPPER_TITLES = new Set([
+  'Evidence Cloud Documentation',
+  'Customer Resource Center & Quick Start Guide',
+  'User Documentation per Release Version',
+  'CiteMed Evidence Cloud: Your Systematic Literature Review Platform for Life Sciences',
+])
+
+// Concise top-bar breadcrumb: Home › (nearest meaningful parent) › Current.
 const crumbs = computed(() => {
   if (route.name === 'docs-home') return [{ label: 'Home' }]
   const cp = store.currentPage
   const trail = [{ label: 'Home', to: '/docs' }]
   if (cp) {
-    for (const c of cp.breadcrumbs || []) {
-      trail.push({ label: c.title, to: `/docs/${c.slug}` })
-    }
+    const ancestors = (cp.breadcrumbs || []).filter(c => !WRAPPER_TITLES.has(c.title))
+    const parent = ancestors[ancestors.length - 1]
+    if (parent) trail.push({ label: parent.title, to: `/docs/${parent.slug}` })
     trail.push({ label: cp.title })
   }
   return trail
@@ -173,9 +182,18 @@ function onKey(e) {
     searchOpen.value = !searchOpen.value
   }
 }
+function onOpenSearch() {
+  searchOpen.value = true
+}
 
-onMounted(() => document.addEventListener('keydown', onKey))
-onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
+onMounted(() => {
+  document.addEventListener('keydown', onKey)
+  window.addEventListener('citemed:open-search', onOpenSearch)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKey)
+  window.removeEventListener('citemed:open-search', onOpenSearch)
+})
 </script>
 
 <style scoped>
@@ -206,6 +224,21 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   background: var(--accent);
   border-color: var(--accent-hover);
   color: var(--accent-foreground);
+}
+/* Primary (brand navy) call-to-action */
+.topbar-btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+.topbar-btn--primary:hover {
+  background: color-mix(in srgb, var(--primary) 88%, #000);
+  border-color: color-mix(in srgb, var(--primary) 88%, #000);
+  color: var(--primary-foreground);
+}
+.dark .topbar-btn--primary:hover {
+  background: color-mix(in srgb, var(--primary) 85%, #fff);
+  border-color: color-mix(in srgb, var(--primary) 85%, #fff);
 }
 .topbar-icon {
   display: inline-flex;

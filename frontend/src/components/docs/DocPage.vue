@@ -115,6 +115,20 @@ const searchQuery = computed(() => route.query.q || '')
 
 async function loadPage() {
   await store.fetchPage(props.slug)
+
+  // Container/root pages often have no body — open their first child instead.
+  const cp = store.currentPage
+  if (cp) {
+    const text = (cp.rendered_html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim()
+    if (!text) {
+      const child = store.firstChildSlug(cp.slug)
+      if (child && child !== props.slug) {
+        router.replace({ name: 'doc-page', params: { slug: child } })
+        return
+      }
+    }
+  }
+
   await nextTick()
   if (window.Prism) window.Prism.highlightAll()
   // Highlight after content renders
