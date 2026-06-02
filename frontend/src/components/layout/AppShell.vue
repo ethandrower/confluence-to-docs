@@ -24,15 +24,11 @@
           </SheetContent>
         </Sheet>
 
-        <!-- Logo -->
-        <RouterLink to="/" class="flex items-center gap-2.5 group">
-          <div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-            <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-            </svg>
-          </div>
-          <span class="font-semibold text-[15px] text-foreground tracking-tight whitespace-nowrap">
-            CiteMed Support
+        <!-- Logo — reproduces the [cite]med wordmark, matching the brand logo
+             and the email letterhead. "Support" reads as a lighter qualifier. -->
+        <RouterLink to="/" class="flex items-center group" aria-label="CiteMed Support — home">
+          <span class="wordmark text-[24px] whitespace-nowrap" aria-hidden="true">
+            <span class="wm-bracket">[</span>cite<span class="wm-bracket">]</span>med<span class="wm-support">Support</span>
           </span>
         </RouterLink>
 
@@ -164,6 +160,25 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </script>
 
 <style scoped>
+/* ── Brand wordmark ([cite]med Support) — matches the logo + email letterhead ── */
+.wordmark {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  color: #2d5296; /* brand navy — same as the logo */
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.wm-bracket {
+  font-weight: 500;
+  color: #8aa4cf; /* lighter navy tint for the brackets */
+}
+.wm-support {
+  margin-left: 0.4em;
+  font-weight: 500;
+  font-size: 0.78em;
+  color: var(--muted-foreground);
+}
+
 /* Visually hidden until focused, then pinned top-left over the header. */
 .skip-link {
   position: fixed;
