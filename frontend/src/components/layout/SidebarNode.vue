@@ -224,32 +224,6 @@ watch(currentSlug, (slug) => {
   border-bottom-left-radius: 8px;
 }
 
-/* ── Node circle (::after) ── */
-/* Sits at the end of the L-connector */
-
-.tree-children > .tree-item::after {
-  content: '';
-  display: block;
-  position: absolute;
-  top: calc(50% - var(--tree-node) / 2);
-  left: calc(var(--tree-spacing) - var(--tree-node) - 2px);
-  width: var(--tree-node);
-  height: var(--tree-node);
-  border-radius: 50%;
-  background: var(--tree-line-color);
-  z-index: 1;
-}
-
-/* Active node: bigger + colored */
-.tree-children > .tree-item--active::after {
-  --tree-node: 7px;
-  background: var(--tree-node-color, oklch(0.52 0.20 260));
-  box-shadow: 0 0 0 3px oklch(0.52 0.20 260 / 0.12);
-}
-
-/* In-path node: slightly bigger */
-.tree-children > .tree-item--in-path::after {
-  --tree-node: 6px;
-  background: oklch(0.52 0.20 260 / 0.4);
-}
+/* Node circles removed — clean L-connectors only. The active page is marked
+   by the solid accent bar on its row (see .tree-item--active > .tree-row). */
 </style>
