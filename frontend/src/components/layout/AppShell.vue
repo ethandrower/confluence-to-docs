@@ -1,13 +1,33 @@
 <template>
-  <div class="min-h-screen flex flex-col">
-    <!-- Skip link — first focusable element, lets keyboard users jump past
-         the nav straight to the document body (WCAG 2.4.1). -->
+  <div class="flex min-h-screen bg-background">
+    <!-- Skip link — first focusable element (WCAG 2.4.1) -->
     <a href="#main-content" class="skip-link">Skip to content</a>
 
-    <!-- Header -->
-    <header class="sticky top-0 z-50 h-14 border-b bg-card shadow-[0_1px_3px_0_oklch(0_0_0/0.04)]">
-      <div class="flex items-center h-full px-4 gap-3">
-        <!-- Mobile menu trigger -->
+    <!-- ── Desktop sidebar (full height) ───────────────────────────────── -->
+    <aside
+      v-if="!hideSidebar"
+      aria-label="Documentation navigation"
+      class="hidden lg:flex flex-col w-[var(--sidebar-width)] shrink-0 border-r border-sidebar-border bg-sidebar h-screen sticky top-0"
+    >
+      <div class="h-14 flex items-center px-5 shrink-0">
+        <RouterLink to="/" class="flex items-center group" aria-label="CiteMed Support — home">
+          <span class="wordmark text-[21px] whitespace-nowrap" aria-hidden="true">
+            <span class="wm-bracket">[</span>cite<span class="wm-bracket">]</span>med<span class="wm-support">Support</span>
+          </span>
+        </RouterLink>
+      </div>
+      <ScrollArea class="flex-1 min-h-0">
+        <div class="pb-8">
+          <slot name="sidebar" />
+        </div>
+      </ScrollArea>
+    </aside>
+
+    <!-- ── Main column ─────────────────────────────────────────────────── -->
+    <div class="flex-1 min-w-0 flex flex-col h-screen">
+      <!-- Top bar -->
+      <header class="topbar h-14 shrink-0 flex items-center gap-3 px-4 lg:px-6 border-b border-border">
+        <!-- Mobile: menu + wordmark -->
         <Sheet v-model:open="mobileOpen">
           <SheetTrigger as-child>
             <button class="lg:hidden p-1.5 -ml-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Menu">
@@ -16,60 +36,66 @@
               </svg>
             </button>
           </SheetTrigger>
-          <SheetContent side="left" class="w-[280px] p-0">
-            <SheetHeader class="sr-only"><SheetTitle>Navigation</SheetTitle><SheetDescription>Docs</SheetDescription></SheetHeader>
-            <ScrollArea class="h-full pt-3 pb-6">
+          <SheetContent side="left" class="w-[280px] p-0 bg-sidebar">
+            <SheetHeader class="sr-only"><SheetTitle>Navigation</SheetTitle><SheetDescription>Documentation navigation</SheetDescription></SheetHeader>
+            <div class="h-14 flex items-center px-5 border-b border-sidebar-border">
+              <span class="wordmark text-[20px]" aria-hidden="true">
+                <span class="wm-bracket">[</span>cite<span class="wm-bracket">]</span>med<span class="wm-support">Support</span>
+              </span>
+            </div>
+            <ScrollArea class="h-[calc(100vh-3.5rem)] pb-6">
               <slot name="sidebar" />
             </ScrollArea>
           </SheetContent>
         </Sheet>
 
-        <!-- Logo — reproduces the [cite]med wordmark, matching the brand logo
-             and the email letterhead. "Support" reads as a lighter qualifier. -->
-        <RouterLink to="/" class="flex items-center group" aria-label="CiteMed Support — home">
-          <span class="wordmark text-[24px] whitespace-nowrap" aria-hidden="true">
+        <RouterLink to="/" class="lg:hidden flex items-center" aria-label="CiteMed Support — home">
+          <span class="wordmark text-[18px]" aria-hidden="true">
             <span class="wm-bracket">[</span>cite<span class="wm-bracket">]</span>med<span class="wm-support">Support</span>
           </span>
         </RouterLink>
 
-        <!-- Nav links — desktop -->
-        <nav class="hidden sm:flex items-center gap-1 ml-2">
-          <RouterLink
-            to="/docs"
-            class="px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors"
-            :class="isDocs ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
-          >Docs</RouterLink>
-          <RouterLink
-            to="/tickets"
-            class="px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors"
-            :class="isContact ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
-          >Contact</RouterLink>
+        <!-- Breadcrumb (desktop) -->
+        <nav class="hidden lg:flex items-center gap-1.5 text-[13px] min-w-0" aria-label="Breadcrumb">
+          <template v-for="(c, i) in crumbs" :key="i">
+            <svg v-if="i > 0" class="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
+            </svg>
+            <RouterLink
+              v-if="c.to && i < crumbs.length - 1"
+              :to="c.to"
+              class="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[180px]"
+            >{{ c.label }}</RouterLink>
+            <span v-else class="text-foreground font-medium truncate max-w-[260px]">{{ c.label }}</span>
+          </template>
         </nav>
 
         <div class="flex-1" />
 
-        <!-- Search — desktop -->
-        <button
-          @click="searchOpen = true"
-          aria-label="Search documentation"
-          class="hidden sm:inline-flex items-center gap-2 h-8 w-52 px-3 rounded-lg border border-border-subtle text-[13px] text-muted-foreground bg-background hover:bg-muted hover:text-muted-foreground hover:border-border transition-all"
-        >
-          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <!-- Actions -->
+        <RouterLink to="/docs" class="topbar-btn hidden sm:inline-flex">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+          </svg>
+          View all docs
+        </RouterLink>
+        <RouterLink to="/tickets" class="topbar-btn hidden sm:inline-flex">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+          </svg>
+          Contact
+        </RouterLink>
+
+        <button @click="searchOpen = true" aria-label="Search documentation" class="topbar-icon sm:hidden">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
           </svg>
-          <span class="flex-1 text-left truncate">Search...</span>
-          <kbd class="hidden md:inline-flex h-5 items-center gap-0.5 rounded-md border bg-background px-1.5 font-mono text-[10px] text-muted-foreground">
-            {{ isMac ? '⌘' : '⌃' }}K
-          </kbd>
         </button>
 
-        <!-- User / Login -->
-        <div class="hidden sm:flex items-center gap-2 ml-1">
-          <ThemeToggle />
+        <ThemeToggle />
+
+        <div class="hidden sm:flex items-center gap-2 pl-1 ml-1 border-l border-border">
           <template v-if="auth.user">
-            <!-- Admin badge — only renders when the logged-in portal user
-                 matches an active Django superuser. Backend gates this
-                 entirely so non-admins never see the badge or the URL. -->
             <a
               v-if="auth.user.is_admin && auth.user.admin_url"
               :href="auth.user.admin_url"
@@ -83,37 +109,19 @@
               </svg>
               Admin
             </a>
-            <span class="text-xs text-muted-foreground truncate max-w-[120px]" :title="auth.user.email">{{ auth.user.email }}</span>
             <button
               @click="signOut"
               class="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              :title="auth.user.email"
             >
               Sign out
             </button>
           </template>
           <RouterLink v-else to="/login" class="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">Log in</RouterLink>
         </div>
+      </header>
 
-        <!-- Search — mobile -->
-        <button @click="searchOpen = true" class="sm:hidden p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Search">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <div class="flex flex-1 overflow-hidden">
-      <!-- Sidebar — desktop -->
-      <aside v-if="!hideSidebar" aria-label="Documentation navigation" class="hidden lg:block w-[var(--sidebar-width)] shrink-0 border-r bg-sidebar">
-        <ScrollArea class="h-[calc(100vh-var(--nav-height))]">
-          <div class="pt-3 pb-6">
-            <slot name="sidebar" />
-          </div>
-        </ScrollArea>
-      </aside>
-
-      <main id="main-content" tabindex="-1" class="flex-1 min-w-0 overflow-y-auto h-[calc(100vh-var(--nav-height))]">
+      <main id="main-content" tabindex="-1" class="flex-1 min-w-0 overflow-y-auto">
         <slot name="content" />
       </main>
     </div>
@@ -126,6 +134,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useDocsStore } from '@/stores/docs.js'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
@@ -135,6 +144,7 @@ defineProps({ hideSidebar: Boolean })
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const store = useDocsStore()
 
 async function signOut() {
   await auth.logout()
@@ -142,10 +152,20 @@ async function signOut() {
 }
 const mobileOpen = ref(false)
 const searchOpen = ref(false)
-const isMac = ref(false)
 
-const isDocs = computed(() => route.path.startsWith('/docs'))
-const isContact = computed(() => route.path === '/tickets')
+// Breadcrumb built from the route + current page (shown in the top bar).
+const crumbs = computed(() => {
+  if (route.name === 'docs-home') return [{ label: 'Home' }]
+  const cp = store.currentPage
+  const trail = [{ label: 'Home', to: '/docs' }]
+  if (cp) {
+    for (const c of cp.breadcrumbs || []) {
+      trail.push({ label: c.title, to: `/docs/${c.slug}` })
+    }
+    trail.push({ label: cp.title })
+  }
+  return trail
+})
 
 function onKey(e) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -154,26 +174,59 @@ function onKey(e) {
   }
 }
 
-onMounted(() => {
-  isMac.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgentData?.platform || navigator.userAgent)
-  document.addEventListener('keydown', onKey)
-})
+onMounted(() => document.addEventListener('keydown', onKey))
 onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </script>
 
 <style scoped>
-/* ── Brand wordmark ([cite]med Support) — matches the logo + email letterhead ── */
+.topbar {
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* Top-bar action buttons (View all docs / Contact) */
+.topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.topbar-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+  color: var(--accent-foreground);
+}
+.topbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+}
+.topbar-icon:hover { color: var(--foreground); background: var(--muted); }
+
+/* ── Brand wordmark ([cite]med Support) ── */
 .wordmark {
   font-family: var(--font-ui);
   font-weight: 700;
-  color: var(--primary); /* brand navy #0C377B (light) / luminous blue (dark) */
+  color: var(--primary);
   letter-spacing: -0.02em;
   line-height: 1;
 }
-.wm-bracket {
-  font-weight: 500;
-  color: var(--brand-accent); /* brighter brand blue for the brackets */
-}
+.wm-bracket { font-weight: 500; color: inherit; }
 .wm-support {
   margin-left: 0.4em;
   font-weight: 500;
@@ -181,7 +234,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   color: var(--muted-foreground);
 }
 
-/* Visually hidden until focused, then pinned top-left over the header. */
+/* Skip link: hidden until focused */
 .skip-link {
   position: fixed;
   top: 8px;
@@ -191,7 +244,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   padding: 8px 14px;
   border-radius: 8px;
   background: var(--primary);
-  color: #fff;
+  color: var(--primary-foreground);
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
@@ -201,7 +254,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 .skip-link:focus-visible,
 .skip-link:focus {
   transform: translateY(0);
-  outline: 2px solid #fff;
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 main:focus-visible { outline: none; }

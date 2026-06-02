@@ -43,16 +43,10 @@
       </p>
 
       <!-- Home -->
-      <ul v-show="!fq" class="space-y-px px-2 mb-2">
+      <ul v-show="!fq" class="space-y-px px-2 mb-1">
         <li>
-          <RouterLink
-            to="/docs"
-            class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13.5px] leading-snug transition-colors duration-100"
-            :class="isHome
-              ? 'bg-primary/10 text-primary font-semibold'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted'"
-          >
-            <svg class="w-4 h-4 shrink-0" :class="isHome ? 'text-primary' : 'text-muted-foreground'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <RouterLink to="/docs" class="sidebar-link" :class="isHome ? 'sidebar-link--active' : ''">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
               <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
             </svg>
             Home
@@ -61,83 +55,78 @@
       </ul>
 
       <div
-        v-for="(section, i) in store.sections"
+        v-for="section in store.sections"
         v-show="!fq || sectionHasMatches(section)"
         :key="section.space_key"
       >
-        <!-- Section divider -->
-        <div class="mx-4 my-2.5 border-t" />
+        <!-- Release section header (version switching lives in the banner) -->
+        <p class="sidebar-section">
+          <span class="sidebar-section-label">{{ sectionHeading(section) }}</span>
+          <span class="sidebar-section-count tabular-nums">{{ countPages(section) }}</span>
+        </p>
 
-        <!-- Section header -->
-        <button
-          @click="toggleSection(section.space_key)"
-          class="flex items-center w-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-muted-foreground transition-colors"
-        >
-          <svg
-            class="w-3 h-3 mr-1.5 transition-transform duration-200"
-            :class="collapsed[section.space_key] ? '' : 'rotate-90'"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-          </svg>
-          {{ section.label }}
-          <span class="ml-auto font-normal text-[10px] tabular-nums opacity-50">{{ countPages(section) }}</span>
-        </button>
+        <ul v-if="getVersionPages(section).length" class="space-y-px px-2 mt-0.5">
+          <SidebarNode
+            v-for="page in getVersionPages(section)"
+            :key="page.id"
+            :page="page"
+            :depth="0"
+            :filtering="!!fq"
+          />
+        </ul>
 
-        <!-- Version switcher (if space has versions) -->
-        <VersionSwitcher
-          v-if="section.versions?.length"
-          :space-key="section.space_key"
-          :space-label="section.label"
-        />
-
-        <!-- Version docs -->
-        <Transition name="sidebar-expand">
-          <div v-show="fq || !collapsed[section.space_key]">
-            <ul v-if="getVersionPages(section).length" class="space-y-px px-2">
-              <SidebarNode
-                v-for="page in getVersionPages(section)"
-                :key="page.id"
-                :page="page"
-                :depth="0"
-                :filtering="!!fq"
-              />
-            </ul>
-
-            <!-- Other Documentation (non-version pages) -->
-            <template v-if="section.versions?.length && getOtherPages(section).length">
-              <div class="mx-4 my-2 border-t" />
-              <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Other Documentation</div>
-            </template>
-
-            <ul v-if="getOtherPages(section).length" class="space-y-px px-2">
-              <SidebarNode
-                v-for="page in getOtherPages(section)"
-                :key="page.id"
-                :page="page"
-                :depth="0"
-                :filtering="!!fq"
-              />
-            </ul>
-          </div>
-        </Transition>
+        <!-- Resources: non-version pages (Release Notes, Policies) + contact -->
+        <template v-if="getOtherPages(section).length || !fq">
+          <p class="sidebar-section sidebar-section--spaced">
+            <span class="sidebar-section-label">Resources</span>
+          </p>
+          <ul v-if="getOtherPages(section).length" class="space-y-px px-2">
+            <SidebarNode
+              v-for="page in getOtherPages(section)"
+              :key="page.id"
+              :page="page"
+              :depth="0"
+              :filtering="!!fq"
+            />
+          </ul>
+          <ul v-show="!fq" class="space-y-px px-2">
+            <li>
+              <RouterLink to="/tickets" class="sidebar-link" :class="isContact ? 'sidebar-link--active' : ''">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+                </svg>
+                Contact support
+              </RouterLink>
+            </li>
+          </ul>
+        </template>
       </div>
     </template>
   </nav>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDocsStore } from '@/stores/docs.js'
 import SidebarNode from './SidebarNode.vue'
-import VersionSwitcher from './VersionSwitcher.vue'
 
 const store = useDocsStore()
 const route = useRoute()
 const isHome = computed(() => route.name === 'docs-home')
-const collapsed = reactive({})
+const isContact = computed(() => route.path === '/tickets')
 const filterQuery = ref('')
+
+/**
+ * The section's release header. For a versioned space, show the selected
+ * version label (e.g. "Altus Release"); otherwise the space label.
+ */
+function sectionHeading(section) {
+  if (section.versions?.length) {
+    return store.getSelectedVersion(section.space_key) || section.label
+  }
+  return section.label
+}
 const fq = computed(() => filterQuery.value.trim().toLowerCase())
 
 /**
@@ -182,10 +171,6 @@ watch(() => route.params.slug, () => {
   })
 })
 
-function toggleSection(key) {
-  collapsed[key] = !collapsed[key]
-}
-
 /**
  * Get the selected version's pre-built page tree.
  * Returns empty array for non-versioned spaces.
@@ -212,6 +197,53 @@ function countPages(section) {
 </script>
 
 <style scoped>
+/* Nav links (Home, Contact support) — pill rows */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  transition: color 0.12s, background 0.12s;
+}
+.sidebar-link:hover {
+  color: var(--foreground);
+  background: var(--muted);
+}
+.sidebar-link--active {
+  color: var(--sidebar-primary);
+  background: var(--sidebar-accent);
+  font-weight: 600;
+}
+.dark .sidebar-link--active { color: var(--sidebar-accent-foreground); }
+
+/* Section labels (ALTUS RELEASE, RESOURCES) */
+.sidebar-section {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 14px;
+  height: 28px;
+}
+.sidebar-section--spaced { margin-top: 14px; }
+.sidebar-section-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.sidebar-section-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
 .sidebar-filter {
   display: flex;
   align-items: center;

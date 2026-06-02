@@ -34,7 +34,6 @@
       <div class="flex">
         <article ref="articleRef" class="flex-1 min-w-0 page-pad py-8">
           <div class="max-w-[var(--content-max-width)]">
-            <Breadcrumbs :crumbs="store.currentPage.breadcrumbs" />
 
             <!-- Search match banner -->
             <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-accent border border-primary/20 text-xs text-accent-foreground">
@@ -89,7 +88,7 @@
 
         <!-- TOC -->
         <div class="hidden lg:block w-40 xl:w-52 shrink-0">
-          <div class="sticky top-[72px] py-8 pr-4 xl:pr-6">
+          <div class="sticky top-6 py-8 pr-4 xl:pr-6">
             <TableOfContents :html="store.currentPage.rendered_html" />
           </div>
         </div>
@@ -102,7 +101,6 @@
 import { ref, watch, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocsStore } from '@/stores/docs.js'
-import Breadcrumbs from '@/components/layout/Breadcrumbs.vue'
 import TableOfContents from './TableOfContents.vue'
 import ProseContent from './ProseContent.vue'
 
