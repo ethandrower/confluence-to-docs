@@ -152,7 +152,10 @@ if _S3_BUCKET:
     # CloudFront domain so storage URLs (and the <img> srcs the sync writes)
     # point at the CDN rather than the private bucket.
     AWS_DEFAULT_ACL = None
-    AWS_S3_FILE_OVERWRITE = False
+    # Overwrite same-key uploads: an attachment maps to a stable key
+    # (confluence/<page>/<file>), so a re-sync should replace it in place
+    # rather than pile up suffixed duplicates.
+    AWS_S3_FILE_OVERWRITE = True
     AWS_QUERYSTRING_AUTH = env.bool('AWS_QUERYSTRING_AUTH', default=False)
     AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN', default='') or None
     if AWS_S3_CUSTOM_DOMAIN:

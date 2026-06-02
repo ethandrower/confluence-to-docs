@@ -88,7 +88,15 @@ class ConfluenceClient:
         """
         Download a binary attachment from a Confluence page.
         Not in trinity (portal-specific) — uses direct authenticated request.
-        Returns a requests.Response with stream=True, or None if not found.
+        Returns a requests.Response (fully read) or None if not found / not an image.
+
+        IMPORTANT: we download via the REST API endpoint
+            /rest/api/content/{page}/child/attachment/{attId}/download
+        NOT the legacy /wiki/download/attachments/... servlet that the
+        attachment's `_links.download` points to. On Confluence Cloud the
+        legacy servlet rejects API-token basic auth (returns a 401 HTML page),
+        and the old code saved that error page to storage as if it were the
+        image. The REST endpoint honours basic auth and returns the binary.
         """
         session = requests.Session()
         session.auth = self.auth
@@ -102,8 +110,24 @@ class ConfluenceClient:
             results = r.json().get('results', [])
             if not results:
                 return None
-            download_url = results[0]['_links']['download']
-            return session.get(f"{self.base}{download_url}", stream=True, timeout=60)
+
+            att_id = results[0]['id']
+            resp = session.get(
+                f"{self.base}/rest/api/content/{page_id}/child/attachment/{att_id}/download",
+                allow_redirects=True,
+                timeout=60,
+            )
+
+            # Validate: only accept a successful, non-HTML (i.e. real binary)
+            # response. Guards against ever persisting an auth/error page.
+            ctype = resp.headers.get('Content-Type', '')
+            if resp.status_code != 200 or ctype.startswith('text/html'):
+                logger.warning(
+                    "download_attachment(%s, %s): unexpected response %s %s",
+                    page_id, filename, resp.status_code, ctype,
+                )
+                return None
+            return resp
         except Exception as e:
             logger.warning(f"download_attachment({page_id}, {filename}): {e}")
             return None
