@@ -200,6 +200,26 @@ def _sync_attachments(client, page, confluence_id, page_data):
     html_updated = False
     rendered = page.rendered_html
 
+    def _apply_url(rendered_html, filename, actual_url):
+        """
+        Replace the placeholder <img src> with the real storage URL.
+
+        The placeholder is generated from the raw filename, but lxml URL-encodes
+        the src when serializing (spaces -> %20, etc.), so the string actually
+        present in rendered_html is the encoded form. We therefore try both the
+        raw and percent-encoded placeholder variants — otherwise any attachment
+        whose filename has a space/special char never gets its src rewritten and
+        stays broken.
+        """
+        base = get_image_url(confluence_id, filename)
+        variants = {base, get_image_url(confluence_id, urllib.parse.quote(filename))}
+        changed = False
+        for ph in variants:
+            if ph in rendered_html and ph != actual_url:
+                rendered_html = rendered_html.replace(ph, actual_url)
+                changed = True
+        return rendered_html, changed
+
     for filename in filenames:
         cache_key = f'{confluence_id}:{filename}'
         existing = DocImage.objects.filter(confluence_id=cache_key).first()
@@ -207,10 +227,8 @@ def _sync_attachments(client, page, confluence_id, page_data):
         if existing:
             # Image already stored — just make sure the rendered_html URL is current
             actual_url = default_storage.url(existing.local_path)
-            placeholder = get_image_url(confluence_id, filename)
-            if placeholder in rendered and actual_url != placeholder:
-                rendered = rendered.replace(placeholder, actual_url)
-                html_updated = True
+            rendered, changed = _apply_url(rendered, filename, actual_url)
+            html_updated = html_updated or changed
             continue
 
         try:
@@ -237,10 +255,8 @@ def _sync_attachments(client, page, confluence_id, page_data):
             )
 
             # Rewrite placeholder URL in rendered HTML to actual storage URL
-            placeholder = get_image_url(confluence_id, filename)
-            if placeholder in rendered:
-                rendered = rendered.replace(placeholder, actual_url)
-                html_updated = True
+            rendered, changed = _apply_url(rendered, filename, actual_url)
+            html_updated = html_updated or changed
 
             logger.debug(f"    Saved attachment: {filename} → {actual_url}")
 

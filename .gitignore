@@ -38,3 +38,5 @@ media/
 docs/superpowers/
 claude-ui-refactor-starter/
 db.sqlite3.bak*
+.playwright-mcp/
+frontend/.playwright-mcp/
