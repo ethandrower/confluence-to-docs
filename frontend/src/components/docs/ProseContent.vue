@@ -293,6 +293,47 @@ function fixBrokenTables(html) {
   return div.innerHTML
 }
 
+// Wrap "steps + single screenshot" sections in a 2-column grid.
+function splitStepImageSections(el) {
+  const blocks = Array.from(el.children)
+  const isHeading = n => /^H[1-4]$/.test(n.tagName)
+  // Build runs of consecutive non-heading siblings.
+  const runs = []
+  let cur = null
+  for (const n of blocks) {
+    if (isHeading(n)) { cur = null; continue }
+    if (!cur) { cur = []; runs.push(cur) }
+    cur.push(n)
+  }
+  for (const run of runs) {
+    if (run.length < 2) continue
+    if (run.some(n => n.classList?.contains('doc-split'))) continue
+    // Disqualify sections with tables/code/panels/expands.
+    if (run.some(n => n.querySelector?.('table, pre, .panel, .confluence-expand') || /^(TABLE|PRE)$/.test(n.tagName))) continue
+    const imgs = run.flatMap(n => (n.tagName === 'IMG' ? [n] : Array.from(n.querySelectorAll('img'))))
+    const hasList = run.some(n => n.tagName === 'OL' || n.tagName === 'UL' || n.querySelector?.('ol, ul'))
+    if (imgs.length !== 1 || !hasList) continue
+
+    const img = imgs[0]
+    const mediaBlock = run.find(n => n === img || n.contains(img))
+    const textBlocks = run.filter(n => n !== mediaBlock)
+    if (!textBlocks.length) continue
+
+    const wrap = document.createElement('div')
+    wrap.className = 'doc-split'
+    const main = document.createElement('div')
+    main.className = 'doc-split-main'
+    const media = document.createElement('div')
+    media.className = 'doc-split-media'
+
+    run[0].before(wrap)
+    textBlocks.forEach(n => main.appendChild(n))
+    media.appendChild(mediaBlock)
+    wrap.appendChild(main)
+    wrap.appendChild(media)
+  }
+}
+
 // ── Post-render: copy buttons, syntax highlight ────────────
 function enhance() {
   if (!contentRef.value) return
@@ -313,6 +354,28 @@ function enhance() {
     })
     pre.style.position = 'relative'
     pre.appendChild(btn)
+  })
+
+  // "Steps + screenshot" sections → two columns (text left, image right).
+  // Conservative: only when a heading-delimited section has a list AND exactly
+  // one image, with no table/code/panel. Collapses to one column on narrow
+  // screens via CSS. Idempotent (skips already-wrapped runs).
+  splitStepImageSections(el)
+
+  // Expand macros → real collapsible disclosures (collapsed by default).
+  el.querySelectorAll('.confluence-expand').forEach(exp => {
+    const title = exp.querySelector('.confluence-expand-title')
+    const body = exp.querySelector('.confluence-expand-content')
+    if (!title || !body || title.dataset.bound) return
+    title.dataset.bound = '1'
+    exp.classList.add('is-collapsed')
+    title.setAttribute('role', 'button')
+    title.setAttribute('tabindex', '0')
+    const toggle = () => exp.classList.toggle('is-collapsed')
+    title.addEventListener('click', toggle)
+    title.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() }
+    })
   })
 
   if (window.Prism) window.Prism.highlightAll()

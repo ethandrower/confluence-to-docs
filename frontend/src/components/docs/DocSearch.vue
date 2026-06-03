@@ -73,15 +73,15 @@
         </div>
       </section>
 
-      <!-- Recently updated -->
+      <!-- Recently viewed (this device) -->
       <section v-if="recent.length" class="block">
-        <p class="block-label">Recently updated</p>
+        <p class="block-label">Recently viewed</p>
         <ul class="recent-list">
           <li v-for="r in recent" :key="r.slug">
             <RouterLink :to="{ name: 'doc-page', params: { slug: r.slug } }" class="recent-row">
-              <svg class="recent-icon w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+              <svg class="recent-icon w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
               <span class="recent-title">{{ r.title }}</span>
-              <span class="recent-date">{{ relativeDate(r.last_synced) }}</span>
+              <span class="recent-date">{{ relativeDate(r.ts) }}</span>
             </RouterLink>
           </li>
         </ul>
@@ -93,6 +93,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useDocsStore } from '@/stores/docs.js'
+import { useRecentlyViewed } from '@/lib/useRecentlyViewed.js'
 
 const store = useDocsStore()
 const isMac = ref(false)
@@ -177,30 +178,16 @@ const modules = computed(() =>
     .filter(m => m.slug)
 )
 
-// Recently updated — flatten everything visible, newest first.
-const recent = computed(() => {
-  const flat = []
-  function walk(list) {
-    for (const p of list || []) {
-      if (p.slug && !p.is_folder && p.last_synced) flat.push(p)
-      walk(p.children)
-    }
-  }
-  for (const s of store.sections) {
-    walk(s.pages)
-    for (const v of s.versions || []) walk(v.pages)
-  }
-  const seen = new Set()
-  return flat
-    .filter(p => (seen.has(p.slug) ? false : seen.add(p.slug)))
-    .sort((a, b) => new Date(b.last_synced) - new Date(a.last_synced))
-    .slice(0, 5)
-    .map(p => ({ slug: p.slug, title: stripVersionPrefix(p.title), last_synced: p.last_synced }))
-})
+// Recently viewed (this device) — accurate per-user history. We'll swap to a
+// real "recently updated" feed once we sync Confluence's last-modified dates.
+const { recent: recentRaw, load: loadRecent } = useRecentlyViewed()
+const recent = computed(() =>
+  recentRaw.value.map(p => ({ slug: p.slug, title: stripVersionPrefix(p.title), ts: p.ts }))
+)
 
-function relativeDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
+function relativeDate(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
   const days = Math.round((Date.now() - d.getTime()) / 86400000)
   if (days <= 0) return 'today'
   if (days === 1) return 'yesterday'
@@ -220,6 +207,7 @@ function openSearch() {
 
 onMounted(() => {
   isMac.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgentData?.platform || navigator.userAgent)
+  loadRecent()
 })
 </script>
 

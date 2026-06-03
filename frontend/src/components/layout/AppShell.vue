@@ -17,10 +17,15 @@
         </RouterLink>
       </div>
       <ScrollArea class="flex-1 min-h-0">
-        <div class="pb-8">
+        <div class="pb-6">
           <slot name="sidebar" />
         </div>
       </ScrollArea>
+      <div class="sidebar-foot">
+        <span>© {{ year }} CiteMed</span>
+        <span class="sidebar-foot-dot" aria-hidden="true">·</span>
+        <span>Controlled documentation</span>
+      </div>
     </aside>
 
     <!-- ── Main column ─────────────────────────────────────────────────── -->
@@ -140,6 +145,8 @@ async function signOut() {
 }
 const mobileOpen = ref(false)
 const searchOpen = ref(false)
+const isMac = ref(false)
+const year = new Date().getFullYear()
 
 function onKey(e) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -152,6 +159,7 @@ function onOpenSearch() {
 }
 
 onMounted(() => {
+  isMac.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgentData?.platform || navigator.userAgent)
   document.addEventListener('keydown', onKey)
   window.addEventListener('citemed:open-search', onOpenSearch)
 })
@@ -243,6 +251,21 @@ onBeforeUnmount(() => {
   background: var(--background);
   color: var(--muted-foreground);
 }
+
+/* Sidebar footer — quiet governance signal */
+.sidebar-foot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--sidebar-border);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--muted-foreground);
+  letter-spacing: 0.005em;
+}
+.sidebar-foot-dot { opacity: 0.5; }
 
 /* ── Brand wordmark ([cite]med Support) ── */
 .wordmark {

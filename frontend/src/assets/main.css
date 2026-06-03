@@ -47,6 +47,7 @@
   --destructive: #C0392B;
   --border: #E4E8F0;              /* Grey 3 */
   --border-subtle: #EBEEF4;
+  --divider: #C2CAD8;             /* stronger rule for header dividers / cards */
   --input: #DBE2F0;               /* Grey 4 */
   --ring: #3578FF;                /* Bright Blue — focus */
   --accent-hover: #C2D3F2;        /* Dull Blue 3 */
@@ -80,6 +81,7 @@
   --destructive: #E15A4B;
   --border: #343C49;
   --border-subtle: #2D3442;
+  --divider: #4A5160;             /* Grey 8-ish — stronger rule on dark */
   --input: #343C49;
   --ring: #3578FF;
   --accent-hover: #2C3A55;

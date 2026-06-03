@@ -59,11 +59,42 @@
         v-show="!fq || sectionHasMatches(section)"
         :key="section.space_key"
       >
-        <!-- Release section header (version switching lives in the banner) -->
-        <p class="sidebar-section">
-          <span class="sidebar-section-label">{{ sectionHeading(section) }}</span>
-          <span class="sidebar-section-count tabular-nums">{{ countPages(section) }}</span>
-        </p>
+        <!-- Release section header — doubles as a version switcher -->
+        <div class="sidebar-ver-wrap">
+          <p class="sidebar-section">
+            <button
+              v-if="section.versions?.length > 1"
+              class="sidebar-ver-trigger"
+              @click.stop="toggleVer(section.space_key)"
+              :aria-expanded="openVer === section.space_key"
+              aria-haspopup="listbox"
+            >
+              <span class="sidebar-section-label">{{ sectionHeading(section) }}</span>
+              <svg class="sidebar-ver-chev" :class="openVer === section.space_key ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+            <span v-else class="sidebar-section-label">{{ sectionHeading(section) }}</span>
+            <span class="sidebar-section-count tabular-nums">{{ countPages(section) }}</span>
+          </p>
+          <Transition name="ver-drop">
+            <ul v-if="openVer === section.space_key" class="sidebar-ver-menu" role="listbox">
+              <li v-for="v in section.versions" :key="v.label">
+                <button
+                  role="option"
+                  :aria-selected="v.label === sectionHeading(section)"
+                  class="sidebar-ver-opt"
+                  :class="v.label === sectionHeading(section) ? 'sidebar-ver-opt--active' : ''"
+                  @click="switchVer(section, v)"
+                >
+                  <span>{{ v.label }}</span>
+                  <span v-if="v.is_latest" class="sidebar-ver-latest">latest</span>
+                  <svg v-if="v.label === sectionHeading(section)" class="w-3.5 h-3.5 ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                </button>
+              </li>
+            </ul>
+          </Transition>
+        </div>
 
         <ul v-if="getVersionPages(section).length" class="space-y-px px-2 mt-0.5">
           <SidebarNode
@@ -106,16 +137,31 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useDocsStore } from '@/stores/docs.js'
 import SidebarNode from './SidebarNode.vue'
 
 const store = useDocsStore()
 const route = useRoute()
+const router = useRouter()
 const isHome = computed(() => route.name === 'docs-home')
 const isContact = computed(() => route.path === '/tickets')
 const filterQuery = ref('')
+const openVer = ref(null)
+
+function toggleVer(spaceKey) {
+  openVer.value = openVer.value === spaceKey ? null : spaceKey
+}
+function switchVer(section, v) {
+  store.selectVersion(section.space_key, v.label)
+  openVer.value = null
+}
+function onDocClick(e) {
+  if (openVer.value && !e.target.closest('.sidebar-ver-wrap')) openVer.value = null
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 /**
  * The section's release header. For a versioned space, show the selected
@@ -243,6 +289,66 @@ function countPages(section) {
   color: var(--muted-foreground);
   opacity: 0.6;
 }
+
+/* Version switcher in the section header */
+.sidebar-ver-wrap { position: relative; }
+.sidebar-ver-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 5px;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  transition: background 0.12s;
+}
+.sidebar-ver-trigger:hover { background: var(--muted); }
+.sidebar-ver-trigger:hover .sidebar-section-label { color: var(--foreground); }
+.sidebar-ver-chev {
+  width: 11px;
+  height: 11px;
+  color: var(--muted-foreground);
+  transition: transform 0.15s;
+}
+.sidebar-ver-menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(100% + 2px);
+  z-index: 30;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 0.12);
+}
+.sidebar-ver-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--foreground);
+  transition: background 0.1s;
+}
+.sidebar-ver-opt:hover { background: var(--accent); }
+.sidebar-ver-opt--active { color: var(--sidebar-primary); font-weight: 600; }
+.dark .sidebar-ver-opt--active { color: var(--sidebar-accent-foreground); }
+.sidebar-ver-latest {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-accent) 14%, transparent);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.ver-drop-enter-active, .ver-drop-leave-active { transition: opacity 0.14s, transform 0.14s; }
+.ver-drop-enter-from, .ver-drop-leave-to { opacity: 0; transform: translateY(-4px); }
 
 .sidebar-filter {
   display: flex;

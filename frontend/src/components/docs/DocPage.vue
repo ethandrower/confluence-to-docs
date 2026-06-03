@@ -70,7 +70,7 @@
               </span>
             </div>
 
-            <div class="mt-5 pt-6 border-t border-border-subtle">
+            <div class="mt-5 pt-6 border-t-2 border-[color:var(--divider)]">
               <ProseContent :html="store.currentPage.rendered_html" />
             </div>
 
@@ -105,6 +105,9 @@ import { useDocsStore } from '@/stores/docs.js'
 import Breadcrumbs from '@/components/layout/Breadcrumbs.vue'
 import TableOfContents from './TableOfContents.vue'
 import ProseContent from './ProseContent.vue'
+import { useRecentlyViewed } from '@/lib/useRecentlyViewed.js'
+
+const { record: recordView } = useRecentlyViewed()
 
 const props = defineProps({ slug: String })
 const store = useDocsStore()
@@ -144,6 +147,8 @@ async function loadPage() {
         return
       }
     }
+    // Real content page — record it as recently viewed.
+    recordView({ slug: cp.slug, title: cp.title })
   }
 
   await nextTick()
