@@ -18,7 +18,7 @@
       </div>
     </div>
 
-    <div class="max-h-[360px] overflow-y-auto">
+    <div class="max-h-[460px] overflow-y-auto">
       <!-- Initial state -->
       <div v-if="!hasSearched" class="py-10 text-center">
         <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">

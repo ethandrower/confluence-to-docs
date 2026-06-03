@@ -45,13 +45,8 @@
           <h1 class="hero-title">CiteMed documentation</h1>
           <p class="hero-sub">
             Guides, module references, and release notes for Evidence Cloud. Browse by
-            module below, or search to find an answer fast.
+            module below, or use search to find an answer fast.
           </p>
-          <button class="hero-search" @click="openSearch">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-            <span>Search the documentation…</span>
-            <kbd>{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
-          </button>
         </div>
       </section>
 

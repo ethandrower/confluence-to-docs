@@ -55,20 +55,14 @@
           </span>
         </RouterLink>
 
-        <!-- Breadcrumb (desktop) -->
-        <nav class="hidden lg:flex items-center gap-1.5 text-[13px] min-w-0" aria-label="Breadcrumb">
-          <template v-for="(c, i) in crumbs" :key="i">
-            <svg v-if="i > 0" class="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-            </svg>
-            <RouterLink
-              v-if="c.to && i < crumbs.length - 1"
-              :to="c.to"
-              class="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[180px]"
-            >{{ c.label }}</RouterLink>
-            <span v-else class="text-foreground font-medium truncate max-w-[260px]">{{ c.label }}</span>
-          </template>
-        </nav>
+        <!-- Search (opens ⌘K palette) -->
+        <button @click="searchOpen = true" aria-label="Search documentation" class="topbar-search hidden sm:inline-flex">
+          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+          <span class="topbar-search-text">Search the documentation…</span>
+          <kbd class="topbar-search-kbd">{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
+        </button>
 
         <div class="flex-1" />
 
@@ -85,12 +79,6 @@
           </svg>
           Contact
         </RouterLink>
-
-        <button @click="searchOpen = true" aria-label="Search documentation" class="topbar-icon sm:hidden">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-          </svg>
-        </button>
 
         <ThemeToggle />
 
@@ -152,29 +140,6 @@ async function signOut() {
 }
 const mobileOpen = ref(false)
 const searchOpen = ref(false)
-
-// Structural wrapper pages that are hidden from the nav — keep them out of
-// the breadcrumb too, so it stays short and meaningful.
-const WRAPPER_TITLES = new Set([
-  'Evidence Cloud Documentation',
-  'Customer Resource Center & Quick Start Guide',
-  'User Documentation per Release Version',
-  'CiteMed Evidence Cloud: Your Systematic Literature Review Platform for Life Sciences',
-])
-
-// Concise top-bar breadcrumb: Home › (nearest meaningful parent) › Current.
-const crumbs = computed(() => {
-  if (route.name === 'docs-home') return [{ label: 'Home' }]
-  const cp = store.currentPage
-  const trail = [{ label: 'Home', to: '/docs' }]
-  if (cp) {
-    const ancestors = (cp.breadcrumbs || []).filter(c => !WRAPPER_TITLES.has(c.title))
-    const parent = ancestors[ancestors.length - 1]
-    if (parent) trail.push({ label: parent.title, to: `/docs/${parent.slug}` })
-    trail.push({ label: cp.title })
-  }
-  return trail
-})
 
 function onKey(e) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -250,6 +215,34 @@ onBeforeUnmount(() => {
   color: var(--muted-foreground);
 }
 .topbar-icon:hover { color: var(--foreground); background: var(--muted); }
+
+/* Top-bar search field (opens the ⌘K palette) */
+.topbar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  flex: 1;
+  max-width: 760px;
+  padding: 0 10px 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  transition: border-color 0.15s, background 0.15s;
+}
+.topbar-search:hover { border-color: var(--accent-hover); background: var(--muted); }
+.topbar-search-text { flex: 1; text-align: left; font-size: 13px; }
+.topbar-search-kbd {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted-foreground);
+}
 
 /* ── Brand wordmark ([cite]med Support) ── */
 .wordmark {

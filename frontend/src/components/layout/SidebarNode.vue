@@ -110,12 +110,12 @@ watch(currentSlug, (slug) => {
 }
 
 .tree-item--active {
-  --tree-line-color: oklch(0.52 0.20 260 / 0.35);
-  --tree-node-color: oklch(0.52 0.20 260);
+  --tree-line-color: color-mix(in srgb, var(--brand-accent) 50%, transparent);
+  --tree-node-color: var(--brand-accent);
 }
 
 .tree-item--in-path {
-  --tree-line-color: oklch(0.52 0.20 260 / 0.2);
+  --tree-line-color: color-mix(in srgb, var(--brand-accent) 28%, transparent);
 }
 
 /* Row layout */

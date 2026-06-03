@@ -343,7 +343,7 @@ const EMOJI = {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   margin: 1.25rem 0;
-  border: 1px solid oklch(0.92 0.006 260);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 .confluence-content .table-wrap table {
@@ -360,19 +360,19 @@ const EMOJI = {
   border-radius: 5px;
   font-size: 0.75rem;
   font-weight: 500;
-  background: oklch(0.96 0.006 260);
-  color: oklch(0.38 0.012 260);
-  border: 1px solid oklch(0.93 0.006 260);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
 }
 
 /* Image placeholder */
 .confluence-content .img-placeholder {
   border-radius: 10px;
-  border: 1px dashed oklch(0.90 0.006 260);
-  background: oklch(0.98 0.003 260);
+  border: 1px dashed var(--border);
+  background: var(--muted);
   padding: 1.25rem;
   font-size: 0.8125rem;
-  color: oklch(0.55 0.012 260);
+  color: var(--muted-foreground);
   text-align: center;
   margin: 1rem 0;
 }
@@ -407,6 +407,6 @@ const EMOJI = {
   transition: color 0.15s;
 }
 .confluence-content .group:hover .anchor-link {
-  color: oklch(0.52 0.20 260 / 0.4);
+  color: color-mix(in srgb, var(--brand-accent) 55%, transparent);
 }
 </style>

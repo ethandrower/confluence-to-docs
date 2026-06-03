@@ -34,6 +34,7 @@
       <div class="flex">
         <article ref="articleRef" class="flex-1 min-w-0 page-pad py-8">
           <div class="max-w-[var(--content-max-width)]">
+            <Breadcrumbs :crumbs="crumbs" />
 
             <!-- Search match banner -->
             <div v-if="searchQuery && matchCount > 0" class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-accent border border-primary/20 text-xs text-accent-foreground">
@@ -101,6 +102,7 @@
 import { ref, watch, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocsStore } from '@/stores/docs.js'
+import Breadcrumbs from '@/components/layout/Breadcrumbs.vue'
 import TableOfContents from './TableOfContents.vue'
 import ProseContent from './ProseContent.vue'
 
@@ -112,6 +114,21 @@ const articleRef = ref(null)
 const matchCount = ref(0)
 
 const searchQuery = computed(() => route.query.q || '')
+
+// Structural wrapper pages hidden from the nav — keep them out of the
+// breadcrumb too. Breadcrumb shows: Docs › (real ancestors) › current page.
+const WRAPPER_TITLES = new Set([
+  'Evidence Cloud Documentation',
+  'Customer Resource Center & Quick Start Guide',
+  'User Documentation per Release Version',
+  'CiteMed Evidence Cloud: Your Systematic Literature Review Platform for Life Sciences',
+])
+const crumbs = computed(() => {
+  const cp = store.currentPage
+  if (!cp) return []
+  const ancestors = (cp.breadcrumbs || []).filter(c => !WRAPPER_TITLES.has(c.title))
+  return [...ancestors, { title: cp.title, slug: cp.slug }]
+})
 
 async function loadPage() {
   await store.fetchPage(props.slug)
