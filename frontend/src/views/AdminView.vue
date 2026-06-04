@@ -53,8 +53,14 @@
                     <button class="switch" :class="u.access_enabled && 'switch--on'" :aria-pressed="u.access_enabled" @click="toggleAccess(u)" :title="u.access_enabled ? 'Enabled' : 'Disabled'"><span class="switch-knob" /></button>
                   </td>
                   <td class="ta-r">
-                    <button class="icon-btn" @click="openUser(u)" aria-label="Edit user">✎</button>
-                    <button class="icon-btn icon-btn--danger" @click="remove('user', u)" aria-label="Remove user">✕</button>
+                    <div class="row-actions">
+                      <button class="icon-btn" @click="openUser(u)" aria-label="Edit user" title="Edit">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
+                      </button>
+                      <button class="icon-btn icon-btn--danger" @click="remove('user', u)" aria-label="Remove user" title="Remove">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 <tr v-if="!store.users.length"><td colspan="6" class="empty">No users yet.</td></tr>
@@ -80,8 +86,14 @@
                   <td>{{ c.contract_end_date ? formatDate(c.contract_end_date) : '—' }}</td>
                   <td class="ta-c tabular">{{ c.user_count }}</td>
                   <td class="ta-r">
-                    <button class="icon-btn" @click="openCompany(c)" aria-label="Edit company">✎</button>
-                    <button class="icon-btn icon-btn--danger" @click="remove('company', c)" aria-label="Remove company">✕</button>
+                    <div class="row-actions">
+                      <button class="icon-btn" @click="openCompany(c)" aria-label="Edit company" title="Edit">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
+                      </button>
+                      <button class="icon-btn icon-btn--danger" @click="remove('company', c)" aria-label="Remove company" title="Remove">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 <tr v-if="!store.companies.length"><td colspan="4" class="empty">No companies yet.</td></tr>
@@ -237,7 +249,8 @@ onMounted(() => store.fetchAll())
 </script>
 
 <style scoped>
-.admin { max-width: 1400px; margin: 0 auto; padding: 24px clamp(1.5rem, 4vw, 3rem) 64px; }
+/* Full-width admin module — aligns with the top-bar padding (px-4 / lg:px-6) */
+.admin { max-width: none; margin: 0; padding: 26px clamp(1rem, 2vw, 1.5rem) 64px; }
 .back-link {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; font-weight: 500; color: var(--muted-foreground);
@@ -299,9 +312,18 @@ tbody tr:hover td { background: var(--accent); }
 .switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.18s; box-shadow: 0 1px 2px oklch(0 0 0 / 0.2); }
 .switch--on .switch-knob { transform: translateX(16px); }
 
-.icon-btn { width: 28px; height: 28px; border-radius: 6px; color: var(--muted-foreground); font-size: 13px; transition: color 0.15s, background 0.15s; }
-.icon-btn:hover { color: var(--foreground); background: var(--muted); }
-.icon-btn--danger:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
+.row-actions { display: inline-flex; gap: 6px; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 7px;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.icon-btn:hover { color: var(--primary); border-color: var(--primary); background: var(--accent); }
+.dark .icon-btn:hover { color: var(--accent-foreground); }
+.icon-btn--danger:hover { color: var(--destructive); border-color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
 
 .btn-primary { background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: 8px; transition: filter 0.15s; }
 .btn-primary:hover { filter: brightness(0.94); }
