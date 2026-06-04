@@ -1,7 +1,14 @@
 from django.urls import path
-from portal.views import docs, auth, tickets
+from portal.views import docs, auth, tickets, admin_api
 
 urlpatterns = [
+    # Admin (manage users + companies) — gated to portal admins
+    path('admin/companies/', admin_api.companies, name='admin-companies'),
+    path('admin/companies/<int:company_id>/', admin_api.company_detail, name='admin-company-detail'),
+    path('admin/users/', admin_api.users, name='admin-users'),
+    path('admin/users/<int:user_id>/', admin_api.user_detail, name='admin-user-detail'),
+    path('admin/sync/', admin_api.sync_docs, name='admin-sync'),
+
     # Docs
     path('docs/', docs.page_tree, name='page-tree'),
     path('docs/search/', docs.search_docs, name='search-docs'),

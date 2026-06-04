@@ -43,14 +43,42 @@ class DocImage(models.Model):
         return self.original_filename
 
 
+class Company(models.Model):
+    """A customer organisation whose people may be granted portal access."""
+    name = models.CharField(max_length=256, unique=True)
+    contract_end_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = 'companies'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class PortalUser(models.Model):
+    ROLE_ADMIN = 'admin'
+    ROLE_CUSTOMER = 'customer'
+    ROLE_CHOICES = [(ROLE_ADMIN, 'Admin'), (ROLE_CUSTOMER, 'Customer')]
+
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=256, blank=True)
+    # Access control (TG-672): only enabled users already in the DB can sign in.
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES, default=ROLE_CUSTOMER)
+    company = models.ForeignKey(
+        'Company', null=True, blank=True, on_delete=models.SET_NULL, related_name='users'
+    )
+    access_enabled = models.BooleanField(default=True)
     jsm_customer_id = models.CharField(max_length=64, blank=True)
     is_jsm_customer = models.BooleanField(default=False)
     jsm_checked_at = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(null=True)
+
+    @property
+    def is_admin_role(self):
+        return self.role == self.ROLE_ADMIN
 
     def __str__(self):
         return self.email

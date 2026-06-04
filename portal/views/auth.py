@@ -31,11 +31,15 @@ def _user_payload(portal_user, request=None):
       - prod (Dokku serves both from one origin; absolute URL still works)
     """
     User = get_user_model()
-    is_admin = User.objects.filter(
+    is_superuser = User.objects.filter(
         email__iexact=portal_user.email,
         is_superuser=True,
         is_active=True,
     ).exists()
+    # Admin = portal role 'admin' OR an active Django superuser. This gates the
+    # in-portal admin (manage users/companies); the Django admin link below is
+    # reserved for superusers (doc resync).
+    is_admin = is_superuser or portal_user.role == 'admin'
 
     payload = {
         'id': portal_user.pk,
@@ -43,7 +47,7 @@ def _user_payload(portal_user, request=None):
         'name': portal_user.name,
         'is_admin': is_admin,
     }
-    if is_admin:
+    if is_superuser:
         relative = f'/{settings.ADMIN_PATH}/'
         payload['admin_url'] = request.build_absolute_uri(relative) if request else relative
     return payload
@@ -92,7 +96,23 @@ def request_magic_link(request):
 
     from portal.models import PortalUser, MagicLinkToken
 
-    user, _ = PortalUser.objects.get_or_create(email=email)
+    # Access allowlist (TG-672): only send a link to an email that already
+    # exists in the DB and is enabled. Active Django superusers are always
+    # allowed (and auto-provisioned as admins) so we can never lock out ops.
+    user = PortalUser.objects.filter(email=email).first()
+    allowed = bool(user and user.access_enabled)
+    if not allowed:
+        User = get_user_model()
+        if User.objects.filter(email__iexact=email, is_superuser=True, is_active=True).exists():
+            user, _ = PortalUser.objects.get_or_create(
+                email=email, defaults={'role': PortalUser.ROLE_ADMIN, 'access_enabled': True}
+            )
+            allowed = True
+    if not allowed:
+        logger.info('Magic link blocked — email not on access list: %s', email)
+        # Same generic response as success: no account-enumeration oracle.
+        return JsonResponse({'message': 'Magic link sent if email exists'})
+
     token = MagicLinkToken.objects.create(
         user=user,
         token=secrets.token_urlsafe(32),
@@ -156,6 +176,14 @@ def verify_magic_link(request):
         return JsonResponse({'error': 'Token expired or already used'}, status=401)
 
     user = token.user
+
+    # Honour access revocation even if a link was already issued.
+    if not user.access_enabled:
+        User = get_user_model()
+        is_super = User.objects.filter(email__iexact=user.email, is_superuser=True, is_active=True).exists()
+        if not is_super:
+            return JsonResponse({'error': 'Access to this portal has been disabled.'}, status=403)
+
     token.used = True
     token.save(update_fields=['used'])
 
