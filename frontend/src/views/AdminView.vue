@@ -112,7 +112,7 @@
 
             <template v-if="modal==='user'">
               <label class="field"><span>Email</span>
-                <input v-model="form.email" type="email" :disabled="!!editing" placeholder="person@company.com" />
+                <input v-model="form.email" type="email" placeholder="person@company.com" />
               </label>
               <label class="field"><span>Name</span>
                 <input v-model="form.name" type="text" placeholder="Full name (optional)" />
@@ -206,9 +206,9 @@ async function save() {
   formError.value = ''
   try {
     if (modal.value === 'user') {
-      const payload = { name: form.value.name, role: form.value.role, company_id: form.value.company_id, access_enabled: form.value.access_enabled }
+      const payload = { email: form.value.email, name: form.value.name, role: form.value.role, company_id: form.value.company_id, access_enabled: form.value.access_enabled }
       if (editing.value) await store.updateUser(editing.value.id, payload)
-      else await store.createUser({ ...payload, email: form.value.email })
+      else await store.createUser(payload)
     } else {
       const payload = { name: form.value.name, contract_end_date: form.value.contract_end_date || null }
       if (editing.value) await store.updateCompany(editing.value.id, payload)

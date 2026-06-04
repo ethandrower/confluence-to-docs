@@ -144,6 +144,13 @@ def user_detail(request, user_id):
     data = _parse(request)
     if data is None:
         return JsonResponse({'error': 'Invalid request'}, status=400)
+    if 'email' in data:
+        new_email = (data['email'] or '').strip().lower()
+        if not new_email or '@' not in new_email:
+            return JsonResponse({'error': 'A valid email is required'}, status=400)
+        if PortalUser.objects.filter(email__iexact=new_email).exclude(pk=u.pk).exists():
+            return JsonResponse({'error': 'A user with that email already exists'}, status=409)
+        u.email = new_email
     if 'name' in data:
         u.name = (data['name'] or '').strip()
     if 'role' in data and data['role'] in (PortalUser.ROLE_ADMIN, PortalUser.ROLE_CUSTOMER):
