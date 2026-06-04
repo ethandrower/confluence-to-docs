@@ -8,6 +8,7 @@ urlpatterns = [
     path('admin/users/', admin_api.users, name='admin-users'),
     path('admin/users/<int:user_id>/', admin_api.user_detail, name='admin-user-detail'),
     path('admin/sync/', admin_api.sync_docs, name='admin-sync'),
+    path('admin/add-page/', admin_api.add_page, name='admin-add-page'),
 
     # Docs
     path('docs/', docs.page_tree, name='page-tree'),

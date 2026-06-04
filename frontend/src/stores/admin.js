@@ -68,6 +68,11 @@ export const useAdminStore = defineStore('admin', () => {
     return data.message || 'Sync started.'
   }
 
+  async function addPage(url) {
+    const { data } = await axios.post('/api/admin/add-page/', { url })
+    return data.message || 'Page added.'
+  }
+
   return {
     companies, users, loading, error,
     fetchAll,

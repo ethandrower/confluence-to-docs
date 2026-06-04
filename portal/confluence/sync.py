@@ -225,6 +225,80 @@ def sync_space(space_key, full=True, since=None):
     return {'synced': synced, 'skipped': skipped, 'errors': errors}
 
 
+class ParentNotSynced(Exception):
+    """Raised when a page's parent chain isn't in the DB yet (needs full sync)."""
+
+
+def ingest_page(space_key, page_id):
+    """
+    Ingest a single Confluence page into the docs (targeted "add a page").
+
+    Fetches the page, transforms it, downloads its images, resolves its
+    internal links, and upserts it as a DocPage nested under its existing
+    parent. If the parent chain isn't present yet, raises ParentNotSynced so
+    the caller can fall back to a full space sync (which builds folders +
+    ancestors correctly). Returns the DocPage.
+    """
+    from portal.links import build_link_map, rewrite_internal_links
+
+    client = ConfluenceClient()
+    page_id = str(page_id)
+    full = client.get_page_body(page_id)
+    if not full or not full.get('id'):
+        raise ValueError('Could not fetch that page from Confluence.')
+
+    ancestors = full.get('ancestors', [])
+    parent_obj = None
+    if ancestors:
+        parent_cid = str(ancestors[-1]['id'])
+        parent_obj = DocPage.objects.filter(confluence_id=parent_cid).first()
+        if not parent_obj:
+            raise ParentNotSynced(parent_cid)
+
+    title = full.get('title', 'Untitled')
+    body = full.get('body', {}).get('storage', {}).get('value', '')
+    version_number = full.get('version', {}).get('number', 1)
+    existing = DocPage.objects.filter(confluence_id=page_id).first()
+
+    title_to_slug = {p.title: p.slug for p in DocPage.objects.filter(space_key=space_key)}
+
+    def page_slug_resolver(t):
+        slug = title_to_slug.get(t)
+        return f'/docs/{slug}' if slug else f'/docs/{django_slugify(t)}'
+
+    transformer = StorageTransformer(
+        image_resolver=lambda fn, cid=page_id: get_image_url(cid, fn),
+        page_slug_resolver=page_slug_resolver,
+    )
+    rendered = transformer.transform(body)
+    slug = make_unique_slug(title, page_id, existing.slug if existing else None)
+
+    page, _ = DocPage.objects.update_or_create(
+        confluence_id=page_id,
+        defaults={
+            'slug': slug,
+            'title': title,
+            'parent': parent_obj,
+            'rendered_html': rendered,
+            'raw_storage': body,
+            'confluence_version': version_number,
+            'version': (existing.version + 1) if existing else 1,
+            'space_key': space_key,
+            'is_published': True,
+            'is_folder': False,
+            'position': existing.position if existing else 9999,
+        },
+    )
+    _sync_attachments(client, page, page_id, full)
+
+    # Resolve this page's internal Confluence links to portal routes.
+    page.refresh_from_db()
+    page.rendered_html = rewrite_internal_links(page.rendered_html, build_link_map([space_key]))
+    page.save(update_fields=['rendered_html'])
+    logger.info('Ingested single page %s (%s)', page_id, title)
+    return page
+
+
 def _extract_proxy_image_url(filename):
     """
     Some pages (imported from GitBook) reference images not as real Confluence

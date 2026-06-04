@@ -12,12 +12,20 @@
             <h1>Manage access</h1>
             <p>Add companies and people, and control who can sign in to the support portal.</p>
           </div>
-          <button class="btn-sync" :disabled="syncing" @click="runSync">
-            <svg class="w-4 h-4" :class="syncing && 'spin'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-            </svg>
-            {{ syncing ? 'Syncing…' : 'Sync from Confluence' }}
-          </button>
+          <div class="head-actions">
+            <button class="btn-sync" @click="openAddPage">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              Add a page
+            </button>
+            <button class="btn-sync" :disabled="syncing" @click="runSync">
+              <svg class="w-4 h-4" :class="syncing && 'spin'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+              {{ syncing ? 'Syncing…' : 'Sync from Confluence' }}
+            </button>
+          </div>
         </header>
         <p v-if="syncMsg" class="sync-msg">{{ syncMsg }}</p>
 
@@ -138,7 +146,7 @@
               <label class="check"><input type="checkbox" v-model="form.access_enabled" /> <span>Access enabled (can sign in)</span></label>
             </template>
 
-            <template v-else>
+            <template v-else-if="modal==='company'">
               <label class="field"><span>Company name</span>
                 <input v-model="form.name" type="text" placeholder="e.g. Abiomed" />
               </label>
@@ -147,9 +155,16 @@
               </label>
             </template>
 
+            <template v-else-if="modal==='addpage'">
+              <label class="field"><span>Confluence page URL</span>
+                <input v-model="form.url" type="url" placeholder="https://citemed.atlassian.net/wiki/spaces/ECD/pages/…" />
+              </label>
+              <p class="addpage-hint">Paste a link to an Evidence Cloud (ECD) page. We'll fetch the page and its images and add it to the docs.</p>
+            </template>
+
             <div class="modal-actions">
               <button class="btn-ghost" @click="modal=null">Cancel</button>
-              <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? 'Saving…' : 'Save' }}</button>
+              <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? (modal==='addpage' ? 'Adding…' : 'Saving…') : (modal==='addpage' ? 'Add page' : 'Save') }}</button>
             </div>
           </div>
         </div>
@@ -193,9 +208,17 @@ async function runSync() {
 }
 
 const modalTitle = computed(() => {
+  if (modal.value === 'addpage') return 'Add a Confluence page'
   const noun = modal.value === 'user' ? 'user' : 'company'
   return `${editing.value ? 'Edit' : 'Add'} ${noun}`
 })
+
+function openAddPage() {
+  editing.value = null
+  formError.value = ''
+  form.value = { url: '' }
+  modal.value = 'addpage'
+}
 
 function openUser(u = null) {
   editing.value = u
@@ -218,6 +241,11 @@ async function save() {
   saving.value = true
   formError.value = ''
   try {
+    if (modal.value === 'addpage') {
+      syncMsg.value = await store.addPage(form.value.url)
+      modal.value = null
+      return
+    }
     if (modal.value === 'user') {
       const payload = { email: form.value.email, name: form.value.name, role: form.value.role, company_id: form.value.company_id, access_enabled: form.value.access_enabled }
       if (editing.value) await store.updateUser(editing.value.id, payload)
@@ -286,6 +314,8 @@ onMounted(() => store.fetchAll())
 .btn-sync .spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .sync-msg { margin: 10px 0 0; font-size: 13px; color: var(--brand-accent); }
+.head-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.addpage-hint { font-size: 12px; color: var(--muted-foreground); line-height: 1.45; margin: 2px 0 0; }
 
 .tabs { display: flex; gap: 4px; margin: 22px 0 18px; border-bottom: 1px solid var(--border); }
 .tab {

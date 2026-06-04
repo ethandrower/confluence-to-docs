@@ -4,6 +4,7 @@ All endpoints require an admin (portal role 'admin' or Django superuser) via
 `require_portal_admin`. JSON in/out, consistent with the rest of the portal API.
 """
 import json
+import re
 import subprocess
 import sys
 
@@ -199,6 +200,53 @@ def _resolve_company(company_id):
 
 
 # ── Sync from Confluence ─────────────────────────────────────────────────────
+
+@csrf_exempt
+@require_http_methods(['POST'])
+@require_portal_admin
+def add_page(request):
+    """Ingest a single Confluence page (by URL) into the docs. ECD-scoped."""
+    from portal.confluence.sync import ingest_page, ParentNotSynced
+
+    data = _parse(request)
+    if data is None:
+        return JsonResponse({'error': 'Invalid request'}, status=400)
+    url = (data.get('url') or '').strip()
+    m = re.search(r'/spaces/([^/]+)/pages/(\d+)', url)
+    if not m:
+        return JsonResponse(
+            {'error': 'Paste a full Confluence page URL — it should contain '
+                      '“/spaces/<SPACE>/pages/<id>”.'}, status=400)
+    space_key, page_id = m.group(1), m.group(2)
+
+    allowed = set(getattr(settings, 'DOCS_ALLOWED_SPACES', []) or [])
+    if allowed and space_key not in allowed:
+        return JsonResponse(
+            {'error': f'That page is in the “{space_key}” space, which isn’t '
+                      f'published to the support site. Only {", ".join(sorted(allowed))} '
+                      f'pages can be added.'}, status=400)
+
+    try:
+        page = ingest_page(space_key, page_id)
+    except ParentNotSynced:
+        # New section not in the DB yet — run a full sync in the background.
+        try:
+            subprocess.Popen(
+                [sys.executable, 'manage.py', 'sync_confluence'],
+                cwd=str(settings.BASE_DIR), start_new_session=True,
+            )
+        except Exception as e:
+            return JsonResponse({'error': f'Could not start sync: {e}'}, status=500)
+        return JsonResponse({'ok': True, 'message': "This page is in a section that "
+                             "isn’t synced yet — running a full sync in the background. "
+                             "It’ll appear shortly."})
+    except Exception as e:
+        return JsonResponse({'error': f'Could not add the page: {e}'}, status=502)
+
+    if not page:
+        return JsonResponse({'error': 'The page could not be added.'}, status=502)
+    return JsonResponse({'ok': True, 'message': f'Added “{page.title}”.', 'slug': page.slug})
+
 
 @csrf_exempt
 @require_http_methods(['POST'])
