@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-screen bg-background">
+  <div class="flex min-h-screen bg-background overflow-x-hidden">
     <!-- Skip link — first focusable element (WCAG 2.4.1) -->
     <a href="#main-content" class="skip-link">Skip to content</a>
 
@@ -31,7 +31,7 @@
     <!-- ── Main column ─────────────────────────────────────────────────── -->
     <div class="flex-1 min-w-0 flex flex-col h-screen">
       <!-- Top bar -->
-      <header class="topbar h-14 shrink-0 flex items-center gap-3 px-4 lg:px-6 border-b border-border">
+      <header class="topbar h-14 shrink-0 flex items-center gap-2 px-4 lg:px-6 border-b border-border">
         <!-- Mobile: menu + wordmark -->
         <Sheet v-model:open="mobileOpen">
           <SheetTrigger as-child>
@@ -84,32 +84,19 @@
           </svg>
           Contact
         </RouterLink>
+        <RouterLink v-if="auth.user?.is_admin" to="/manage" class="topbar-btn hidden sm:inline-flex" title="Manage users & companies">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+          </svg>
+          Manage
+        </RouterLink>
+
+        <span class="topbar-divider hidden sm:block" aria-hidden="true"></span>
 
         <ThemeToggle />
 
-        <div class="hidden sm:flex items-center gap-2 pl-1 ml-1 border-l border-border">
-          <template v-if="auth.user">
-            <RouterLink
-              v-if="auth.user.is_admin"
-              to="/manage"
-              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12.5px] font-medium text-foreground border border-border hover:bg-muted transition-colors"
-              title="Manage users & companies"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-              </svg>
-              Manage
-            </RouterLink>
-            <button
-              @click="signOut"
-              class="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-              :title="auth.user.email"
-            >
-              Sign out
-            </button>
-          </template>
-          <RouterLink v-else to="/login" class="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">Log in</RouterLink>
-        </div>
+        <button v-if="auth.user" @click="signOut" class="topbar-btn-ghost hidden sm:inline-flex" :title="auth.user.email">Sign out</button>
+        <RouterLink v-else to="/login" class="topbar-btn-ghost hidden sm:inline-flex">Log in</RouterLink>
       </header>
 
       <main id="main-content" tabindex="-1" class="flex-1 min-w-0 overflow-y-auto">
@@ -222,13 +209,37 @@ onBeforeUnmount(() => {
 }
 .topbar-icon:hover { color: var(--foreground); background: var(--muted); }
 
+/* Ghost button (Sign out / Log in) — same height as the action buttons */
+.topbar-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  transition: color 0.15s, background 0.15s;
+}
+.topbar-btn-ghost:hover { color: var(--foreground); background: var(--muted); }
+
+/* Vertical divider between action groups and utility controls */
+.topbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
 /* Top-bar search field (opens the ⌘K palette) */
 .topbar-search {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 36px;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;           /* allow it to shrink instead of forcing overflow */
   max-width: 760px;
   padding: 0 10px 0 12px;
   border-radius: 8px;
@@ -238,7 +249,15 @@ onBeforeUnmount(() => {
   transition: border-color 0.15s, background 0.15s;
 }
 .topbar-search:hover { border-color: var(--accent-hover); background: var(--muted); }
-.topbar-search-text { flex: 1; text-align: left; font-size: 13px; }
+.topbar-search-text {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .topbar-search-kbd {
   font-family: var(--font-ui);
   font-size: 10.5px;
