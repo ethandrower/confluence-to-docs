@@ -39,13 +39,15 @@ def _user_payload(portal_user, request=None):
     # Admin = portal role 'admin' OR an active Django superuser. This gates the
     # in-portal admin (manage users/companies); the Django admin link below is
     # reserved for superusers (doc resync).
-    is_admin = is_superuser or portal_user.role == 'admin'
+    is_owner = is_superuser or portal_user.role == 'owner'
+    is_admin = is_owner or portal_user.role == 'admin'
 
     payload = {
         'id': portal_user.pk,
         'email': portal_user.email,
         'name': portal_user.name,
         'is_admin': is_admin,
+        'is_owner': is_owner,
     }
     if is_superuser:
         relative = f'/{settings.ADMIN_PATH}/'

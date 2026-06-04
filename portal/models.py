@@ -58,9 +58,10 @@ class Company(models.Model):
 
 
 class PortalUser(models.Model):
+    ROLE_OWNER = 'owner'
     ROLE_ADMIN = 'admin'
     ROLE_CUSTOMER = 'customer'
-    ROLE_CHOICES = [(ROLE_ADMIN, 'Admin'), (ROLE_CUSTOMER, 'Customer')]
+    ROLE_CHOICES = [(ROLE_OWNER, 'Owner'), (ROLE_ADMIN, 'Admin'), (ROLE_CUSTOMER, 'Customer')]
 
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=256, blank=True)
@@ -77,8 +78,13 @@ class PortalUser(models.Model):
     last_login = models.DateTimeField(null=True)
 
     @property
+    def is_owner_role(self):
+        return self.role == self.ROLE_OWNER
+
+    @property
     def is_admin_role(self):
-        return self.role == self.ROLE_ADMIN
+        # Owners are also admin-privileged.
+        return self.role in (self.ROLE_OWNER, self.ROLE_ADMIN)
 
     def __str__(self):
         return self.email

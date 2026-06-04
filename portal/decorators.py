@@ -57,10 +57,13 @@ def require_portal_admin(view_func):
         is_super = User.objects.filter(
             email__iexact=user.email, is_superuser=True, is_active=True
         ).exists()
-        if not (is_super or user.role == PortalUser.ROLE_ADMIN):
+        is_owner = is_super or user.role == PortalUser.ROLE_OWNER
+        is_admin = is_owner or user.role == PortalUser.ROLE_ADMIN
+        if not is_admin:
             return JsonResponse({'error': 'Admin access required'}, status=403)
 
         request.portal_user = user
+        request.is_owner = is_owner
         return view_func(request, *args, **kwargs)
 
     return wrapped

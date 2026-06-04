@@ -25,12 +25,26 @@ def _company_dict(c):
     }
 
 
-def _user_dict(u):
+def _super_emails():
+    """Lowercased emails of active Django superusers (always treated as owners)."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    return {e.lower() for e in User.objects.filter(
+        is_superuser=True, is_active=True
+    ).values_list('email', flat=True) if e}
+
+
+def _is_owner_user(u, supers):
+    return u.role == PortalUser.ROLE_OWNER or (u.email or '').lower() in supers
+
+
+def _user_dict(u, supers=frozenset()):
     return {
         'id': u.id,
         'email': u.email,
         'name': u.name,
         'role': u.role,
+        'is_owner': _is_owner_user(u, supers),
         'access_enabled': u.access_enabled,
         'company_id': u.company_id,
         'company_name': u.company.name if u.company else None,
@@ -102,9 +116,10 @@ def company_detail(request, company_id):
 @require_http_methods(['GET', 'POST'])
 @require_portal_admin
 def users(request):
+    supers = _super_emails()
     if request.method == 'GET':
         rows = PortalUser.objects.select_related('company').order_by('email')
-        return JsonResponse({'users': [_user_dict(u) for u in rows]})
+        return JsonResponse({'users': [_user_dict(u, supers) for u in rows]})
 
     data = _parse(request)
     if data is None:
@@ -115,7 +130,10 @@ def users(request):
     if PortalUser.objects.filter(email__iexact=email).exists():
         return JsonResponse({'error': 'A user with that email already exists'}, status=409)
 
-    role = data.get('role') if data.get('role') in (PortalUser.ROLE_ADMIN, PortalUser.ROLE_CUSTOMER) else PortalUser.ROLE_CUSTOMER
+    role = data.get('role') if data.get('role') in dict(PortalUser.ROLE_CHOICES) else PortalUser.ROLE_CUSTOMER
+    # Only owners can mint owners.
+    if role == PortalUser.ROLE_OWNER and not request.is_owner:
+        return JsonResponse({'error': 'Only an owner can grant the Owner role'}, status=403)
     company = _resolve_company(data.get('company_id'))
     u = PortalUser.objects.create(
         email=email,
@@ -124,7 +142,7 @@ def users(request):
         company=company,
         access_enabled=bool(data.get('access_enabled', True)),
     )
-    return JsonResponse({'user': _user_dict(u)}, status=201)
+    return JsonResponse({'user': _user_dict(u, supers)}, status=201)
 
 
 @csrf_exempt
@@ -134,6 +152,11 @@ def user_detail(request, user_id):
     u = PortalUser.objects.filter(pk=user_id).select_related('company').first()
     if not u:
         return JsonResponse({'error': 'User not found'}, status=404)
+
+    supers = _super_emails()
+    # Owner accounts can only be modified by another owner.
+    if _is_owner_user(u, supers) and not request.is_owner:
+        return JsonResponse({'error': 'Only an owner can modify an owner account'}, status=403)
 
     if request.method == 'DELETE':
         if u.pk == request.portal_user.pk:
@@ -153,17 +176,20 @@ def user_detail(request, user_id):
         u.email = new_email
     if 'name' in data:
         u.name = (data['name'] or '').strip()
-    if 'role' in data and data['role'] in (PortalUser.ROLE_ADMIN, PortalUser.ROLE_CUSTOMER):
+    if 'role' in data and data['role'] in dict(PortalUser.ROLE_CHOICES):
+        # Only owners can promote someone to (or keep) Owner.
+        if data['role'] == PortalUser.ROLE_OWNER and not request.is_owner:
+            return JsonResponse({'error': 'Only an owner can grant the Owner role'}, status=403)
         u.role = data['role']
     if 'access_enabled' in data:
-        # Guard: don't let an admin lock themselves out.
+        # Guard: don't let anyone lock themselves out.
         if u.pk == request.portal_user.pk and not data['access_enabled']:
             return JsonResponse({'error': "You can't disable your own access"}, status=400)
         u.access_enabled = bool(data['access_enabled'])
     if 'company_id' in data:
         u.company = _resolve_company(data['company_id'])
     u.save()
-    return JsonResponse({'user': _user_dict(u)})
+    return JsonResponse({'user': _user_dict(u, supers)})
 
 
 def _resolve_company(company_id):

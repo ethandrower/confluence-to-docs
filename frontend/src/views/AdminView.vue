@@ -47,19 +47,24 @@
                 <tr v-for="u in store.users" :key="u.id">
                   <td class="mono">{{ u.email }}</td>
                   <td>{{ u.name || '—' }}</td>
-                  <td><span class="role" :class="u.role==='admin' ? 'role--admin' : 'role--customer'">{{ u.role }}</span></td>
+                  <td><span class="role" :class="`role--${u.role}`">{{ u.role }}</span></td>
                   <td>{{ u.company_name || '—' }}</td>
                   <td class="ta-c">
-                    <button class="switch" :class="u.access_enabled && 'switch--on'" :aria-pressed="u.access_enabled" @click="toggleAccess(u)" :title="u.access_enabled ? 'Enabled' : 'Disabled'"><span class="switch-knob" /></button>
+                    <button class="switch" :class="u.access_enabled && 'switch--on'" :aria-pressed="u.access_enabled" :disabled="!canManage(u)" @click="toggleAccess(u)" :title="!canManage(u) ? 'Owner — only an owner can change this' : (u.access_enabled ? 'Enabled' : 'Disabled')"><span class="switch-knob" /></button>
                   </td>
                   <td class="ta-r">
                     <div class="row-actions">
+                      <button v-if="!canManage(u)" class="owner-lock" title="Owner account — only an owner can manage it" aria-label="Owner-protected">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                      </button>
+                      <template v-else>
                       <button class="icon-btn" @click="openUser(u)" aria-label="Edit user" title="Edit">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
                       </button>
                       <button class="icon-btn icon-btn--danger" @click="remove('user', u)" aria-label="Remove user" title="Remove">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                       </button>
+                      </template>
                     </div>
                   </td>
                 </tr>
@@ -121,6 +126,7 @@
                 <select v-model="form.role">
                   <option value="customer">Customer</option>
                   <option value="admin">Admin</option>
+                  <option v-if="isOwner" value="owner">Owner</option>
                 </select>
               </label>
               <label class="field"><span>Company</span>
@@ -156,8 +162,15 @@
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAdminStore } from '@/stores/admin.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const store = useAdminStore()
+const auth = useAuthStore()
+const isOwner = computed(() => !!auth.user?.is_owner)
+// A non-owner admin cannot modify owner accounts.
+function canManage(u) {
+  return isOwner.value || !u.is_owner
+}
 const tab = ref('users')
 const modal = ref(null)      // 'user' | 'company' | null
 const editing = ref(null)    // record being edited, or null for create
@@ -303,9 +316,20 @@ tbody tr:hover td { background: var(--accent); }
 .empty { text-align: center; color: var(--muted-foreground); padding: 28px; }
 
 .role { font-family: var(--font-ui); font-size: 11px; font-weight: 600; text-transform: capitalize; padding: 2px 9px; border-radius: 6px; }
+.role--owner { color: #fff; background: var(--primary); }
+.dark .role--owner { color: var(--background); background: var(--brand-accent); }
 .role--admin { color: var(--primary); background: var(--accent); }
 .dark .role--admin { color: var(--accent-foreground); }
 .role--customer { color: var(--muted-foreground); background: var(--muted); }
+
+/* Owner-protected row: no actions for non-owners */
+.owner-lock {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 7px;
+  color: var(--muted-foreground); cursor: default;
+}
+.switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .switch { width: 36px; height: 20px; border-radius: 999px; background: var(--input); position: relative; transition: background 0.18s; }
 .switch--on { background: var(--primary); }
