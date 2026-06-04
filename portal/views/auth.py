@@ -110,8 +110,13 @@ def request_magic_link(request):
             allowed = True
     if not allowed:
         logger.info('Magic link blocked — email not on access list: %s', email)
-        # Same generic response as success: no account-enumeration oracle.
-        return JsonResponse({'message': 'Magic link sent if email exists'})
+        # Controlled-access portal: tell the person plainly rather than show a
+        # misleading "check your email" screen when no link was sent.
+        return JsonResponse(
+            {'error': "This email isn’t authorized to access the portal. "
+                      "Please contact your administrator to request access."},
+            status=403,
+        )
 
     token = MagicLinkToken.objects.create(
         user=user,

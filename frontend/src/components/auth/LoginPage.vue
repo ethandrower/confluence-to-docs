@@ -61,6 +61,10 @@ async function submit() {
   } catch (e) {
     if (e.response?.status === 429) {
       serverError.value = 'Too many requests. Please try again in a few minutes.'
+    } else if (e.response?.status === 403) {
+      // Not on the access list — show the server's message, don't pretend a
+      // link was sent.
+      serverError.value = e.response.data?.error || 'This email isn’t authorized to access the portal.'
     } else {
       serverError.value = 'Something went wrong. Please try again.'
     }
