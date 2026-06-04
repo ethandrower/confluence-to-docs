@@ -28,7 +28,14 @@
       We'll email you a secure link to sign in — no password needed.
     </p>
 
-    <p v-if="serverError" class="server-error">{{ serverError }}</p>
+    <Transition name="notice">
+      <div v-if="serverError" class="notice" role="alert">
+        <svg class="notice-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+        </svg>
+        <span>{{ serverError }}</span>
+      </div>
+    </Transition>
   </form>
 </template>
 
@@ -170,16 +177,30 @@ async function submit() {
   line-height: 1.5;
 }
 
-.server-error {
-  font-size: 0.8125rem;
-  color: var(--destructive);
-  text-align: center;
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   margin: 0;
-  padding: 10px 12px;
-  background: oklch(0.95 0.03 25 / 0.6);
-  border: 1px solid oklch(0.85 0.06 25);
-  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  text-align: left;
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 9%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--destructive) 28%, var(--border));
+  border-left: 3px solid var(--destructive);
+  border-radius: 10px;
 }
+.notice-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.notice span { min-width: 0; }
+.notice-enter-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.notice-enter-from { opacity: 0; transform: translateY(-4px); }
 
 .spin {
   animation: spin 0.7s linear infinite;
