@@ -131,3 +131,35 @@ class ConfluenceClient:
         except Exception as e:
             logger.warning(f"download_attachment({page_id}, {filename}): {e}")
             return None
+
+    def get_ordered_child_ids(self, parent_id):
+        """
+        Return the IDs of a page's direct child pages in **Confluence tree
+        order** (the manual order set in the page tree) — used to make the
+        portal's navigation match Confluence rather than creation order.
+
+        Uses the REST child/page endpoint, which returns children in tree
+        order. Folders aren't returned by this endpoint; callers keep their
+        existing order for any child not listed here.
+        """
+        session = requests.Session()
+        session.auth = self.auth
+        ids = []
+        try:
+            start = 0
+            while True:
+                r = session.get(
+                    f"{self.base}/rest/api/content/{parent_id}/child/page",
+                    params={'limit': 100, 'start': start},
+                    timeout=30,
+                )
+                if r.status_code != 200:
+                    break
+                data = r.json()
+                ids.extend(str(c['id']) for c in data.get('results', []))
+                if data.get('size', 0) < data.get('limit', 0) or not data.get('results'):
+                    break
+                start += data.get('limit', 100)
+        except Exception as e:
+            logger.warning(f"get_ordered_child_ids({parent_id}): {e}")
+        return ids

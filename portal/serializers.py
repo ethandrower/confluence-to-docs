@@ -10,7 +10,13 @@ class DocPageTreeSerializer(serializers.ModelSerializer):
         fields = ['id', 'confluence_id', 'title', 'slug', 'parent', 'children', 'position', 'is_folder', 'last_synced']
 
     def get_children(self, obj):
-        children = obj.children.filter(is_published=True).order_by('position', 'title')
+        # Drop excluded pages here too (not just top-level roots), so an
+        # excluded page nested under a published parent doesn't slip through.
+        from portal.views.docs import is_doc_excluded
+        children = [
+            c for c in obj.children.filter(is_published=True).order_by('position', 'title')
+            if not is_doc_excluded(c.title)
+        ]
         return DocPageTreeSerializer(children, many=True).data
 
 

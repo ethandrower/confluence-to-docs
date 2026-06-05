@@ -221,8 +221,41 @@ def sync_space(space_key, full=True, since=None):
             errors += 1
             logger.error(f"  Error syncing page {confluence_id} ({title}): {e}", exc_info=True)
 
+    # Pass 2: order each parent's children to match Confluence's tree order
+    # (the deliberate sequence the team arranged), not creation order.
+    _apply_confluence_order(client, space_key)
+
     logger.info(f"Sync complete — synced: {synced}, skipped: {skipped}, errors: {errors}")
     return {'synced': synced, 'skipped': skipped, 'errors': errors}
+
+
+def _apply_confluence_order(client, space_key):
+    """
+    Set DocPage.position to match Confluence's page-tree order. For each parent,
+    fetch its children in tree order and number them; children not returned by
+    the tree endpoint (e.g. folders) sort after the ordered ones, keeping their
+    relative order.
+    """
+    from collections import defaultdict
+    pages = list(DocPage.objects.filter(space_key=space_key).only('id', 'confluence_id', 'parent_id', 'position'))
+    by_parent = defaultdict(list)
+    for p in pages:
+        by_parent[p.parent_id].append(p)
+
+    for parent in pages:
+        kids = by_parent.get(parent.id)
+        if not kids:
+            continue
+        ordered = client.get_ordered_child_ids(parent.confluence_id)
+        if not ordered:
+            continue
+        order_map = {cid: i for i, cid in enumerate(ordered)}
+        for k in kids:
+            new_pos = order_map.get(k.confluence_id)
+            new_pos = new_pos if new_pos is not None else 1000 + (k.position or 0)
+            if k.position != new_pos:
+                DocPage.objects.filter(pk=k.id).update(position=new_pos)
+    logger.info('Applied Confluence tree order for space %s', space_key)
 
 
 class ParentNotSynced(Exception):

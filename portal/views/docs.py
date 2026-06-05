@@ -29,6 +29,8 @@ def published_pages():
         qs = qs.filter(space_key__in=spaces)
     if EXCLUDE_TITLES:
         qs = qs.exclude(title__in=EXCLUDE_TITLES)
+    for prefix in EXCLUDE_PREFIXES:
+        qs = qs.exclude(title__startswith=prefix)
     return qs
 
 
@@ -47,6 +49,19 @@ EXCLUDE_TITLES = {
     'Retrospective: V6.0.1',
     'SOP for Managing User Documentation in Confluence and Jira Knowledge Base',
 }
+
+# Titles starting with any of these are excluded everywhere — including pages
+# nested under a published parent (which exact-title root filtering misses).
+EXCLUDE_PREFIXES = ('Retrospective',)
+
+
+def is_doc_excluded(title):
+    """True if a page should never appear on the site (by exact title or prefix)."""
+    if not title:
+        return False
+    if title in EXCLUDE_TITLES:
+        return True
+    return any(title.startswith(p) for p in EXCLUDE_PREFIXES)
 
 # Display-title overrides — rename a page in the portal without touching
 # Confluence. Keyed by the page's Confluence title.
