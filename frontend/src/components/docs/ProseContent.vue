@@ -1,12 +1,43 @@
 <template>
   <div ref="contentRef" class="confluence-content" v-html="processedHtml" />
+  <Teleport to="body">
+    <Transition name="lightbox-fade">
+      <div v-if="lightboxSrc" class="lightbox" role="dialog" aria-modal="true" aria-label="Image preview" @click="closeLightbox">
+        <button class="lightbox-close" aria-label="Close preview" @click="closeLightbox">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+        </button>
+        <figure class="lightbox-figure" @click.stop>
+          <img :src="lightboxSrc" :alt="lightboxAlt" class="lightbox-img" />
+          <figcaption v-if="lightboxAlt" class="lightbox-cap">{{ lightboxAlt }}</figcaption>
+        </figure>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, watch, nextTick } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 
 const props = defineProps({ html: String })
 const contentRef = ref(null)
+
+// ── Image lightbox (click any doc image to enlarge) ───────────
+const lightboxSrc = ref(null)
+const lightboxAlt = ref('')
+
+function openLightbox(src, alt) {
+  lightboxSrc.value = src
+  lightboxAlt.value = alt || ''
+  document.body.style.overflow = 'hidden'
+}
+function closeLightbox() {
+  lightboxSrc.value = null
+  lightboxAlt.value = ''
+  document.body.style.overflow = ''
+}
+function onKeydown(e) {
+  if (e.key === 'Escape' && lightboxSrc.value) closeLightbox()
+}
 
 const processedHtml = computed(() => {
   if (!props.html) return ''
@@ -378,11 +409,41 @@ function enhance() {
     })
   })
 
+  // Make doc images click-to-enlarge (skip tiny icons/emoji).
+  el.querySelectorAll('img').forEach(img => {
+    if (img.dataset.zoomBound) return
+    img.dataset.zoomBound = '1'
+    const enable = () => {
+      const w = img.naturalWidth || img.width || 0
+      const h = img.naturalHeight || img.height || 0
+      if ((w && w < 48) || (h && h < 48)) return // skip emoji / inline icons
+      img.classList.add('zoomable')
+      img.setAttribute('role', 'button')
+      img.setAttribute('tabindex', '0')
+      img.setAttribute('aria-label', 'Enlarge image' + (img.alt ? ': ' + img.alt : ''))
+      // Small "Click to expand" hint above the image.
+      if (!img.previousElementSibling?.classList?.contains('zoom-hint')) {
+        const hint = document.createElement('span')
+        hint.className = 'zoom-hint'
+        hint.setAttribute('aria-hidden', 'true')
+        hint.textContent = 'Click to expand'
+        img.parentNode?.insertBefore(hint, img)
+      }
+      img.addEventListener('click', () => openLightbox(img.currentSrc || img.src, img.alt))
+      img.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(img.currentSrc || img.src, img.alt) }
+      })
+    }
+    if (img.complete) enable()
+    else img.addEventListener('load', enable, { once: true })
+  })
+
   if (window.Prism) window.Prism.highlightAll()
 }
 
 watch(() => props.html, () => nextTick(enhance))
-onMounted(() => nextTick(enhance))
+onMounted(() => { nextTick(enhance); document.addEventListener('keydown', onKeydown) })
+onBeforeUnmount(() => { document.removeEventListener('keydown', onKeydown); document.body.style.overflow = '' })
 
 const EMOJI = {
   ':blue_book:': '\u{1F4D8}', ':clipboard:': '\u{1F4CB}', ':thinking:': '\u{1F914}',
@@ -471,5 +532,103 @@ const EMOJI = {
 }
 .confluence-content .group:hover .anchor-link {
   color: color-mix(in srgb, var(--brand-accent) 55%, transparent);
+}
+
+/* ── Image lightbox / enlarge ───────────────────────────── */
+.confluence-content .zoom-hint {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground, #6b7280);
+}
+.confluence-content img.zoomable {
+  cursor: zoom-in;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+.confluence-content img.zoomable:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 30%, transparent);
+}
+.confluence-content img.zoomable:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 5vw, 4rem);
+  background: color-mix(in srgb, var(--foreground, #0f1115) 82%, transparent);
+  backdrop-filter: blur(2px);
+  cursor: zoom-out;
+}
+.lightbox-figure {
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: default;
+}
+.lightbox-img {
+  max-width: 100%;
+  max-height: 82vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  background: var(--card, #fff);
+}
+.lightbox-cap {
+  margin: 0;
+  max-width: 70ch;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.85);
+}
+.lightbox-close {
+  position: fixed;
+  top: clamp(0.75rem, 2vw, 1.5rem);
+  right: clamp(0.75rem, 2vw, 1.5rem);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.lightbox-close:hover { background: rgba(255, 255, 255, 0.26); }
+.lightbox-close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+.lightbox-fade-enter-active,
+.lightbox-fade-leave-active { transition: opacity 0.18s ease; }
+.lightbox-fade-enter-from,
+.lightbox-fade-leave-to { opacity: 0; }
+.lightbox-fade-enter-active .lightbox-img,
+.lightbox-fade-leave-active .lightbox-img { transition: transform 0.18s ease; }
+.lightbox-fade-enter-from .lightbox-img,
+.lightbox-fade-leave-to .lightbox-img { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .confluence-content img.zoomable,
+  .lightbox-fade-enter-active,
+  .lightbox-fade-leave-active,
+  .lightbox-fade-enter-active .lightbox-img,
+  .lightbox-fade-leave-active .lightbox-img { transition: none; }
 }
 </style>
