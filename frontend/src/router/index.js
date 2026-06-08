@@ -47,6 +47,12 @@ const router = createRouter({
       name: 'contact',
     },
     {
+      path: '/files',
+      component: () => import('@/views/FilesView.vue'),
+      name: 'files',
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/manage',
       component: () => import('@/views/AdminView.vue'),
       name: 'admin',
