@@ -120,10 +120,53 @@
 
         <!-- FILES -->
         <section v-show="tab==='files'" class="panel">
-          <div class="panel-bar">
-            <span class="panel-hint">Files customers have shared, by company. Read-only here.</span>
+          <div class="files-modes" role="tablist">
+            <button role="tab" :aria-selected="filesMode==='inbox'" class="seg" :class="filesMode==='inbox' && 'seg--active'" @click="openInbox">
+              Inbox <span v-if="inboxUnprocessed" class="seg-badge">{{ inboxUnprocessed }}</span>
+            </button>
+            <button role="tab" :aria-selected="filesMode==='company'" class="seg" :class="filesMode==='company' && 'seg--active'" @click="filesMode='company'">
+              By company
+            </button>
           </div>
-          <div class="files-admin">
+
+          <!-- INBOX: recent uploads across all clients -->
+          <div v-show="filesMode==='inbox'" class="inbox">
+            <div class="inbox-bar">
+              <span class="panel-hint">New uploads across all clients — mark items processed once integrated.</span>
+              <div class="inbox-filters">
+                <select v-model="inboxCompany" class="inbox-select" @change="loadInbox" aria-label="Filter by company">
+                  <option :value="''">All clients</option>
+                  <option v-for="c in fileCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+                <div class="seg sm-seg">
+                  <button :class="inboxStatus==='unprocessed' && 'on'" @click="inboxStatus='unprocessed'; loadInbox()">Unprocessed</button>
+                  <button :class="inboxStatus==='all' && 'on'" @click="inboxStatus='all'; loadInbox()">All</button>
+                </div>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>File</th><th>Client</th><th>Request</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="i in inboxItems" :key="i.id" :class="i.processed && 'is-processed'">
+                    <td>{{ i.original_name }} <span class="dim">· {{ fmtSize(i.size_bytes) }}</span></td>
+                    <td><button class="link" @click="selectCompany(i.company.id); filesMode='company'">{{ i.company.name }}</button></td>
+                    <td>{{ i.bucket.kind==='request' ? i.bucket.title : '—' }}</td>
+                    <td>{{ fmtFileDate(i.uploaded_at) }}</td>
+                    <td>{{ i.uploaded_by_name || '—' }}</td>
+                    <td class="ta-r inbox-actions">
+                      <a :href="`/api/admin/files/${i.id}/download`">Download</a>
+                      <button class="link" @click="toggleProcessed(i)">{{ i.processed ? 'Undo' : 'Mark processed' }}</button>
+                    </td>
+                  </tr>
+                  <tr v-if="!inboxItems.length"><td colspan="6" class="empty">{{ inboxStatus==='unprocessed' ? 'Nothing waiting — all caught up.' : 'No files yet.' }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- BY COMPANY: drill-down switcher -->
+          <div v-show="filesMode==='company'" class="files-admin">
             <aside class="company-switcher">
               <input v-model="fileCompanyQuery" class="cs-search" type="search" placeholder="Search companies…" aria-label="Search companies" />
               <ul class="cs-list">
@@ -391,11 +434,44 @@ const filteredFileCompanies = computed(() => {
 })
 const companyFileCount = computed(() => companyBuckets.value.reduce((n, b) => n + b.files.length, 0))
 
-async function openFiles() {
-  tab.value = 'files'
+const filesMode = ref('inbox')
+const inboxItems = ref([])
+const inboxStatus = ref('unprocessed')
+const inboxCompany = ref('')
+const inboxUnprocessed = ref(0)
+
+async function loadFileCompanies() {
   if (fileCompanies.value.length) return
   const r = await fetch('/api/admin/files/companies/', { credentials: 'include' })
   if (r.ok) fileCompanies.value = (await r.json()).companies
+}
+async function loadInbox() {
+  const params = new URLSearchParams({ status: inboxStatus.value })
+  if (inboxCompany.value) params.set('company', inboxCompany.value)
+  const r = await fetch(`/api/admin/files/inbox/?${params}`, { credentials: 'include' })
+  if (r.ok) {
+    const data = await r.json()
+    inboxItems.value = data.items
+    inboxUnprocessed.value = data.unprocessed_total
+  }
+}
+async function openFiles() {
+  tab.value = 'files'
+  loadFileCompanies()
+  if (filesMode.value === 'inbox') loadInbox()
+}
+function openInbox() {
+  filesMode.value = 'inbox'
+  loadInbox()
+}
+async function toggleProcessed(item) {
+  const next = !item.processed
+  const r = await fetch(`/api/admin/files/${item.id}/processed`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ processed: next }),
+  })
+  if (r.ok) await loadInbox()
 }
 async function selectCompany(id) {
   selectedCompanyId.value = id
@@ -595,6 +671,23 @@ tbody tr:hover td { background: var(--accent); }
 .fd-head-actions { display: flex; align-items: center; gap: 8px; }
 .fd-edit { background: none; border: none; color: var(--muted-foreground); cursor: pointer; padding: 2px; border-radius: 6px; display: inline-grid; place-items: center; }
 .fd-edit:hover { background: var(--muted); color: var(--foreground); }
+/* Files: segmented modes + inbox */
+.files-modes { display: flex; gap: 6px; margin-bottom: 16px; }
+.seg { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 13.5px; font-weight: 550; cursor: pointer; }
+.seg:hover { color: var(--foreground); }
+.seg--active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); color: var(--primary); }
+.seg-badge { font-size: 11px; font-weight: 700; background: var(--primary); color: var(--primary-foreground); border-radius: 999px; padding: 1px 7px; }
+.inbox-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.inbox-filters { display: flex; align-items: center; gap: 10px; }
+.inbox-select { height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; }
+.sm-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.sm-seg button { border: none; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 12.5px; font-weight: 550; padding: 6px 12px; cursor: pointer; }
+.sm-seg button.on { background: color-mix(in srgb, var(--primary) 10%, var(--card)); color: var(--primary); }
+.link { background: none; border: none; color: var(--brand-accent); cursor: pointer; font: inherit; padding: 0; }
+.link:hover { text-decoration: underline; }
+.dim { color: var(--muted-foreground); font-size: 12px; }
+.inbox-actions { display: flex; gap: 14px; justify-content: flex-end; }
+.is-processed td { color: var(--muted-foreground); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field textarea { width: 100%; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
 .field textarea:focus { outline: 2px solid var(--ring); outline-offset: -1px; border-color: var(--ring); }
