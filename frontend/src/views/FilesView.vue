@@ -93,7 +93,7 @@
                     <span v-else class="row-name" :title="f.original_name">{{ f.original_name }}</span>
                     <span class="row-sub">
                       {{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}
-                      <span v-if="f.review_status && f.review_status !== 'pending'" class="rv-badge" :class="`rv-badge--${f.review_status}`">{{ reviewLabel(f.review_status) }}</span>
+                      <span v-if="f.review_status" class="rv-badge" :class="`rv-badge--${f.review_status}`">{{ reviewLabel(f.review_status) }}</span>
                     </span>
                     <span v-if="f.review_notes" class="rv-note">{{ f.review_notes }}</span>
                   </div>
@@ -241,7 +241,7 @@ function relDate(d) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function shortDate(d) { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
-function reviewLabel(s) { return { review: 'In review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
+function reviewLabel(s) { return { pending: 'Awaiting review', review: 'In review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
 function checklistReceived(b) { return (b.checklist || []).filter((c) => c.linked_file).length }
 function checklistPct(b) {
   const total = (b.checklist || []).length
