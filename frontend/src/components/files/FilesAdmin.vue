@@ -18,8 +18,14 @@
 
     <!-- ACTIVITY: append-only audit trail -->
     <div v-show="filesMode==='activity'" class="activity">
-      <span class="panel-hint">Every upload, download, review, and status change — newest first.</span>
-      <div class="table-wrap" style="margin-top:12px">
+      <div class="inbox-bar">
+        <span class="panel-hint">Every upload, download, review, and status change — newest first.</span>
+        <select v-model="activityCompany" class="inbox-select" @change="loadActivity" aria-label="Filter activity by company">
+          <option :value="''">All clients</option>
+          <option v-for="c in fileCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+      </div>
+      <div class="table-wrap">
         <table>
           <thead><tr><th>When</th><th>Who</th><th>Action</th><th>File</th><th>Client</th></tr></thead>
           <tbody>
@@ -311,8 +317,11 @@ function openInbox() {
 
 // Activity (audit trail)
 const activityItems = ref([])
+const activityCompany = ref('')
 async function loadActivity() {
-  const r = await fetch('/api/admin/files/activity/?limit=200', { credentials: 'include' })
+  const params = new URLSearchParams({ limit: '200' })
+  if (activityCompany.value) params.set('company', activityCompany.value)
+  const r = await fetch(`/api/admin/files/activity/?${params}`, { credentials: 'include' })
   if (r.ok) activityItems.value = (await r.json()).items
 }
 function openActivity() {
