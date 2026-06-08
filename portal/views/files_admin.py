@@ -185,20 +185,22 @@ def update_request(request, bucket_id):
 
 @require_portal_admin
 def inbox(request):
-    """Cross-client 'to-process' inbox: recent uploads across ALL companies.
+    """Cross-client review queue: recent uploads across ALL companies.
 
-    Available to all CiteMed staff (owner/admin). Newest first. Optional
-    filters: ?status=unprocessed|all (default unprocessed), ?company=<id>,
-    ?limit=<n> (default 100, max 300).
+    Keyed on the customer-facing review status (not an internal flag), so
+    resolving a file (Approve / Needs revision) is exactly what the customer
+    sees and removes it from the queue. Filters: ?status=awaiting|all
+    (default awaiting), ?company=<id>, ?limit=<n> (default 100, max 300).
     """
-    status = request.GET.get('status', 'unprocessed')
+    AWAITING = ['pending', 'review']  # uploaded, no decision yet
+    status = request.GET.get('status', 'awaiting')
     qs = (
         SharedFile.objects
         .filter(deleted_at__isnull=True, state=SharedFile.STATE_READY)
         .select_related('company', 'bucket', 'uploaded_by')
     )
-    if status == 'unprocessed':
-        qs = qs.filter(processed=False)
+    if status == 'awaiting':
+        qs = qs.filter(review_status__in=AWAITING)
     company_id = request.GET.get('company')
     if company_id:
         qs = qs.filter(company_id=company_id)
@@ -217,12 +219,13 @@ def inbox(request):
             'uploaded_by_name': (f.uploaded_by.name or f.uploaded_by.email) if f.uploaded_by else None,
             'company': {'id': f.company_id, 'name': f.company.name},
             'bucket': {'id': f.bucket_id, 'title': f.bucket.title, 'kind': f.bucket.kind},
-            'processed': f.processed,
+            'review_status': f.review_status,
+            'review_notes': f.review_notes,
         })
-    unprocessed_total = SharedFile.objects.filter(
-        deleted_at__isnull=True, state=SharedFile.STATE_READY, processed=False,
+    awaiting_total = SharedFile.objects.filter(
+        deleted_at__isnull=True, state=SharedFile.STATE_READY, review_status__in=AWAITING,
     ).count()
-    return JsonResponse({'items': items, 'unprocessed_total': unprocessed_total})
+    return JsonResponse({'items': items, 'awaiting_total': awaiting_total})
 
 
 @csrf_exempt

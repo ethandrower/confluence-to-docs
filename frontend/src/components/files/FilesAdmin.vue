@@ -51,14 +51,14 @@
     <!-- INBOX: recent uploads across all clients -->
     <div v-show="filesMode==='inbox'" class="inbox">
       <div class="inbox-bar">
-        <span class="panel-hint">New uploads across all clients — mark items processed once integrated.</span>
+        <span class="panel-hint">Uploads awaiting your review, across all clients. Approving / requesting changes here updates the customer.</span>
         <div class="inbox-filters">
           <select v-model="inboxCompany" class="inbox-select" @change="loadInbox" aria-label="Filter by company">
             <option :value="''">All clients</option>
             <option v-for="c in fileCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
           <div class="seg sm-seg">
-            <button :class="inboxStatus==='unprocessed' && 'on'" @click="inboxStatus='unprocessed'; loadInbox()">Unprocessed</button>
+            <button :class="inboxStatus==='awaiting' && 'on'" @click="inboxStatus='awaiting'; loadInbox()">Awaiting review</button>
             <button :class="inboxStatus==='all' && 'on'" @click="inboxStatus='all'; loadInbox()">All</button>
           </div>
         </div>
@@ -74,7 +74,7 @@
               <tr v-for="n in 4" :key="'sk'+n" class="sk-row"><td :colspan="preview ? 3 : 6"><span class="sk-bar" /></td></tr>
             </tbody>
             <tbody v-else>
-              <tr v-for="i in inboxItems" :key="i.id" :class="[i.processed && 'is-processed', preview && preview.id===i.id && 'row-active']">
+              <tr v-for="i in inboxItems" :key="i.id" :class="preview && preview.id===i.id && 'row-active'">
                 <td>{{ i.original_name }} <span class="dim">· {{ fmtSize(i.size_bytes) }}</span></td>
                 <td><button class="link" @click="selectCompany(i.company.id); filesMode='company'">{{ i.company.name }}</button></td>
                 <template v-if="!preview">
@@ -91,14 +91,18 @@
                     <a class="act" :href="`/api/admin/files/${i.id}/download`" title="Download" aria-label="Download">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     </a>
-                    <button v-if="!preview" class="done-btn" :class="i.processed && 'is-on'" @click="toggleProcessed(i)" :aria-pressed="i.processed" :aria-label="i.processed ? `Mark ${i.original_name} not processed` : `Mark ${i.original_name} processed`" :title="i.processed ? 'Processed — click to undo' : 'Mark as processed'">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      {{ i.processed ? 'Done' : 'Mark done' }}
-                    </button>
+                    <template v-if="!preview">
+                      <template v-if="i.review_status==='pending' || i.review_status==='review'">
+                        <button class="mini-btn mini-btn--approve" @click="reviewInbox(i, 'approved')">Approve</button>
+                        <button class="mini-btn mini-btn--revision" @click="reviewInbox(i, 'revision')">Request changes</button>
+                      </template>
+                      <span v-else-if="i.review_status==='approved'" class="rv-pill rv-pill--approved">Approved</span>
+                      <span v-else-if="i.review_status==='revision'" class="rv-pill rv-pill--revision">Needs revision</span>
+                    </template>
                   </span>
                 </td>
               </tr>
-              <tr v-if="!inboxItems.length"><td :colspan="preview ? 3 : 6" class="empty">{{ inboxStatus==='unprocessed' ? 'Nothing waiting — all caught up.' : 'No files yet.' }}</td></tr>
+              <tr v-if="!inboxItems.length"><td :colspan="preview ? 3 : 6" class="empty">{{ inboxStatus==='awaiting' ? 'Nothing awaiting review — all caught up. 🎉' : 'No files yet.' }}</td></tr>
             </tbody>
           </table>
         </div>
@@ -278,7 +282,7 @@ const orderedBuckets = computed(() => {
 
 const filesMode = ref('inbox')
 const inboxItems = ref([])
-const inboxStatus = ref('unprocessed')
+const inboxStatus = ref('awaiting')
 const inboxCompany = ref('')
 const inboxUnprocessed = ref(0)
 const inboxLoading = ref(false)
@@ -314,11 +318,27 @@ async function loadInbox() {
     if (r.ok) {
       const data = await r.json()
       inboxItems.value = data.items
-      inboxUnprocessed.value = data.unprocessed_total
+      inboxUnprocessed.value = data.awaiting_total
     }
   } finally {
     inboxLoading.value = false
   }
+}
+// Resolve a file straight from the inbox → updates what the customer sees.
+async function reviewInbox(item, status) {
+  let notes
+  if (status === 'revision') {
+    notes = prompt('What needs to change? (the customer will see this note)', '')
+    if (notes === null) return
+  }
+  const body = { review_status: status }
+  if (notes !== undefined) body.notes = notes
+  const r = await fetch(`/api/admin/files/${item.id}/review`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (r.ok) await loadInbox()
 }
 function openInbox() {
   preview.value = null
@@ -424,15 +444,6 @@ function dueLabel(b) {
   if (days < 0) return 'Overdue'
   if (days === 0) return 'Due today'
   return `Due ${days}d`
-}
-async function toggleProcessed(item) {
-  const next = !item.processed
-  const r = await fetch(`/api/admin/files/${item.id}/processed`, {
-    method: 'PATCH', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ processed: next }),
-  })
-  if (r.ok) await loadInbox()
 }
 async function selectCompany(id) {
   preview.value = null
@@ -567,6 +578,14 @@ tbody tr:hover td { background: var(--accent); }
 .sm-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .sm-seg button { border: none; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 12.5px; font-weight: 550; padding: 6px 12px; cursor: pointer; }
 .sm-seg button.on { background: color-mix(in srgb, var(--primary) 10%, var(--card)); color: var(--primary); }
+.mini-btn { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.13s, border-color 0.13s, color 0.13s; }
+.mini-btn--approve { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, var(--border)); }
+.mini-btn--approve:hover { background: color-mix(in srgb, var(--success) 12%, var(--card)); }
+.mini-btn--revision { color: var(--destructive); border-color: color-mix(in srgb, var(--destructive) 38%, var(--border)); }
+.mini-btn--revision:hover { background: color-mix(in srgb, var(--destructive) 10%, var(--card)); }
+.rv-pill { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 3px 9px; border-radius: 999px; }
+.rv-pill--approved { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.rv-pill--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 14%, transparent); }
 .link { background: none; border: none; color: var(--brand-accent); cursor: pointer; font: inherit; padding: 0; }
 .link:hover { text-decoration: underline; }
 .dim { color: var(--muted-foreground); font-size: 12px; }

@@ -215,27 +215,27 @@ class InboxTests(TestCase):
         self._login(self.cust)
         self.assertEqual(self.client.get('/api/admin/files/inbox/').status_code, 403)
 
-    def test_inbox_returns_files_across_all_companies(self):
+    def test_inbox_returns_files_awaiting_review(self):
         self._login(self.admin)
         r = self.client.get('/api/admin/files/inbox/')
         self.assertEqual(r.status_code, 200)
         names = {i['original_name'] for i in r.json()['items']}
-        self.assertEqual(names, {'a.pdf', 'b.pdf'})
-        self.assertEqual(r.json()['unprocessed_total'], 2)
+        self.assertEqual(names, {'a.pdf', 'b.pdf'})  # both pending → awaiting
+        self.assertEqual(r.json()['awaiting_total'], 2)
 
-    def test_mark_processed_and_filter(self):
+    def test_resolving_in_inbox_updates_customer_and_clears_queue(self):
         self._login(self.admin)
-        r = self.client.patch(f'/api/admin/files/{self.f1.id}/processed',
-                              data=json.dumps({'processed': True}), content_type='application/json')
+        # Approve f1 straight from the review endpoint (what the inbox calls).
+        r = self.client.patch(f'/api/admin/files/{self.f1.id}/review',
+                              data=json.dumps({'review_status': 'approved'}), content_type='application/json')
         self.assertEqual(r.status_code, 200)
         self.f1.refresh_from_db()
-        self.assertTrue(self.f1.processed)
-        self.assertTrue(FileActivity.objects.filter(file=self.f1, action='processed').exists())
-        # default inbox (unprocessed) now hides f1
+        self.assertEqual(self.f1.review_status, 'approved')
+        # default inbox (awaiting) no longer lists f1; total drops
         items = self.client.get('/api/admin/files/inbox/').json()
         self.assertEqual({i['original_name'] for i in items['items']}, {'b.pdf'})
-        self.assertEqual(items['unprocessed_total'], 1)
-        # status=all shows both
+        self.assertEqual(items['awaiting_total'], 1)
+        # status=all still shows both
         allitems = self.client.get('/api/admin/files/inbox/?status=all').json()['items']
         self.assertEqual(len({i['id'] for i in allitems}), 2)
 
