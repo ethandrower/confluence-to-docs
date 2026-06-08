@@ -180,17 +180,17 @@ const filtered = computed(() => {
 })
 
 /* Status: quiet dot + label. Color reserved for action/urgency only. */
-function statusLabel(b) {
-  if (b.status === 'complete') return 'Complete'
-  if (b.status === 'partial') return 'In progress'
-  return b.files.length ? 'Open' : 'Awaiting upload'
+// Customer-facing request status, derived from what's actually happened
+// (not the raw admin 'open' flag) so it never goes stale.
+function reqState(b) {
+  if (b.status === 'complete') return ['Complete', 'success']
+  if (!b.files.length) return ['Awaiting your upload', 'warning']
+  if (b.files.some((f) => f.review_status === 'revision')) return ['Action needed', 'danger']
+  if (b.files.every((f) => f.review_status === 'approved')) return ['Approved', 'success']
+  return ['In review', 'info']  // files uploaded, awaiting/under CiteMed review
 }
-function statusTone(b) {
-  if (b.status === 'complete') return 'success'
-  if (b.status === 'partial') return 'warning'
-  if (b.status === 'open' && !b.files.length) return 'warning'  // awaiting your upload
-  return 'info'                                                  // open, files in
-}
+function statusLabel(b) { return reqState(b)[0] }
+function statusTone(b) { return reqState(b)[1] }
 function duePill(b) {
   if (!b.due_at || b.status === 'complete') return null
   const days = Math.ceil((new Date(b.due_at) - Date.now()) / 86400000)
@@ -317,6 +317,7 @@ function cat(name) {
 .status--success { color: var(--success); }
 .status--warning { color: var(--warning); }
 .status--info { color: var(--info); }
+.status--danger { color: var(--destructive); }
 .status--muted { color: var(--muted-foreground); }
 
 .due { font-size: 0.72rem; font-weight: 550; color: var(--muted-foreground); }
@@ -355,6 +356,7 @@ function cat(name) {
 
 /* Review status badge + note (customer) — colour carries the state */
 .rv-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; border-radius: 999px; color: var(--muted-foreground); background: var(--secondary); }
+.rv-badge--pending { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
 .rv-badge--review { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
 .rv-badge--approved { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
 .rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 14%, transparent); }
