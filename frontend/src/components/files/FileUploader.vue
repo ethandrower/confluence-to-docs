@@ -1,10 +1,10 @@
 <template>
   <div
-    class="uploader"
-    :class="{ dragging }"
+    class="dropzone"
+    :class="{ dragging, busy: active.length }"
     role="button"
     tabindex="0"
-    aria-label="Upload files — drag and drop or click to browse"
+    :aria-label="`Upload files${label ? ' to ' + label : ''}`"
     @dragover.prevent="dragging = true"
     @dragleave.prevent="dragging = false"
     @drop.prevent="onDrop"
@@ -13,17 +13,26 @@
     @keydown.space.prevent="open"
   >
     <input ref="input" type="file" multiple hidden @change="onPick" />
-    <svg class="uploader-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-    </svg>
-    <p class="uploader-title">Drag files here or click to browse</p>
-    <p class="uploader-sub">PDF, Office docs, CSV, reference-library exports (RIS/ENW/NBIB/XML), images, zip</p>
 
-    <ul v-if="active.length" class="uploader-progress" @click.stop>
-      <li v-for="(a, i) in active" :key="i" :class="{ failed: a.error }">
-        <span class="name">{{ a.name }}</span>
-        <span class="bar"><span class="fill" :style="{ width: Math.round(a.pct * 100) + '%' }" /></span>
-        <span v-if="a.error" class="err">{{ a.error }}</span>
+    <span class="dz-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+      </svg>
+    </span>
+    <p class="dz-title"><strong>Drop files</strong> to upload<span v-if="label"> to {{ label }}</span></p>
+    <p class="dz-sub">or click to browse · PDF, Office, CSV, RIS/ENW/NBIB/XML, images, zip</p>
+
+    <ul v-if="active.length" class="dz-progress" @click.stop>
+      <li v-for="(a, i) in active" :key="i" :class="{ failed: a.error, done: a.pct >= 1 && !a.error }">
+        <span class="dz-name">{{ a.name }}</span>
+        <span class="dz-bar"><span class="dz-fill" :style="{ width: Math.round(a.pct * 100) + '%' }" /></span>
+        <span class="dz-state">
+          <template v-if="a.error">{{ a.error }}</template>
+          <template v-else-if="a.pct >= 1">Done</template>
+          <template v-else>{{ Math.round(a.pct * 100) }}%</template>
+        </span>
       </li>
     </ul>
   </div>
@@ -33,7 +42,12 @@
 import { ref } from 'vue'
 import { useFilesStore } from '@/stores/files'
 
-const props = defineProps({ bucketId: { type: Number, default: null } })
+const props = defineProps({
+  bucketId: { type: Number, default: null },
+  label: { type: String, default: '' },
+})
+const emit = defineEmits(['uploaded'])
+
 const store = useFilesStore()
 const input = ref(null)
 const dragging = ref(false)
@@ -44,20 +58,23 @@ function open() {
 }
 
 async function handle(fileList) {
+  const names = []
   for (const file of Array.from(fileList)) {
     const entry = { name: file.name, pct: 0, error: '' }
     active.value.push(entry)
     try {
       await store.upload(file, props.bucketId, (p) => (entry.pct = p))
       entry.pct = 1
+      names.push(file.name)
     } catch (e) {
       entry.error = e.message || 'Failed'
     }
   }
-  // Clear successful rows shortly after; keep failures visible.
+  if (names.length) emit('uploaded', names)
+  // Clear finished rows after a beat; keep failures pinned.
   setTimeout(() => {
     active.value = active.value.filter((a) => a.error)
-  }, 1400)
+  }, 1600)
 }
 
 function onDrop(e) {
@@ -71,79 +88,75 @@ function onPick(e) {
 </script>
 
 <style scoped>
-.uploader {
-  border: 2px dashed var(--border);
-  border-radius: 12px;
-  padding: 2rem 1.5rem;
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
-  cursor: pointer;
-  background: var(--card);
-  transition: border-color 0.15s, background 0.15s;
-}
-.uploader.dragging,
-.uploader:hover {
-  border-color: var(--brand-accent);
-  background: color-mix(in srgb, var(--brand-accent) 6%, var(--card));
-}
-.uploader:focus-visible {
-  outline: 2px solid var(--brand-accent);
-  outline-offset: 2px;
-}
-.uploader-icon {
-  width: 32px;
-  height: 32px;
-  margin: 0 auto 0.5rem;
-  color: var(--brand-accent);
-}
-.uploader-title {
-  font-weight: 600;
-  color: var(--foreground);
-}
-.uploader-sub {
-  font-size: 0.78rem;
+  gap: 0.35rem;
+  padding: 1.75rem 1.5rem;
+  border: 1.5px dashed var(--input);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    radial-gradient(120% 140% at 50% -20%, color-mix(in srgb, var(--brand-accent) 7%, transparent), transparent 60%) border-box;
   color: var(--muted-foreground);
-  margin-top: 0.25rem;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.06s ease;
 }
-.uploader-progress {
-  list-style: none;
-  margin: 1.25rem 0 0;
-  padding: 0;
-  text-align: left;
+.dropzone:hover {
+  border-color: color-mix(in srgb, var(--brand-accent) 55%, var(--input));
+}
+.dropzone.dragging {
+  border-color: var(--brand-accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--brand-accent) 8%, var(--card));
+}
+.dropzone:active { transform: translateY(1px); }
+.dropzone:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.dz-icon {
   display: grid;
-  gap: 0.5rem;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--primary);
+  margin-bottom: 0.25rem;
+}
+.dz-icon svg { width: 22px; height: 22px; }
+.dz-title { font-size: 0.95rem; color: var(--foreground); }
+.dz-title strong { font-weight: 650; }
+.dz-sub { font-size: 0.76rem; color: var(--muted-foreground); }
+
+.dz-progress {
+  width: 100%;
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+  text-align: left;
   cursor: default;
 }
-.uploader-progress li {
+.dz-progress li {
   display: grid;
-  grid-template-columns: 1fr 120px;
-  gap: 0.5rem 0.75rem;
+  grid-template-columns: 1fr 90px auto;
   align-items: center;
-  font-size: 0.8rem;
+  gap: 0.5rem 0.65rem;
+  font-size: 0.78rem;
   color: var(--foreground);
 }
-.name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bar {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--muted);
-  overflow: hidden;
-}
-.fill {
-  display: block;
-  height: 100%;
-  background: var(--brand-accent);
-  transition: width 0.2s ease;
-}
-.failed .fill {
-  background: #b42318;
-}
-.err {
-  grid-column: 1 / -1;
-  color: #b42318;
-  font-size: 0.75rem;
+.dz-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-bar { height: 5px; border-radius: 999px; background: var(--secondary); overflow: hidden; }
+.dz-fill { display: block; height: 100%; background: var(--brand-accent); transition: width 0.2s ease; }
+.dz-state { font-size: 0.72rem; color: var(--muted-foreground); white-space: nowrap; }
+.done .dz-state { color: var(--primary); }
+.failed .dz-fill { background: var(--destructive); }
+.failed .dz-state { color: var(--destructive); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dropzone, .dz-fill { transition: none; }
 }
 </style>
