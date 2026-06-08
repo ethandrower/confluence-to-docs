@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>File sharing — Stage 1 (MVP) · CiteMed Portal</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ─── CiteMed palette (mirrored from frontend/src/assets/main.css) ─── */
+  :root {
+    --background: #F5F6FA;
+    --foreground: #242A35;
+    --card: #FFFFFF;
+    --primary: #0C377B;        /* brand navy */
+    --secondary: #E6EBF5;
+    --muted: #F5F6FA;
+    --muted-foreground: #626A7A;
+    --accent: #DEEBFA;         /* tinted hover */
+    --accent-foreground: #0C377B;
+    --destructive: #C0392B;
+    --border: #E4E8F0;
+    --border-subtle: #EBEEF4;
+    --divider: #C2CAD8;
+    --brand-accent: #3578FF;
+    --ring: #3578FF;
+    --radius: 10px;
+    --font-ui: 'Archivo', system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--foreground);
+    background: var(--background);
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.006em;
+  }
+
+  /* ─── Top app bar (matches portal shell) ─── */
+  .topbar {
+    height: 56px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; color: var(--primary); font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--primary); color: #fff;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .topbar nav { display: flex; gap: 4px; margin-left: 8px; }
+  .topbar nav a {
+    text-decoration: none; color: var(--muted-foreground);
+    padding: 6px 12px; border-radius: 8px;
+    font-size: 13.5px; font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+  }
+  .topbar nav a:hover { background: var(--muted); color: var(--foreground); }
+  .topbar nav a.active { color: var(--primary); background: var(--accent); }
+  .topbar .spacer { flex: 1; }
+  .user-chip {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted-foreground);
+  }
+  .user-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--secondary); color: var(--primary);
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 600;
+  }
+
+  /* ─── Page container ─── */
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+
+  .page-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; margin-bottom: 24px;
+  }
+  .page-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .page-header p {
+    margin: 6px 0 0;
+    color: var(--muted-foreground);
+    font-size: 13.5px;
+  }
+
+  /* ─── Primary button ─── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px;
+    background: var(--primary); color: #fff;
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    font-size: 13.5px; font-weight: 550;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.05s;
+  }
+  .btn:hover { opacity: 0.92; }
+  .btn:active { transform: translateY(1px); }
+  .btn.ghost {
+    background: transparent; color: var(--primary);
+    border-color: var(--border);
+  }
+  .btn.ghost:hover { background: var(--muted); opacity: 1; }
+  .btn.danger {
+    background: var(--destructive); border-color: var(--destructive);
+  }
+  .btn.sm { padding: 6px 10px; font-size: 12.5px; border-radius: 6px; }
+
+  /* ─── Dropzone ─── */
+  .dropzone {
+    border: 1.5px dashed var(--input, #DBE2F0);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    background: var(--card);
+    color: var(--muted-foreground);
+    transition: background 0.15s, border-color 0.15s;
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    background: var(--accent);
+    border-color: var(--brand-accent);
+    color: var(--accent-foreground);
+  }
+  .dropzone svg { color: var(--primary); margin-bottom: 6px; }
+  .dropzone strong { color: var(--foreground); font-weight: 600; }
+  .dropzone small { display: block; margin-top: 4px; font-size: 12px; opacity: 0.75; }
+  .dropzone input[type=file] { display: none; }
+
+  /* ─── File list card ─── */
+  .list-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.02);
+  }
+  .list-toolbar {
+    display: flex; align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: #FCFCFE;
+    gap: 12px;
+  }
+  .list-toolbar .count {
+    font-size: 12.5px; color: var(--muted-foreground);
+  }
+  .search {
+    flex: 1; max-width: 280px;
+    margin-left: auto;
+    position: relative;
+  }
+  .search input {
+    width: 100%;
+    padding: 7px 10px 7px 32px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--card);
+    font: inherit; font-size: 13px;
+    color: var(--foreground);
+    outline: none;
+  }
+  .search input:focus {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 3px oklch(0.6 0.2 260 / 0.10);
+  }
+  .search svg {
+    position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+    color: var(--muted-foreground);
+  }
+
+  .file-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 110px 150px 90px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background 0.1s;
+  }
+  .file-row:last-child { border-bottom: none; }
+  .file-row:hover { background: var(--muted); }
+
+  .file-row .icon {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    color: var(--primary);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .file-row .name {
+    font-size: 13.5px; font-weight: 500;
+    color: var(--foreground);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .file-row .name input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid var(--brand-accent);
+    border-radius: 5px;
+    font: inherit; font-size: 13.5px;
+    background: var(--card);
+    outline: none;
+  }
+  .file-row .meta {
+    font-size: 12.5px;
+    color: var(--muted-foreground);
+  }
+  .file-row .actions {
+    display: flex; justify-content: flex-end; gap: 4px;
+  }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: transparent; border: none;
+    color: var(--muted-foreground);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+  .icon-btn:hover { background: var(--secondary); color: var(--foreground); }
+  .icon-btn.danger:hover { background: oklch(0.55 0.22 25 / 0.12); color: var(--destructive); }
+
+  /* ─── Empty state ─── */
+  .empty {
+    padding: 56px 24px;
+    text-align: center;
+    color: var(--muted-foreground);
+  }
+  .empty svg { color: var(--divider); margin-bottom: 8px; }
+  .empty h3 { margin: 4px 0 6px; font-size: 14.5px; font-weight: 600; color: var(--foreground); }
+  .empty p { margin: 0; font-size: 13px; }
+
+  /* ─── Toast ─── */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #1f2937;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    box-shadow: 0 8px 24px oklch(0 0 0 / 0.18);
+    opacity: 0;
+    transition: transform 0.25s, opacity 0.25s;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* ─── Confirm dialog (modal) ─── */
+  .scrim {
+    position: fixed; inset: 0;
+    background: oklch(0 0 0 / 0.32);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 50;
+  }
+  .scrim.show { display: flex; }
+  .modal {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 22px 22px 16px;
+    width: 380px; max-width: 92vw;
+    box-shadow: 0 16px 40px oklch(0 0 0 / 0.16);
+    border: 1px solid var(--border);
+  }
+  .modal h3 { margin: 0 0 6px; font-size: 15px; font-weight: 650; }
+  .modal p { margin: 0 0 18px; font-size: 13.5px; color: var(--muted-foreground); }
+  .modal .row { display: flex; justify-content: flex-end; gap: 8px; }
+
+  /* ─── Prototype ribbon ─── */
+  .ribbon {
+    background: linear-gradient(135deg, #FFF8DC, #FFE9B0);
+    color: #6B4F00;
+    border-bottom: 1px solid #F3D27A;
+    text-align: center;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .ribbon a { color: #6B4F00; text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="ribbon">
+  Prototype · <strong>Stage 1 — MVP</strong> file sharing ·
+  <a href="stage2-requests.html">Stage 2 →</a> ·
+  <a href="stage3-admin.html">Stage 3 (Admin) →</a>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">C</div>
+    CiteMed Portal
+  </div>
+  <nav>
+    <a href="#">Docs</a>
+    <a href="#">Support</a>
+    <a href="#" class="active">Files</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="user-chip">
+    <span>Acme Medical</span>
+    <div class="user-avatar">AC</div>
+  </div>
+</header>
+
+<main class="page">
+
+  <div class="page-header">
+    <div>
+      <h1>Shared Files</h1>
+      <p>Securely upload documents to share with the CiteMed team.</p>
+    </div>
+    <button class="btn" onclick="document.getElementById('file-input').click()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      Upload files
+    </button>
+  </div>
+
+  <!-- Drag-drop -->
+  <label class="dropzone" id="dropzone" for="file-input">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+    <div><strong>Drop files here</strong> or click to browse</div>
+    <small>PDF, DOCX, XLSX, PNG, JPG · up to 50 MB per file</small>
+    <input id="file-input" type="file" multiple />
+  </label>
+
+  <!-- File list -->
+  <div class="list-card">
+    <div class="list-toolbar">
+      <span class="count" id="count">0 files</span>
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search" placeholder="Search files…" />
+      </div>
+    </div>
+
+    <div id="file-list">
+      <!-- rows injected here -->
+    </div>
+
+    <div id="empty" class="empty" hidden>
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <h3>No files yet</h3>
+      <p>Drop files above to start sharing with the CiteMed team.</p>
+    </div>
+  </div>
+</main>
+
+<!-- Confirm modal -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <h3 id="modal-title">Delete file?</h3>
+    <p id="modal-body">This file will be removed and CiteMed staff will no longer have access to it.</p>
+    <div class="row">
+      <button class="btn ghost" id="modal-cancel">Cancel</button>
+      <button class="btn danger" id="modal-confirm">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Saved</div>
+
+<script>
+  // ─── Seed data (so the page isn't empty on first load) ───
+  const seed = [
+    { name: 'PMS-Annual-Report-2025.pdf', size: 2_410_000, uploaded: daysAgo(2) },
+    { name: 'Clinical-Evaluation-Plan-v3.docx', size: 184_000, uploaded: daysAgo(5) },
+    { name: 'Device-Drawings.zip', size: 11_800_000, uploaded: daysAgo(11) },
+  ];
+  let files = seed.map(f => ({ id: cryptoId(), ...f }));
+
+  // ─── Helpers ───
+  function cryptoId() { return Math.random().toString(36).slice(2, 10); }
+  function daysAgo(d) { const t = new Date(); t.setDate(t.getDate() - d); return t.toISOString(); }
+  function formatSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes/1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes/1024/1024).toFixed(1)} MB`;
+    return `${(bytes/1024/1024/1024).toFixed(2)} GB`;
+  }
+  function formatDate(iso) {
+    const d = new Date(iso);
+    const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function ext(name) {
+    const dot = name.lastIndexOf('.');
+    return dot === -1 ? '' : name.slice(dot + 1).toUpperCase().slice(0, 4);
+  }
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ─── Render ───
+  const listEl = document.getElementById('file-list');
+  const emptyEl = document.getElementById('empty');
+  const countEl = document.getElementById('count');
+  const searchEl = document.getElementById('search');
+
+  function render() {
+    const q = searchEl.value.trim().toLowerCase();
+    const filtered = q ? files.filter(f => f.name.toLowerCase().includes(q)) : files;
+    countEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
+
+    listEl.innerHTML = '';
+    if (filtered.length === 0) {
+      emptyEl.hidden = false;
+      if (q) {
+        emptyEl.querySelector('h3').textContent = 'No matches';
+        emptyEl.querySelector('p').textContent = `Nothing matched "${q}".`;
+      } else {
+        emptyEl.querySelector('h3').textContent = 'No files yet';
+        emptyEl.querySelector('p').textContent = 'Drop files above to start sharing with the CiteMed team.';
+      }
+      return;
+    }
+    emptyEl.hidden = true;
+
+    for (const f of filtered) {
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      row.dataset.id = f.id;
+      row.innerHTML = `
+        <div class="icon">${ext(f.name) || 'FILE'}</div>
+        <div class="name" title="${f.name}">${f.name}</div>
+        <div class="meta">${formatSize(f.size)}</div>
+        <div class="meta">${formatDate(f.uploaded)}</div>
+        <div class="actions">
+          <button class="icon-btn" title="Download" data-act="download">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <button class="icon-btn" title="Rename" data-act="rename">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="icon-btn danger" title="Delete" data-act="delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      `;
+      listEl.appendChild(row);
+    }
+  }
+
+  // ─── Row actions (event delegation) ───
+  listEl.addEventListener('click', e => {
+    const btn = e.target.closest('button.icon-btn');
+    if (!btn) return;
+    const row = btn.closest('.file-row');
+    const id = row.dataset.id;
+    const act = btn.dataset.act;
+    const file = files.find(f => f.id === id);
+
+    if (act === 'download') {
+      toast(`Downloading ${file.name}…`);
+    } else if (act === 'rename') {
+      startRename(row, file);
+    } else if (act === 'delete') {
+      confirmDelete(file);
+    }
+  });
+
+  function startRename(row, file) {
+    const nameEl = row.querySelector('.name');
+    const original = file.name;
+    nameEl.innerHTML = `<input type="text" value="${original}" />`;
+    const input = nameEl.querySelector('input');
+    input.focus();
+    input.setSelectionRange(0, original.lastIndexOf('.') === -1 ? original.length : original.lastIndexOf('.'));
+    const commit = save => {
+      if (save && input.value.trim() && input.value.trim() !== original) {
+        file.name = input.value.trim();
+        toast('Renamed');
+      }
+      render();
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') commit(true);
+      else if (e.key === 'Escape') commit(false);
+    });
+    input.addEventListener('blur', () => commit(true));
+  }
+
+  // ─── Delete confirm modal ───
+  const scrim = document.getElementById('scrim');
+  const modalBody = document.getElementById('modal-body');
+  let pendingDeleteId = null;
+  function confirmDelete(file) {
+    pendingDeleteId = file.id;
+    modalBody.textContent = `"${file.name}" will be removed and CiteMed staff will no longer have access to it.`;
+    scrim.classList.add('show');
+  }
+  document.getElementById('modal-cancel').onclick = () => { scrim.classList.remove('show'); pendingDeleteId = null; };
+  document.getElementById('modal-confirm').onclick = () => {
+    files = files.filter(f => f.id !== pendingDeleteId);
+    scrim.classList.remove('show');
+    pendingDeleteId = null;
+    toast('Deleted');
+    render();
+  };
+  scrim.addEventListener('click', e => { if (e.target === scrim) document.getElementById('modal-cancel').click(); });
+
+  // ─── Upload (drag-drop + input) ───
+  const dz = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+
+  function addUploads(fileList) {
+    for (const f of fileList) {
+      files.unshift({ id: cryptoId(), name: f.name, size: f.size, uploaded: new Date().toISOString() });
+    }
+    toast(`Uploaded ${fileList.length} file${fileList.length === 1 ? '' : 's'}`);
+    render();
+  }
+  fileInput.addEventListener('change', e => {
+    if (e.target.files.length) addUploads(e.target.files);
+    e.target.value = '';
+  });
+  ['dragenter', 'dragover'].forEach(evt => {
+    dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(evt => {
+    dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.remove('dragover'); });
+  });
+  dz.addEventListener('drop', e => {
+    if (e.dataTransfer.files.length) addUploads(e.dataTransfer.files);
+  });
+
+  // ─── Search ───
+  searchEl.addEventListener('input', render);
+
+  // ─── First paint ───
+  render();
+</script>
+</body>
+</html>

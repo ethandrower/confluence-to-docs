@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>File sharing — Stage 2 (Requests) · CiteMed Portal</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --background: #F5F6FA;
+    --foreground: #242A35;
+    --card: #FFFFFF;
+    --primary: #0C377B;
+    --secondary: #E6EBF5;
+    --muted: #F5F6FA;
+    --muted-foreground: #626A7A;
+    --accent: #DEEBFA;
+    --accent-foreground: #0C377B;
+    --destructive: #C0392B;
+    --warn: #B45309;
+    --warn-bg: #FEF3C7;
+    --ok: #15803D;
+    --ok-bg: #DCFCE7;
+    --border: #E4E8F0;
+    --border-subtle: #EBEEF4;
+    --divider: #C2CAD8;
+    --brand-accent: #3578FF;
+    --ring: #3578FF;
+    --radius: 10px;
+    --font-ui: 'Archivo', system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--foreground);
+    background: var(--background);
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.006em;
+  }
+
+  /* ─── Top app bar ─── */
+  .topbar {
+    height: 56px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--primary); font-size: 16px; letter-spacing: -0.01em; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+  .topbar nav { display: flex; gap: 4px; margin-left: 8px; }
+  .topbar nav a {
+    text-decoration: none; color: var(--muted-foreground);
+    padding: 6px 12px; border-radius: 8px;
+    font-size: 13.5px; font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+  }
+  .topbar nav a:hover { background: var(--muted); color: var(--foreground); }
+  .topbar nav a.active { color: var(--primary); background: var(--accent); }
+  .topbar .spacer { flex: 1; }
+
+  /* Role toggle (so devs can preview the CSM admin view) */
+  .role-toggle {
+    display: inline-flex;
+    background: var(--muted);
+    border-radius: 8px;
+    padding: 3px;
+    font-size: 12.5px;
+    border: 1px solid var(--border);
+  }
+  .role-toggle button {
+    border: none; background: transparent;
+    padding: 4px 10px; border-radius: 6px;
+    color: var(--muted-foreground);
+    cursor: pointer; font: inherit;
+    transition: background 0.15s, color 0.15s;
+  }
+  .role-toggle button.active {
+    background: var(--card);
+    color: var(--primary);
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.06);
+    font-weight: 600;
+  }
+
+  .user-chip { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-foreground); margin-left: 12px; }
+  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--secondary); color: var(--primary); display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+
+  /* ─── Two-pane layout ─── */
+  .shell {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 28px;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 28px 24px 64px;
+  }
+
+  /* ── Sidebar (request list) ── */
+  .sidebar h2 {
+    margin: 0 0 10px;
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted-foreground);
+  }
+  .sidebar-section { margin-bottom: 22px; }
+
+  .req-item {
+    display: block;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 9px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .req-item:hover {
+    border-color: var(--brand-accent);
+    background: var(--card);
+  }
+  .req-item.active {
+    border-color: var(--brand-accent);
+    background: var(--accent);
+  }
+  .req-item .top {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 4px;
+  }
+  .req-item .title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--foreground);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .req-item .sub {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .req-item .sub .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--divider); }
+
+  /* Status pills */
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .pill.open { background: var(--warn-bg); color: var(--warn); }
+  .pill.partial { background: var(--accent); color: var(--accent-foreground); }
+  .pill.complete { background: var(--ok-bg); color: var(--ok); }
+  .pill.general { background: var(--secondary); color: var(--muted-foreground); }
+
+  /* CSM-only button */
+  .new-request-btn {
+    width: 100%;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px;
+    background: var(--card);
+    border: 1px dashed var(--input, #DBE2F0);
+    color: var(--primary);
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .new-request-btn:hover { background: var(--accent); border-color: var(--brand-accent); border-style: solid; }
+
+  /* ── Main pane (request detail) ── */
+  .detail-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 24px; margin-bottom: 6px;
+  }
+  .detail-header h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .detail-header h1 .pill { vertical-align: middle; margin-left: 10px; font-size: 11px; padding: 3px 8px; }
+
+  .req-meta {
+    display: flex; flex-wrap: wrap; gap: 14px;
+    font-size: 12.5px;
+    color: var(--muted-foreground);
+    margin-bottom: 16px;
+  }
+  .req-meta span { display: inline-flex; align-items: center; gap: 5px; }
+
+  .req-description {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--brand-accent);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--foreground);
+    margin-bottom: 20px;
+  }
+  .req-description .label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted-foreground);
+    margin-bottom: 5px;
+  }
+  .req-description .from {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px;
+    background: var(--primary); color: #fff;
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    font-size: 13.5px; font-weight: 550;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.05s;
+    text-decoration: none;
+  }
+  .btn:hover { opacity: 0.92; }
+  .btn:active { transform: translateY(1px); }
+  .btn.ghost { background: transparent; color: var(--primary); border-color: var(--border); }
+  .btn.ghost:hover { background: var(--muted); opacity: 1; }
+  .btn.danger { background: var(--destructive); border-color: var(--destructive); }
+  .btn.sm { padding: 6px 10px; font-size: 12.5px; border-radius: 6px; }
+
+  /* Dropzone */
+  .dropzone {
+    border: 1.5px dashed var(--input, #DBE2F0);
+    border-radius: 12px;
+    padding: 22px 20px;
+    text-align: center;
+    background: var(--card);
+    color: var(--muted-foreground);
+    transition: background 0.15s, border-color 0.15s;
+    cursor: pointer;
+    margin-bottom: 18px;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    background: var(--accent);
+    border-color: var(--brand-accent);
+    color: var(--accent-foreground);
+  }
+  .dropzone svg { color: var(--primary); margin-bottom: 4px; }
+  .dropzone strong { color: var(--foreground); font-weight: 600; }
+  .dropzone small { display: block; margin-top: 4px; font-size: 12px; opacity: 0.75; }
+  .dropzone input[type=file] { display: none; }
+
+  /* File list (same look as Stage 1) */
+  .list-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.02);
+  }
+  .list-toolbar {
+    display: flex; align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: #FCFCFE;
+    gap: 12px;
+  }
+  .list-toolbar .count { font-size: 12.5px; color: var(--muted-foreground); }
+  .search {
+    flex: 1; max-width: 260px; margin-left: auto; position: relative;
+  }
+  .search input {
+    width: 100%; padding: 7px 10px 7px 32px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--card); font: inherit; font-size: 13px;
+    color: var(--foreground); outline: none;
+  }
+  .search input:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px oklch(0.6 0.2 260 / 0.10); }
+  .search svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted-foreground); }
+
+  .file-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 110px 150px 90px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background 0.1s;
+  }
+  .file-row:last-child { border-bottom: none; }
+  .file-row:hover { background: var(--muted); }
+  .file-row .icon {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    color: var(--primary);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .file-row .name {
+    font-size: 13.5px; font-weight: 500; color: var(--foreground);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .file-row .name input {
+    width: 100%; padding: 4px 6px;
+    border: 1px solid var(--brand-accent); border-radius: 5px;
+    font: inherit; font-size: 13.5px; background: var(--card); outline: none;
+  }
+  .file-row .meta { font-size: 12.5px; color: var(--muted-foreground); }
+  .file-row .actions { display: flex; justify-content: flex-end; gap: 4px; }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: transparent; border: none; color: var(--muted-foreground);
+    display: grid; place-items: center; cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+  .icon-btn:hover { background: var(--secondary); color: var(--foreground); }
+  .icon-btn.danger:hover { background: oklch(0.55 0.22 25 / 0.12); color: var(--destructive); }
+
+  /* Empty state */
+  .empty {
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--muted-foreground);
+  }
+  .empty svg { color: var(--divider); margin-bottom: 8px; }
+  .empty h3 { margin: 4px 0 6px; font-size: 14.5px; font-weight: 600; color: var(--foreground); }
+  .empty p { margin: 0; font-size: 13px; }
+
+  /* CSM "edit request" toolbar */
+  .csm-bar {
+    display: none; /* shown when role === 'csm' */
+    align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, #FFF8DC, #FFE9B0);
+    border: 1px solid #F3D27A;
+    border-radius: 10px;
+    font-size: 12.5px;
+    color: #6B4F00;
+    margin-bottom: 16px;
+  }
+  body.csm .csm-bar { display: flex; }
+  body.csm .new-request-btn { /* always available */ }
+  body:not(.csm) .csm-only { display: none !important; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #1f2937; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px;
+    box-shadow: 0 8px 24px oklch(0 0 0 / 0.18);
+    opacity: 0; transition: transform 0.25s, opacity 0.25s;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* Modals */
+  .scrim {
+    position: fixed; inset: 0; background: oklch(0 0 0 / 0.32);
+    display: none; align-items: center; justify-content: center; z-index: 50;
+  }
+  .scrim.show { display: flex; }
+  .modal {
+    background: var(--card); border-radius: 12px;
+    padding: 22px 22px 16px;
+    width: 460px; max-width: 92vw;
+    box-shadow: 0 16px 40px oklch(0 0 0 / 0.16);
+    border: 1px solid var(--border);
+  }
+  .modal h3 { margin: 0 0 14px; font-size: 15.5px; font-weight: 650; }
+  .modal label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--foreground); margin-bottom: 4px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .modal input, .modal textarea, .modal select {
+    width: 100%; padding: 8px 11px;
+    border: 1px solid var(--border); border-radius: 7px;
+    font: inherit; font-size: 13.5px;
+    background: var(--card); color: var(--foreground);
+    outline: none; margin-bottom: 14px;
+    font-family: inherit;
+  }
+  .modal input:focus, .modal textarea:focus, .modal select:focus {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 3px oklch(0.6 0.2 260 / 0.10);
+  }
+  .modal textarea { resize: vertical; min-height: 80px; }
+  .modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+  /* Ribbon */
+  .ribbon {
+    background: linear-gradient(135deg, #FFF8DC, #FFE9B0);
+    color: #6B4F00;
+    border-bottom: 1px solid #F3D27A;
+    text-align: center; padding: 6px 10px;
+    font-size: 12px; font-weight: 500;
+  }
+  .ribbon a { color: #6B4F00; text-decoration: underline; }
+
+  @media (max-width: 880px) {
+    .shell { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body class="customer">
+
+<div class="ribbon">
+  Prototype · <strong>Stage 2 — Requests / Groups</strong> ·
+  <a href="stage1-mvp.html">← Stage 1</a> ·
+  <a href="stage3-admin.html">Stage 3 (Admin) →</a> ·
+  Toggle the role pill in the top-right to preview the CSM (CiteMed) view.
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">C</div>
+    CiteMed Portal
+  </div>
+  <nav>
+    <a href="#">Docs</a>
+    <a href="#">Support</a>
+    <a href="#" class="active">Files</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="role-toggle" role="tablist" aria-label="View as">
+    <button id="role-customer" class="active" onclick="setRole('customer')">Customer view</button>
+    <button id="role-csm" onclick="setRole('csm')">CSM view</button>
+  </div>
+  <div class="user-chip">
+    <span id="who">Acme Medical</span>
+    <div class="user-avatar" id="who-avatar">AC</div>
+  </div>
+</header>
+
+<main class="shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h2>Requests from CiteMed</h2>
+      <div id="req-list"></div>
+      <button class="new-request-btn csm-only" onclick="openNewRequest()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        New request
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>Your files</h2>
+      <div id="general-list"></div>
+    </div>
+  </aside>
+
+  <!-- ── Detail pane ── -->
+  <section class="detail">
+    <div class="csm-bar">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+      Viewing as <strong>&nbsp;CiteMed CSM&nbsp;</strong> — you can create / edit requests and download submitted files. The customer sees the same list but no edit controls.
+      <span style="flex:1"></span>
+      <button class="btn ghost sm" onclick="openEditRequest()" id="edit-btn">Edit request</button>
+    </div>
+
+    <div class="detail-header">
+      <div>
+        <h1 id="detail-title">Request title</h1>
+        <div class="req-meta" id="detail-meta"></div>
+      </div>
+      <button class="btn" onclick="document.getElementById('file-input').click()" id="upload-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Upload to this request
+      </button>
+    </div>
+
+    <div class="req-description" id="detail-description"></div>
+
+    <label class="dropzone" id="dropzone" for="file-input">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div><strong>Drop files here</strong> or click to browse</div>
+      <small>Files you upload here will be linked to this request.</small>
+      <input id="file-input" type="file" multiple />
+    </label>
+
+    <div class="list-card">
+      <div class="list-toolbar">
+        <span class="count" id="count">0 files</span>
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="search" placeholder="Search files in this request…" />
+        </div>
+      </div>
+
+      <div id="file-list"></div>
+
+      <div id="empty" class="empty" hidden>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <h3>No files in this request yet</h3>
+        <p>Drop files above to send them to CiteMed.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ── Confirm delete modal ── -->
+<div class="scrim" id="confirm-scrim">
+  <div class="modal">
+    <h3 id="confirm-title">Delete file?</h3>
+    <p id="confirm-body" style="margin:-4px 0 18px; color:var(--muted-foreground); font-size:13.5px;"></p>
+    <div class="row">
+      <button class="btn ghost" id="confirm-cancel">Cancel</button>
+      <button class="btn danger" id="confirm-yes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── New / edit request modal (CSM only) ── -->
+<div class="scrim" id="request-scrim">
+  <div class="modal">
+    <h3 id="request-modal-title">New request</h3>
+    <label>Title</label>
+    <input id="r-title" placeholder="e.g. Q3 PMS report submission" />
+    <label>Description for customer</label>
+    <textarea id="r-desc" placeholder="Tell the customer what you need them to upload…"></textarea>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div>
+        <label>Due date (optional)</label>
+        <input id="r-due" type="date" />
+      </div>
+      <div>
+        <label>Status</label>
+        <select id="r-status">
+          <option value="open">Open</option>
+          <option value="partial">Partial</option>
+          <option value="complete">Complete</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="r-cancel">Cancel</button>
+      <button class="btn" id="r-save">Save request</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Saved</div>
+
+<script>
+  /* ─── Data model ───
+     Buckets are flat — NO nested folders. Two kinds:
+       - kind: 'request'  → created by CSM, has title/description/due/status
+       - kind: 'general'  → customer's own bucket(s), no CSM metadata
+     Each file belongs to exactly one bucket.id.
+  */
+  function id() { return Math.random().toString(36).slice(2, 10); }
+  function daysAgo(d) { const t = new Date(); t.setDate(t.getDate() - d); return t.toISOString(); }
+  function daysFromNow(d) { const t = new Date(); t.setDate(t.getDate() + d); return t.toISOString(); }
+
+  const buckets = [
+    {
+      id: 'r1', kind: 'request',
+      title: 'Q3 PMS Report Submission',
+      description: 'Please upload your Q3 post-market surveillance report and any supporting clinical-data summaries. We will incorporate these into the next CER update.',
+      requestedBy: 'Maria Chen (CiteMed)',
+      requestedAt: daysAgo(3),
+      due: daysFromNow(4),
+      status: 'open',
+    },
+    {
+      id: 'r2', kind: 'request',
+      title: 'CE-mark renewal evidence pack',
+      description: 'Upload your latest risk-management file (ISO 14971) and updated declaration of conformity.',
+      requestedBy: 'Maria Chen (CiteMed)',
+      requestedAt: daysAgo(10),
+      due: daysFromNow(-2), // overdue
+      status: 'partial',
+    },
+    {
+      id: 'r3', kind: 'request',
+      title: 'Annual literature search inputs',
+      description: 'Reference list and inclusion/exclusion criteria for the FY25 literature search.',
+      requestedBy: 'David Park (CiteMed)',
+      requestedAt: daysAgo(18),
+      due: null,
+      status: 'complete',
+    },
+    {
+      id: 'g1', kind: 'general',
+      title: 'General uploads',
+      description: 'Files you upload here are visible to CiteMed but not tied to any specific request.',
+      status: 'general',
+    },
+  ];
+
+  let files = [
+    { id: id(), bucketId: 'r1', name: 'PMS-Q3-2025-draft.docx', size: 184_000, uploaded: daysAgo(1) },
+    { id: id(), bucketId: 'r2', name: 'Risk-Management-File-v4.pdf', size: 1_840_000, uploaded: daysAgo(2) },
+    { id: id(), bucketId: 'r2', name: 'DoC-EU-2024.pdf', size: 320_000, uploaded: daysAgo(2) },
+    { id: id(), bucketId: 'r3', name: 'Literature-References.xlsx', size: 78_000, uploaded: daysAgo(15) },
+    { id: id(), bucketId: 'r3', name: 'Inclusion-Criteria-FY25.docx', size: 42_000, uploaded: daysAgo(15) },
+    { id: id(), bucketId: 'g1', name: 'Acme-Org-Chart.pdf', size: 220_000, uploaded: daysAgo(20) },
+  ];
+
+  let activeBucketId = 'r1';
+  let role = 'customer'; // 'customer' | 'csm'
+
+  /* ─── Helpers ─── */
+  function fmtSize(b) {
+    if (b < 1024) return `${b} B`;
+    if (b < 1_048_576) return `${(b/1024).toFixed(1)} KB`;
+    if (b < 1_073_741_824) return `${(b/1_048_576).toFixed(1)} MB`;
+    return `${(b/1_073_741_824).toFixed(2)} GB`;
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function fmtDueLabel(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    const days = Math.ceil((d.getTime() - Date.now()) / 86_400_000);
+    if (days < 0) return { text: `${-days}d overdue`, overdue: true };
+    if (days === 0) return { text: 'Due today', overdue: false, soon: true };
+    if (days <= 3) return { text: `Due in ${days}d`, overdue: false, soon: true };
+    return { text: `Due ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, overdue: false };
+  }
+  function ext(name) { const i = name.lastIndexOf('.'); return i === -1 ? 'FILE' : name.slice(i+1).toUpperCase().slice(0,4); }
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  /* ─── Sidebar ─── */
+  function renderSidebar() {
+    const reqList = document.getElementById('req-list');
+    const genList = document.getElementById('general-list');
+    reqList.innerHTML = '';
+    genList.innerHTML = '';
+
+    buckets.forEach(b => {
+      const count = files.filter(f => f.bucketId === b.id).length;
+      const node = document.createElement('div');
+      node.className = 'req-item' + (b.id === activeBucketId ? ' active' : '');
+      node.onclick = () => { activeBucketId = b.id; render(); };
+
+      const due = b.kind === 'request' ? fmtDueLabel(b.due) : null;
+      const dueHtml = due ? `<span class="dot"></span><span style="${due.overdue ? 'color:var(--destructive);font-weight:600;' : due.soon ? 'color:var(--warn);font-weight:600;' : ''}">${due.text}</span>` : '';
+
+      node.innerHTML = `
+        <div class="top">
+          <span class="title">${b.title}</span>
+          <span class="pill ${b.status}">${b.status === 'general' ? 'Yours' : b.status}</span>
+        </div>
+        <div class="sub">
+          <span>${count} file${count === 1 ? '' : 's'}</span>
+          ${dueHtml}
+        </div>
+      `;
+      (b.kind === 'request' ? reqList : genList).appendChild(node);
+    });
+  }
+
+  /* ─── Detail pane ─── */
+  function renderDetail() {
+    const b = buckets.find(x => x.id === activeBucketId);
+    if (!b) return;
+
+    const titleEl = document.getElementById('detail-title');
+    titleEl.innerHTML = `${b.title} <span class="pill ${b.status}">${b.status === 'general' ? 'Your files' : b.status}</span>`;
+
+    const meta = document.getElementById('detail-meta');
+    if (b.kind === 'request') {
+      const due = fmtDueLabel(b.due);
+      meta.innerHTML = `
+        <span>Requested by <strong style="color:var(--foreground)">${b.requestedBy}</strong></span>
+        <span>·</span>
+        <span>${fmtDate(b.requestedAt)}</span>
+        ${due ? `<span>·</span><span style="${due.overdue ? 'color:var(--destructive);font-weight:600;' : due.soon ? 'color:var(--warn);font-weight:600;' : ''}">${due.text}</span>` : ''}
+      `;
+    } else {
+      meta.innerHTML = `<span>Files you've shared with CiteMed outside of any specific request.</span>`;
+    }
+
+    const desc = document.getElementById('detail-description');
+    if (b.kind === 'request') {
+      desc.style.display = '';
+      desc.innerHTML = `
+        <span class="label">What we need from you</span>
+        ${b.description}
+        <div class="from">— ${b.requestedBy}</div>
+      `;
+    } else {
+      desc.style.display = '';
+      desc.innerHTML = `
+        <span class="label">About this bucket</span>
+        ${b.description}
+      `;
+    }
+
+    // Edit button only valid for requests
+    document.getElementById('edit-btn').style.display = b.kind === 'request' ? '' : 'none';
+
+    renderFiles();
+  }
+
+  /* ─── Files ─── */
+  function renderFiles() {
+    const q = document.getElementById('search').value.trim().toLowerCase();
+    const bucketFiles = files.filter(f => f.bucketId === activeBucketId);
+    const filtered = q ? bucketFiles.filter(f => f.name.toLowerCase().includes(q)) : bucketFiles;
+
+    document.getElementById('count').textContent = `${bucketFiles.length} file${bucketFiles.length === 1 ? '' : 's'}`;
+
+    const listEl = document.getElementById('file-list');
+    const emptyEl = document.getElementById('empty');
+    listEl.innerHTML = '';
+
+    if (filtered.length === 0) {
+      emptyEl.hidden = false;
+      if (q) {
+        emptyEl.querySelector('h3').textContent = 'No matches';
+        emptyEl.querySelector('p').textContent = `Nothing matched "${q}".`;
+      } else {
+        emptyEl.querySelector('h3').textContent = 'No files in this request yet';
+        emptyEl.querySelector('p').textContent = role === 'csm'
+          ? 'The customer has not uploaded anything yet.'
+          : 'Drop files above to send them to CiteMed.';
+      }
+      return;
+    }
+    emptyEl.hidden = true;
+
+    for (const f of filtered) {
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      row.dataset.id = f.id;
+      row.innerHTML = `
+        <div class="icon">${ext(f.name)}</div>
+        <div class="name" title="${f.name}">${f.name}</div>
+        <div class="meta">${fmtSize(f.size)}</div>
+        <div class="meta">${fmtDate(f.uploaded)}</div>
+        <div class="actions">
+          <button class="icon-btn" title="Download" data-act="download">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <button class="icon-btn" title="Rename" data-act="rename" ${role === 'csm' ? 'style="display:none"' : ''}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="icon-btn danger" title="Delete" data-act="delete" ${role === 'csm' ? 'style="display:none"' : ''}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      `;
+      document.getElementById('file-list').appendChild(row);
+    }
+  }
+
+  function render() {
+    renderSidebar();
+    renderDetail();
+
+    // Upload affordances disabled in CSM view
+    const csm = role === 'csm';
+    document.getElementById('upload-btn').style.display = csm ? 'none' : '';
+    document.getElementById('dropzone').style.display = csm ? 'none' : '';
+  }
+
+  /* ─── File row actions ─── */
+  document.getElementById('file-list').addEventListener('click', e => {
+    const btn = e.target.closest('button.icon-btn');
+    if (!btn) return;
+    const row = btn.closest('.file-row');
+    const f = files.find(x => x.id === row.dataset.id);
+    const act = btn.dataset.act;
+    if (act === 'download') toast(`Downloading ${f.name}…`);
+    else if (act === 'rename') startRename(row, f);
+    else if (act === 'delete') confirmDelete(f);
+  });
+
+  function startRename(row, file) {
+    const nameEl = row.querySelector('.name');
+    const original = file.name;
+    nameEl.innerHTML = `<input type="text" value="${original}" />`;
+    const input = nameEl.querySelector('input');
+    input.focus();
+    input.setSelectionRange(0, original.lastIndexOf('.') === -1 ? original.length : original.lastIndexOf('.'));
+    const commit = save => {
+      if (save && input.value.trim() && input.value.trim() !== original) {
+        file.name = input.value.trim();
+        toast('Renamed');
+      }
+      renderFiles();
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') commit(true);
+      else if (e.key === 'Escape') commit(false);
+    });
+    input.addEventListener('blur', () => commit(true));
+  }
+
+  /* ─── Delete confirm ─── */
+  const confirmScrim = document.getElementById('confirm-scrim');
+  let pendingDeleteId = null;
+  function confirmDelete(file) {
+    pendingDeleteId = file.id;
+    document.getElementById('confirm-body').textContent =
+      `"${file.name}" will be removed from this request and CiteMed staff will no longer have access to it.`;
+    confirmScrim.classList.add('show');
+  }
+  document.getElementById('confirm-cancel').onclick = () => { confirmScrim.classList.remove('show'); pendingDeleteId = null; };
+  document.getElementById('confirm-yes').onclick = () => {
+    files = files.filter(f => f.id !== pendingDeleteId);
+    confirmScrim.classList.remove('show'); pendingDeleteId = null;
+    toast('Deleted'); render();
+  };
+  confirmScrim.addEventListener('click', e => { if (e.target === confirmScrim) document.getElementById('confirm-cancel').click(); });
+
+  /* ─── New / edit request modal ─── */
+  const requestScrim = document.getElementById('request-scrim');
+  let editingId = null;
+  function openNewRequest() {
+    editingId = null;
+    document.getElementById('request-modal-title').textContent = 'New request for Acme Medical';
+    document.getElementById('r-title').value = '';
+    document.getElementById('r-desc').value = '';
+    document.getElementById('r-due').value = '';
+    document.getElementById('r-status').value = 'open';
+    requestScrim.classList.add('show');
+    setTimeout(() => document.getElementById('r-title').focus(), 30);
+  }
+  function openEditRequest() {
+    const b = buckets.find(x => x.id === activeBucketId);
+    if (!b || b.kind !== 'request') return;
+    editingId = b.id;
+    document.getElementById('request-modal-title').textContent = 'Edit request';
+    document.getElementById('r-title').value = b.title;
+    document.getElementById('r-desc').value = b.description;
+    document.getElementById('r-due').value = b.due ? b.due.slice(0, 10) : '';
+    document.getElementById('r-status').value = b.status;
+    requestScrim.classList.add('show');
+  }
+  document.getElementById('r-cancel').onclick = () => requestScrim.classList.remove('show');
+  document.getElementById('r-save').onclick = () => {
+    const title = document.getElementById('r-title').value.trim();
+    if (!title) { toast('Title required'); return; }
+    const desc = document.getElementById('r-desc').value.trim();
+    const due = document.getElementById('r-due').value ? new Date(document.getElementById('r-due').value).toISOString() : null;
+    const status = document.getElementById('r-status').value;
+
+    if (editingId) {
+      const b = buckets.find(x => x.id === editingId);
+      b.title = title; b.description = desc; b.due = due; b.status = status;
+      toast('Request updated');
+    } else {
+      const newId = id();
+      const newBucket = {
+        id: newId, kind: 'request', title, description: desc,
+        requestedBy: 'Maria Chen (CiteMed)',
+        requestedAt: new Date().toISOString(),
+        due, status,
+      };
+      // insert at top of requests, before general buckets
+      const firstGeneralIdx = buckets.findIndex(x => x.kind === 'general');
+      buckets.splice(firstGeneralIdx === -1 ? buckets.length : firstGeneralIdx, 0, newBucket);
+      activeBucketId = newId;
+      toast('Request created');
+    }
+    requestScrim.classList.remove('show');
+    render();
+  };
+  requestScrim.addEventListener('click', e => { if (e.target === requestScrim) document.getElementById('r-cancel').click(); });
+
+  /* ─── Upload ─── */
+  const dz = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  function addUploads(fileList) {
+    for (const f of fileList) {
+      files.unshift({ id: id(), bucketId: activeBucketId, name: f.name, size: f.size, uploaded: new Date().toISOString() });
+    }
+    toast(`Uploaded ${fileList.length} file${fileList.length === 1 ? '' : 's'}`);
+    render();
+  }
+  fileInput.addEventListener('change', e => {
+    if (e.target.files.length) addUploads(e.target.files);
+    e.target.value = '';
+  });
+  ['dragenter', 'dragover'].forEach(evt => dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach(evt => dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+  dz.addEventListener('drop', e => { if (e.dataTransfer.files.length) addUploads(e.dataTransfer.files); });
+
+  document.getElementById('search').addEventListener('input', renderFiles);
+
+  /* ─── Role toggle ─── */
+  function setRole(r) {
+    role = r;
+    document.body.classList.toggle('csm', r === 'csm');
+    document.getElementById('role-customer').classList.toggle('active', r === 'customer');
+    document.getElementById('role-csm').classList.toggle('active', r === 'csm');
+    document.getElementById('who').textContent = r === 'csm' ? 'CiteMed CSM' : 'Acme Medical';
+    document.getElementById('who-avatar').textContent = r === 'csm' ? 'CM' : 'AC';
+    render();
+  }
+
+  /* ─── First paint ─── */
+  render();
+</script>
+</body>
+</html>
