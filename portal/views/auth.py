@@ -120,6 +120,13 @@ def request_magic_link(request):
             status=403,
         )
 
+    # Demo/sandbox accounts skip the magic link entirely — just sign them in.
+    # (Restricted to is_demo sandbox users; real users always get a link.)
+    if user.is_demo:
+        request.session['portal_user_id'] = user.pk
+        request.session.save()
+        return JsonResponse({'demo': True, 'user': _user_payload(user, request)})
+
     token = MagicLinkToken.objects.create(
         user=user,
         token=secrets.token_urlsafe(32),

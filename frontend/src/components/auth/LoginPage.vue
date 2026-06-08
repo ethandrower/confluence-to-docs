@@ -41,10 +41,12 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 
 const emit = defineEmits(['sent'])
 const auth = useAuthStore()
+const router = useRouter()
 const email = ref('')
 const loading = ref(false)
 const emailError = ref('')
@@ -63,7 +65,12 @@ async function submit() {
   }
   loading.value = true
   try {
-    await auth.requestMagicLink(email.value)
+    const result = await auth.requestMagicLink(email.value)
+    if (result?.demo) {
+      // Sandbox account — signed in already, go straight to the portal.
+      router.push(router.currentRoute.value.query.redirect || '/files')
+      return
+    }
     emit('sent')
   } catch (e) {
     if (e.response?.status === 429) {

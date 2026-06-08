@@ -17,6 +17,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function requestMagicLink(email) {
     const res = await axios.post('/api/auth/request-magic-link/', { email })
+    // Demo/sandbox accounts are signed in immediately (no magic link).
+    if (res.data?.demo && res.data.user) {
+      user.value = res.data.user
+    }
     return res.data
   }
 

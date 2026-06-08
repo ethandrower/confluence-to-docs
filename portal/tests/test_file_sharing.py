@@ -284,6 +284,23 @@ class DemoLoginTests(TestCase):
     def test_unknown_email_404(self):
         self.assertEqual(self.client.get('/api/auth/demo-login/', {'email': 'nobody@x.com'}).status_code, 404)
 
+    def test_login_form_signs_in_demo_directly(self):
+        # Entering a demo email on the normal login form skips the magic link.
+        r = self.client.post('/api/auth/request-magic-link/',
+                             data=json.dumps({'email': 'demo@citemed.com'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json().get('demo'))
+        self.assertEqual(self.client.get('/api/auth/me/').json()['user']['email'], 'demo@citemed.com')
+
+    def test_login_form_real_user_gets_link_not_session(self):
+        r = self.client.post('/api/auth/request-magic-link/',
+                             data=json.dumps({'email': 'real@acme.com'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.json().get('demo'))
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)  # not logged in
+
 
 class ReviewAndChecklistTests(TestCase):
     def setUp(self):
