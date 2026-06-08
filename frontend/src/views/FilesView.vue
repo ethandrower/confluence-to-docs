@@ -1,7 +1,7 @@
 <template>
   <AppShell hide-sidebar>
     <template #content>
-      <div class="fs">
+      <div class="fs" :class="{ 'has-preview': preview }">
         <!-- Sidebar -->
         <aside class="fs-side" aria-label="File buckets">
           <div class="fs-group">
@@ -84,7 +84,7 @@
               </div>
 
               <ul v-if="filtered.length" class="rows">
-                <li v-for="f in filtered" :key="f.id" class="row" :class="{ flash: flash.has(f.original_name) }">
+                <li v-for="f in filtered" :key="f.id" class="row" :class="{ flash: flash.has(f.original_name), 'row-active': preview && preview.id === f.id }">
                   <span class="tile" :data-cat="cat(f.original_name)">{{ ext(f.original_name) }}</span>
                   <div class="row-main">
                     <template v-if="editingId === f.id">
@@ -98,7 +98,7 @@
                     <span v-if="f.review_notes" class="rv-note">{{ f.review_notes }}</span>
                   </div>
                   <span class="row-actions">
-                    <button v-if="previewable(f.original_name)" class="ico" title="Preview" aria-label="Preview" @click="openPreview(f)">
+                    <button v-if="previewable(f.original_name)" class="ico" :class="preview && preview.id === f.id && 'ico--on'" :title="preview && preview.id === f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
                     <a class="ico" :href="store.downloadUrl(f.id)" title="Download" aria-label="Download">
@@ -122,9 +122,9 @@
 
           <p v-else class="fs-placeholder">Select a request or your files to get started.</p>
         </section>
-      </div>
 
-      <FilePreview :src="previewSrc" :name="previewName" @close="previewSrc = null" />
+        <FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="preview = null" />
+      </div>
 
       <!-- toast -->
       <Transition name="toast">
@@ -150,7 +150,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FileUploader from '@/components/files/FileUploader.vue'
-import FilePreview from '@/components/files/FilePreview.vue'
+import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
 import { useFilesStore } from '@/stores/files'
 
 const store = useFilesStore()
@@ -161,13 +161,12 @@ const editName = ref('')
 const renameInput = ref(null)
 const toast = ref('')
 const flash = ref(new Set())
-const previewSrc = ref(null)
-const previewName = ref('')
+const preview = ref(null)  // { id, src, name }
 
 function previewable(name) { return /\.(pdf|png|jpe?g|gif|webp)$/i.test(name) }
 function openPreview(f) {
-  previewName.value = f.original_name
-  previewSrc.value = `/api/files/${f.id}/view`
+  if (preview.value?.id === f.id) { preview.value = null; return }  // toggle
+  preview.value = { id: f.id, src: `/api/files/${f.id}/view`, name: f.original_name }
 }
 
 onMounted(store.load)
@@ -273,6 +272,11 @@ function cat(name) {
   align-items: start;
 }
 @media (max-width: 840px) { .fs { grid-template-columns: 1fr; } }
+.fs.has-preview { grid-template-columns: 240px minmax(0, 1fr) minmax(340px, 0.95fr); max-width: 1320px; }
+@media (max-width: 1100px) { .fs.has-preview { grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr); } .fs.has-preview .fs-side { display: none; } }
+@media (max-width: 760px) { .fs.has-preview { grid-template-columns: 1fr; } }
+.row.row-active { border-color: var(--brand-accent); background: color-mix(in srgb, var(--brand-accent) 6%, var(--card)); }
+.ico--on { background: var(--accent); color: var(--primary); }
 
 /* ── Sidebar ── */
 .fs-group { margin-bottom: 1.5rem; }

@@ -144,31 +144,39 @@
                 </div>
               </div>
             </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>File</th><th>Client</th><th>Request</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
-                <tbody>
-                  <tr v-for="i in inboxItems" :key="i.id" :class="i.processed && 'is-processed'">
-                    <td>{{ i.original_name }} <span class="dim">· {{ fmtSize(i.size_bytes) }}</span></td>
-                    <td><button class="link" @click="selectCompany(i.company.id); filesMode='company'">{{ i.company.name }}</button></td>
-                    <td>{{ i.bucket.kind==='request' ? i.bucket.title : '—' }}</td>
-                    <td>{{ fmtFileDate(i.uploaded_at) }}</td>
-                    <td>{{ i.uploaded_by_name || '—' }}</td>
-                    <td class="ta-r inbox-actions">
-                      <button v-if="previewable(i.original_name)" class="link" @click="openPreview(i.id, i.original_name)">Preview</button>
-                      <a :href="`/api/admin/files/${i.id}/download`">Download</a>
-                      <button class="link" @click="toggleProcessed(i)">{{ i.processed ? 'Undo' : 'Mark processed' }}</button>
-                    </td>
-                  </tr>
-                  <tr v-if="!inboxItems.length"><td colspan="6" class="empty">{{ inboxStatus==='unprocessed' ? 'Nothing waiting — all caught up.' : 'No files yet.' }}</td></tr>
-                </tbody>
-              </table>
+            <div class="split" :class="{ 'has-preview': preview }">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr v-if="preview"><th>File</th><th>Client</th><th></th></tr>
+                    <tr v-else><th>File</th><th>Client</th><th>Request</th><th>Uploaded</th><th>By</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="i in inboxItems" :key="i.id" :class="[i.processed && 'is-processed', preview && preview.id===i.id && 'row-active']">
+                      <td>{{ i.original_name }} <span class="dim">· {{ fmtSize(i.size_bytes) }}</span></td>
+                      <td><button class="link" @click="selectCompany(i.company.id); filesMode='company'">{{ i.company.name }}</button></td>
+                      <template v-if="!preview">
+                        <td>{{ i.bucket.kind==='request' ? i.bucket.title : '—' }}</td>
+                        <td>{{ fmtFileDate(i.uploaded_at) }}</td>
+                        <td>{{ i.uploaded_by_name || '—' }}</td>
+                      </template>
+                      <td class="ta-r inbox-actions">
+                        <button v-if="previewable(i.original_name)" class="link" @click="openPreview(i.id, i.original_name)">{{ preview && preview.id===i.id ? 'Close' : 'Preview' }}</button>
+                        <a :href="`/api/admin/files/${i.id}/download`">Download</a>
+                        <button v-if="!preview" class="link" @click="toggleProcessed(i)">{{ i.processed ? 'Undo' : 'Mark processed' }}</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!inboxItems.length"><td :colspan="preview ? 3 : 6" class="empty">{{ inboxStatus==='unprocessed' ? 'Nothing waiting — all caught up.' : 'No files yet.' }}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="closePreview" />
             </div>
           </div>
 
           <!-- BY COMPANY: drill-down switcher -->
-          <div v-show="filesMode==='company'" class="files-admin">
-            <aside class="company-switcher">
+          <div v-show="filesMode==='company'" class="files-admin" :class="{ 'has-preview': preview }">
+            <aside class="company-switcher" v-show="!preview">
               <input v-model="fileCompanyQuery" class="cs-search" type="search" placeholder="Search companies…" aria-label="Search companies" />
               <ul class="cs-list">
                 <li v-for="c in filteredFileCompanies" :key="c.id">
@@ -181,7 +189,7 @@
               </ul>
             </aside>
 
-            <div class="files-detail">
+            <div class="files-detail" :class="{ compact: preview }">
               <template v-if="selectedCompany">
                 <div class="fd-head">
                   <h3>{{ selectedCompany.name }}</h3>
@@ -226,7 +234,7 @@
                   </div>
 
                   <ul v-if="b.files.length" class="fd-rows">
-                    <li v-for="f in b.files" :key="f.id" class="fd-row">
+                    <li v-for="f in b.files" :key="f.id" class="fd-row" :class="preview && preview.id===f.id && 'row-active'">
                       <span class="fd-file">
                         <span class="fd-name">{{ f.original_name }}</span>
                         <span class="fd-sub">{{ fmtSize(f.size_bytes) }} · {{ fmtFileDate(f.uploaded_at) }} · {{ f.uploaded_by_name || '—' }}</span>
@@ -242,7 +250,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
                       </button>
                       <span class="fd-actions">
-                        <button v-if="previewable(f.original_name)" class="link" @click="openPreview(f.id, f.original_name)">Preview</button>
+                        <button v-if="previewable(f.original_name)" class="link" @click="openPreview(f.id, f.original_name)">{{ preview && preview.id===f.id ? 'Close' : 'Preview' }}</button>
                         <a :href="`/api/admin/files/${f.id}/download`">Download</a>
                       </span>
                     </li>
@@ -252,6 +260,7 @@
               </template>
               <p v-else class="fd-placeholder">Select a company to view its files.</p>
             </div>
+            <FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="closePreview" />
           </div>
         </section>
       </div>
@@ -341,8 +350,6 @@
           </div>
         </div>
       </Transition>
-
-      <FilePreview :src="previewSrc" :name="previewName" @close="previewSrc = null" />
     </template>
   </AppShell>
 </template>
@@ -350,7 +357,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
-import FilePreview from '@/components/files/FilePreview.vue'
+import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
 import { useAdminStore } from '@/stores/admin.js'
 import { useAuthStore } from '@/stores/auth.js'
 
@@ -501,16 +508,17 @@ async function openFiles() {
   if (filesMode.value === 'inbox') loadInbox()
 }
 function openInbox() {
+  preview.value = null
   filesMode.value = 'inbox'
   loadInbox()
 }
-const previewSrc = ref(null)
-const previewName = ref('')
+const preview = ref(null)  // { id, src, name }
 function previewable(name) { return /\.(pdf|png|jpe?g|gif|webp)$/i.test(name) }
 function openPreview(id, name) {
-  previewName.value = name
-  previewSrc.value = `/api/admin/files/${id}/view`
+  if (preview.value?.id === id) { preview.value = null; return }  // toggle
+  preview.value = { id, src: `/api/admin/files/${id}/view`, name }
 }
+function closePreview() { preview.value = null }
 
 // Review + checklist
 const checklistDraft = ref({})
@@ -579,6 +587,7 @@ async function toggleProcessed(item) {
   if (r.ok) await loadInbox()
 }
 async function selectCompany(id) {
+  preview.value = null
   selectedCompanyId.value = id
   const r = await fetch(`/api/admin/files/companies/${id}/`, { credentials: 'include' })
   if (r.ok) {
@@ -760,10 +769,12 @@ tbody tr:hover td { background: var(--accent); }
 .cs-search { width: 100%; height: 36px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 13.5px; margin-bottom: 8px; }
 .cs-search:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
 .cs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
-.cs-item { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; cursor: pointer; background: none; border: none; }
-.cs-item:hover { background: var(--muted); }
-.cs-item--active { background: color-mix(in srgb, var(--primary) 12%, transparent); }
-.cs-name { font-size: 14px; font-weight: 550; color: var(--foreground); }
+.cs-item { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 8px; cursor: pointer; background: none; border: 1px solid transparent; transition: background-color 0.12s ease, border-color 0.12s ease; }
+.cs-item:hover { background: var(--secondary); }
+.cs-item--active { background: color-mix(in srgb, var(--primary) 14%, var(--card)); border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
+.cs-item--active:hover { background: color-mix(in srgb, var(--primary) 18%, var(--card)); }
+.cs-name { font-size: 14px; font-weight: 600; color: var(--foreground); }
+.cs-item--active .cs-name { color: var(--primary); }
 .cs-counts { font-size: 12px; color: var(--muted-foreground); }
 .cs-empty { padding: 10px; font-size: 13px; color: var(--muted-foreground); }
 .files-detail { min-width: 0; }
@@ -829,6 +840,22 @@ tbody tr:hover td { background: var(--accent); }
 .dim { color: var(--muted-foreground); font-size: 12px; }
 .inbox-actions { display: flex; gap: 14px; justify-content: flex-end; }
 .is-processed td { color: var(--muted-foreground); }
+.row-active > td { background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+
+/* Split preview (inbox + company) */
+.split { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.split.has-preview { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr); }
+.files-admin.has-preview { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr); }
+.files-detail.compact .review-select,
+.files-detail.compact .fd-row .ico-sm,
+.files-detail.compact .fd-sub,
+.files-detail.compact .fd-note,
+.files-detail.compact .checklist { display: none; }
+.files-detail.compact .fd-row { grid-template-columns: 1fr auto; }
+.fd-row.row-active { box-shadow: inset 3px 0 0 var(--primary); border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
+@media (max-width: 900px) {
+  .split.has-preview, .files-admin.has-preview { grid-template-columns: 1fr; }
+}
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field textarea { width: 100%; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
 .field textarea:focus { outline: 2px solid var(--ring); outline-offset: -1px; border-color: var(--ring); }
