@@ -61,7 +61,7 @@
                 <p v-if="active.kind === 'request'" class="fs-submeta">
                   <span v-if="active.requested_by_name">Requested by {{ active.requested_by_name }}</span>
                   <span v-if="active.created_at"> · {{ relDate(active.created_at) }}</span>
-                  <span v-if="active.due_at" class="fs-due" :class="duePill(active) ? `due--${duePill(active).tone}` : ''"> · Due {{ shortDate(active.due_at) }}</span>
+                  <span v-if="duePill(active)" class="fs-due" :class="`due--${duePill(active).tone}`"> · Due {{ shortDate(active.due_at) }}</span>
                 </p>
               </div>
               <button class="refresh-btn" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh" @click="store.load()">
@@ -209,6 +209,9 @@ function statusLabel(b) { return reqState(b)[0] }
 function statusTone(b) { return reqState(b)[1] }
 function duePill(b) {
   if (!b.due_at || b.status === 'complete') return null
+  // Once the request is resolved (all approved / complete), the deadline is
+  // no longer relevant — hide it.
+  if (reqState(b)[1] === 'success') return null
   const days = Math.ceil((new Date(b.due_at) - Date.now()) / 86400000)
   if (days < 0) return { label: 'Overdue', tone: 'over' }
   if (days === 0) return { label: 'Due today', tone: 'soon' }
