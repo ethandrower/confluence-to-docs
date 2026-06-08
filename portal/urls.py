@@ -11,12 +11,19 @@ urlpatterns = [
     path('admin/add-page/', admin_api.add_page, name='admin-add-page'),
 
     # Admin — file sharing
+    path('admin/files/inbox/', files_admin.inbox, name='admin-files-inbox'),
+    path('admin/files/activity/', files_admin.activity, name='admin-files-activity'),
+    path('admin/files/<int:file_id>/processed', files_admin.set_processed, name='admin-files-processed'),
     path('admin/files/companies/', files_admin.companies, name='admin-files-companies'),
     path('admin/files/companies/<int:company_id>/', files_admin.company_files, name='admin-files-company'),
     path('admin/files/companies/<int:company_id>/download-all', files_admin.company_download_all, name='admin-files-zip'),
     path('admin/files/requests/', files_admin.create_request, name='admin-files-create-request'),
     path('admin/files/requests/<int:bucket_id>/', files_admin.update_request, name='admin-files-update-request'),
+    path('admin/files/<int:file_id>/review', files_admin.set_review, name='admin-files-review'),
+    path('admin/files/checklist/', files_admin.create_checklist_item, name='admin-files-checklist-create'),
+    path('admin/files/checklist/<int:item_id>/', files_admin.checklist_item, name='admin-files-checklist-item'),
     path('admin/files/<int:file_id>/download', files_admin.admin_file_download, name='admin-files-download'),
+    path('admin/files/<int:file_id>/view', files_admin.admin_file_view, name='admin-files-view'),
 
     # File sharing (customer + shared)
     path('files/buckets/', files.buckets_list, name='files-buckets'),
@@ -24,6 +31,7 @@ urlpatterns = [
     path('files/upload-complete', files.upload_complete, name='files-upload-complete'),
     path('files/<int:file_id>', files.file_detail, name='files-file'),
     path('files/<int:file_id>/download', files.file_download, name='files-download'),
+    path('files/<int:file_id>/view', files.file_view, name='files-view'),
 
     # Docs
     path('docs/', docs.page_tree, name='page-tree'),
@@ -33,6 +41,7 @@ urlpatterns = [
     # Auth
     path('auth/request-magic-link/', auth.request_magic_link, name='request-magic-link'),
     path('auth/verify/', auth.verify_magic_link, name='verify-magic-link'),
+    path('auth/demo-login/', auth.demo_login, name='demo-login'),  # is_demo accounts only
     path('auth/me/', auth.me, name='auth-me'),
     path('auth/logout/', auth.logout, name='auth-logout'),
 

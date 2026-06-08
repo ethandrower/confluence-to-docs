@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 from portal import file_storage
 from portal.decorators import require_portal_user
 from portal.models import Bucket, SharedFile, FileActivity
+from portal.rate_limit import is_rate_limited
 from portal.serializers import BucketSerializer
 
 logger = logging.getLogger(__name__)
@@ -48,9 +49,8 @@ def _ext_ok(name):
 
 
 def _own_file(request, file_id):
-    return SharedFile.objects.filter(
-        id=file_id, company_id=request.portal_user.company_id, deleted_at__isnull=True,
-    ).first()
+    # Route through the scoped manager so isolation lives in one place.
+    return SharedFile.for_user(request.portal_user).filter(id=file_id).first()
 
 
 # ── Listing ──────────────────────────────────────────────────────────────
@@ -73,6 +73,10 @@ def upload_init(request):
     user = request.portal_user
     if not user.company_id:
         return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
+    # Bound how fast one account can mint upload slots (the rest of auth is
+    # rate-limited; this endpoint creates rows + presigned URLs).
+    if is_rate_limited('file-upload-init', str(user.id), 120, 3600):
+        return JsonResponse({'error': 'Too many uploads right now — please slow down.'}, status=429)
     data = json.loads(request.body or '{}')
     name = (data.get('name') or '').strip()
     size = int(data.get('size') or 0)
@@ -111,9 +115,7 @@ def upload_init(request):
 def upload_complete(request):
     user = request.portal_user
     data = json.loads(request.body or '{}')
-    f = SharedFile.objects.filter(
-        id=data.get('file_id'), company_id=user.company_id, deleted_at__isnull=True,
-    ).first()
+    f = SharedFile.for_user(user).filter(id=data.get('file_id')).first()
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
     size = file_storage.head_size(f.storage_key)
@@ -123,11 +125,21 @@ def upload_complete(request):
         file_storage.delete_object(f.storage_key)
         f.delete()
         return JsonResponse({'error': 'File exceeds the size limit.'}, status=400)
+    # Reject content that contradicts its extension (HTML-as-PDF, etc.).
+    if not file_storage.signature_ok(f.storage_key, f.original_name):
+        file_storage.delete_object(f.storage_key)
+        f.delete()
+        return JsonResponse({'error': "File content doesn't match its type."}, status=400)
     f.size_bytes = size
     f.state = SharedFile.STATE_READY
     f.save(update_fields=['size_bytes', 'state'])
     log_activity(user.company, 'upload', actor=user, file=f, bucket=f.bucket,
                  name=f.original_name, size=size)
+    try:
+        from portal import file_notify
+        file_notify.notify_upload(f)
+    except Exception:
+        pass
     return JsonResponse({'ok': True, 'file_id': f.id})
 
 
@@ -167,3 +179,32 @@ def file_download(request, file_id):
     log_activity(request.portal_user.company, 'download', actor=request.portal_user,
                  file=f, name=f.original_name)
     return HttpResponseRedirect(url)
+
+
+# Only these types are ever served *inline*. The content-type is derived from
+# the (validated) extension, NOT the client-supplied mime — otherwise a file
+# uploaded as .pdf but declared text/html could execute inline when previewed
+# (stored XSS). Anything else is served as a download instead.
+_INLINE_MIME = {
+    'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp',
+}
+
+
+def inline_mime(name):
+    ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    return _INLINE_MIME.get(ext)
+
+
+@require_portal_user
+@require_http_methods(['GET'])
+def file_view(request, file_id):
+    """Inline preview (PDF/image). For non-previewable types, falls back to a
+    safe download so nothing untrusted is ever rendered inline."""
+    f = _own_file(request, file_id)
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    mime = inline_mime(f.original_name)
+    if not mime:
+        return HttpResponseRedirect(file_storage.presign_get(f.storage_key, download_name=f.original_name))
+    return HttpResponseRedirect(file_storage.presign_view(f.storage_key, mime))

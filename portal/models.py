@@ -71,6 +71,10 @@ class PortalUser(models.Model):
         'Company', null=True, blank=True, on_delete=models.SET_NULL, related_name='users'
     )
     access_enabled = models.BooleanField(default=True)
+    # Demo/sandbox accounts may sign in WITHOUT a magic link (see
+    # auth.demo_login) so staff can open the customer portal in a second
+    # browser. Only ever set on throwaway sandbox accounts — never real users.
+    is_demo = models.BooleanField(default=False)
     jsm_customer_id = models.CharField(max_length=64, blank=True)
     is_jsm_customer = models.BooleanField(default=False)
     jsm_checked_at = models.DateTimeField(null=True)
@@ -176,12 +180,32 @@ class Bucket(models.Model):
 
     class Meta:
         ordering = ['kind', '-created_at']
+        constraints = [
+            # At most one 'general' bucket per company (guards the get_or_create
+            # race in get_general_bucket). Requests are unconstrained.
+            models.UniqueConstraint(
+                fields=['company'], condition=models.Q(kind='general'),
+                name='uniq_general_bucket_per_company',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.company.name} — {self.title}'
 
 
 class SharedFile(models.Model):
+    """A customer-shared file living in S3 (reached only via presigned URLs).
+
+    Two independent state machines, intentionally separate:
+      - `state`         : upload lifecycle — 'uploading' until the browser→S3
+                          PUT is confirmed, then 'ready'. Only 'ready' files
+                          are listed/downloadable.
+      - `review_status` : the CUSTOMER-FACING review loop driven by CiteMed
+                          staff (pending → review → approved / revision).
+      - `processed`     : a separate INTERNAL "we've integrated this" flag for
+                          the staff inbox. Never shown to customers. Do not
+                          conflate with review_status.
+    """
     STATE_UPLOADING = 'uploading'
     STATE_READY = 'ready'
     REVIEW_CHOICES = [
@@ -207,6 +231,14 @@ class SharedFile(models.Model):
         related_name='reviewed_files',
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    # Internal "we've handled / integrated this" flag for the staff inbox.
+    # Distinct from review_status (which is the customer-facing approve/revise loop).
+    processed = models.BooleanField(default=False)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    processed_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='processed_files',
+    )
     uploaded_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
@@ -214,10 +246,23 @@ class SharedFile(models.Model):
         ordering = ['-uploaded_at']
         indexes = [
             models.Index(fields=['company', 'deleted_at']),
+            # Powers the cross-client inbox list + unprocessed count.
+            models.Index(fields=['state', 'processed', 'deleted_at', '-uploaded_at']),
         ]
 
     def __str__(self):
         return self.original_name
+
+    @classmethod
+    def for_user(cls, user):
+        """Non-deleted files the given portal user may access — scoped to THEIR
+        company only. The single chokepoint for customer-side tenant isolation:
+        customer endpoints must query through here, never `objects` directly,
+        so a forgotten `.filter(company_id=...)` can't leak across clients."""
+        company_id = getattr(user, 'company_id', None)
+        if not company_id:
+            return cls.objects.none()
+        return cls.objects.filter(company_id=company_id, deleted_at__isnull=True)
 
 
 class ChecklistItem(models.Model):

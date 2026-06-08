@@ -36,7 +36,7 @@
           <button role="tab" :aria-selected="tab==='companies'" class="tab" :class="tab==='companies' && 'tab--active'" @click="tab='companies'">
             Companies <span class="tab-count">{{ store.companies.length }}</span>
           </button>
-          <button role="tab" :aria-selected="tab==='files'" class="tab" :class="tab==='files' && 'tab--active'" @click="openFiles">
+          <button role="tab" :aria-selected="tab==='files'" class="tab" :class="tab==='files' && 'tab--active'" @click="tab='files'">
             Files
           </button>
         </div>
@@ -118,62 +118,8 @@
           </div>
         </section>
 
-        <!-- FILES -->
-        <section v-show="tab==='files'" class="panel">
-          <div class="panel-bar">
-            <span class="panel-hint">Files customers have shared, by company. Read-only here.</span>
-          </div>
-          <div class="files-admin">
-            <aside class="company-switcher">
-              <input v-model="fileCompanyQuery" class="cs-search" type="search" placeholder="Search companies…" aria-label="Search companies" />
-              <ul class="cs-list">
-                <li v-for="c in filteredFileCompanies" :key="c.id">
-                  <button class="cs-item" :class="c.id===selectedCompanyId && 'cs-item--active'" @click="selectCompany(c.id)">
-                    <span class="cs-name">{{ c.name }}</span>
-                    <span class="cs-counts">{{ c.file_count }} file{{ c.file_count===1?'':'s' }}<span v-if="c.open_request_count"> · {{ c.open_request_count }} open</span></span>
-                  </button>
-                </li>
-                <li v-if="!fileCompanies.length" class="cs-empty">No companies.</li>
-              </ul>
-            </aside>
-
-            <div class="files-detail">
-              <template v-if="selectedCompany">
-                <div class="fd-head">
-                  <h3>{{ selectedCompany.name }}</h3>
-                  <div class="fd-head-actions">
-                    <button class="btn-ghost" @click="openRequest()">+ New request</button>
-                    <a v-if="companyFileCount" class="btn-primary" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">Download all</a>
-                  </div>
-                </div>
-                <div v-for="b in companyBuckets" :key="b.id" class="fd-bucket">
-                  <h4>
-                    {{ b.title }}
-                    <span v-if="b.kind==='request'" class="role role--admin">request</span>
-                    <button v-if="b.kind==='request'" class="fd-edit" title="Edit request" @click="openRequest(b)" aria-label="Edit request">
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
-                    </button>
-                  </h4>
-                  <p v-if="b.description" class="fd-desc">{{ b.description }}</p>
-                  <table v-if="b.files.length">
-                    <thead><tr><th>Name</th><th>Size</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="f in b.files" :key="f.id">
-                        <td>{{ f.original_name }}</td>
-                        <td class="tabular">{{ fmtSize(f.size_bytes) }}</td>
-                        <td>{{ fmtFileDate(f.uploaded_at) }}</td>
-                        <td>{{ f.uploaded_by_name || '—' }}</td>
-                        <td class="ta-r"><a :href="`/api/admin/files/${f.id}/download`">Download</a></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <p v-else class="empty">No files in this bucket.</p>
-                </div>
-              </template>
-              <p v-else class="fd-placeholder">Select a company to view its files.</p>
-            </div>
-          </div>
-        </section>
+        <!-- FILES (extracted to its own component) -->
+        <FilesAdmin v-if="tab==='files'" />
       </div>
 
       <!-- Modal -->
@@ -230,37 +176,6 @@
         </div>
       </Transition>
 
-      <!-- Request modal (file sharing) -->
-      <Transition name="modal">
-        <div v-if="reqModal" class="modal-overlay" @click.self="reqModal=false">
-          <div class="modal" role="dialog" aria-modal="true">
-            <h2 class="modal-title">{{ reqEditing ? 'Edit request' : 'New request' }}</h2>
-            <p v-if="reqError" class="form-error">{{ reqError }}</p>
-            <label class="field"><span>Title</span>
-              <input v-model="reqForm.title" type="text" placeholder="e.g. Q3 PMS report submission" />
-            </label>
-            <label class="field"><span>Description for customer</span>
-              <textarea v-model="reqForm.description" rows="3" placeholder="Tell the customer what to upload…"></textarea>
-            </label>
-            <div class="field-row">
-              <label class="field"><span>Due date</span>
-                <input v-model="reqForm.due_at" type="date" />
-              </label>
-              <label class="field"><span>Status</span>
-                <select v-model="reqForm.status">
-                  <option value="open">Open</option>
-                  <option value="partial">Partial</option>
-                  <option value="complete">Complete</option>
-                </select>
-              </label>
-            </div>
-            <div class="modal-actions">
-              <button class="btn-ghost" @click="reqModal=false">Cancel</button>
-              <button class="btn-primary" :disabled="reqSaving" @click="saveRequest">{{ reqSaving ? 'Saving…' : (reqEditing ? 'Save' : 'Create request') }}</button>
-            </div>
-          </div>
-        </div>
-      </Transition>
     </template>
   </AppShell>
 </template>
@@ -268,6 +183,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
+import FilesAdmin from '@/components/files/FilesAdmin.vue'
 import { useAdminStore } from '@/stores/admin.js'
 import { useAuthStore } from '@/stores/auth.js'
 
@@ -376,84 +292,6 @@ async function remove(type, item) {
 
 function formatDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-// ── Files tab (read-only company switcher) ──────────────────────────
-const fileCompanies = ref([])
-const fileCompanyQuery = ref('')
-const selectedCompanyId = ref(null)
-const companyBuckets = ref([])
-const selectedCompany = ref(null)
-
-const filteredFileCompanies = computed(() => {
-  const q = fileCompanyQuery.value.toLowerCase().trim()
-  return q ? fileCompanies.value.filter((c) => c.name.toLowerCase().includes(q)) : fileCompanies.value
-})
-const companyFileCount = computed(() => companyBuckets.value.reduce((n, b) => n + b.files.length, 0))
-
-async function openFiles() {
-  tab.value = 'files'
-  if (fileCompanies.value.length) return
-  const r = await fetch('/api/admin/files/companies/', { credentials: 'include' })
-  if (r.ok) fileCompanies.value = (await r.json()).companies
-}
-async function selectCompany(id) {
-  selectedCompanyId.value = id
-  const r = await fetch(`/api/admin/files/companies/${id}/`, { credentials: 'include' })
-  if (r.ok) {
-    const data = await r.json()
-    selectedCompany.value = data.company
-    companyBuckets.value = data.buckets
-  }
-}
-function fmtSize(b) {
-  if (!b) return '—'
-  const u = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  while (b >= 1024 && i < 3) { b /= 1024; i++ }
-  return `${b.toFixed(i ? 1 : 0)} ${u[i]}`
-}
-function fmtFileDate(d) {
-  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-// Request authoring
-const reqModal = ref(false)
-const reqEditing = ref(null)
-const reqSaving = ref(false)
-const reqError = ref('')
-const reqForm = ref({ title: '', description: '', due_at: '', status: 'open' })
-
-function openRequest(b = null) {
-  reqEditing.value = b
-  reqError.value = ''
-  reqForm.value = b
-    ? { title: b.title, description: b.description || '', due_at: b.due_at ? b.due_at.slice(0, 10) : '', status: b.status === 'general' ? 'open' : b.status }
-    : { title: '', description: '', due_at: '', status: 'open' }
-  reqModal.value = true
-}
-async function saveRequest() {
-  reqSaving.value = true
-  reqError.value = ''
-  try {
-    const payload = { ...reqForm.value, due_at: reqForm.value.due_at || null, company_id: selectedCompanyId.value }
-    const url = reqEditing.value
-      ? `/api/admin/files/requests/${reqEditing.value.id}/`
-      : '/api/admin/files/requests/'
-    const r = await fetch(url, {
-      method: reqEditing.value ? 'PATCH' : 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save request')
-    reqModal.value = false
-    await selectCompany(selectedCompanyId.value)
-  } catch (e) {
-    reqError.value = e.message
-  } finally {
-    reqSaving.value = false
-  }
 }
 
 onMounted(() => store.fetchAll())
@@ -572,30 +410,4 @@ tbody tr:hover td { background: var(--accent); }
 .modal-enter-active, .modal-leave-active { transition: opacity 0.18s; }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
 
-/* Files tab */
-.files-admin { display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start; }
-@media (max-width: 720px) { .files-admin { grid-template-columns: 1fr; } }
-.company-switcher { border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--card); }
-.cs-search { width: 100%; height: 36px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 13.5px; margin-bottom: 8px; }
-.cs-search:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
-.cs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
-.cs-item { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; cursor: pointer; background: none; border: none; }
-.cs-item:hover { background: var(--muted); }
-.cs-item--active { background: color-mix(in srgb, var(--primary) 12%, transparent); }
-.cs-name { font-size: 14px; font-weight: 550; color: var(--foreground); }
-.cs-counts { font-size: 12px; color: var(--muted-foreground); }
-.cs-empty { padding: 10px; font-size: 13px; color: var(--muted-foreground); }
-.files-detail { min-width: 0; }
-.fd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.fd-head h3 { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 600; color: var(--foreground); margin: 0; }
-.fd-bucket { margin-bottom: 22px; }
-.fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
-.fd-desc { font-size: 0.85rem; color: var(--muted-foreground); margin: -2px 0 10px; max-width: 70ch; }
-.fd-placeholder { color: var(--muted-foreground); font-size: 0.95rem; padding: 24px 0; }
-.fd-head-actions { display: flex; align-items: center; gap: 8px; }
-.fd-edit { background: none; border: none; color: var(--muted-foreground); cursor: pointer; padding: 2px; border-radius: 6px; display: inline-grid; place-items: center; }
-.fd-edit:hover { background: var(--muted); color: var(--foreground); }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.field textarea { width: 100%; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
-.field textarea:focus { outline: 2px solid var(--ring); outline-offset: -1px; border-color: var(--ring); }
 </style>

@@ -204,6 +204,36 @@ def verify_magic_link(request):
 
 
 @require_GET
+def demo_login(request):
+    """Magic-link-free sign-in for DEMO/sandbox accounts only.
+
+    Lets CiteMed staff open the customer-facing portal in a second browser
+    without minting a magic link. Hard-restricted to PortalUsers flagged
+    `is_demo=True` (sandbox accounts with no real client data) — it can never
+    log in a real customer or admin, so it's safe to expose in production.
+    """
+    from portal.models import PortalUser
+    from portal.rate_limit import client_ip, is_rate_limited
+
+    if is_rate_limited('demo-login', client_ip(request), 30, 300):
+        return JsonResponse({'error': 'Too many attempts. Try again shortly.'}, status=429)
+
+    email = request.GET.get('email', '').strip()
+    user = PortalUser.objects.filter(
+        email__iexact=email, is_demo=True, access_enabled=True,
+    ).first()
+    if not user:
+        # Don't reveal whether the email exists / is a demo account.
+        from django.http import Http404
+        raise Http404()
+
+    request.session['portal_user_id'] = user.pk
+    request.session.save()
+    from django.http import HttpResponseRedirect
+    return HttpResponseRedirect(request.GET.get('next') or '/files')
+
+
+@require_GET
 def me(request):
     user_id = request.session.get('portal_user_id')
     if not user_id:

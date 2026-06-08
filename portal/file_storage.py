@@ -65,6 +65,55 @@ def presign_get(key, download_name=None):
     )
 
 
+def presign_view(key, mime=None):
+    """Presigned GET that renders inline (for PDF/image preview in an iframe)
+    rather than forcing a download."""
+    params = {'Bucket': settings.FILESHARE_BUCKET, 'Key': key, 'ResponseContentDisposition': 'inline'}
+    if mime:
+        params['ResponseContentType'] = mime
+    return _s3().generate_presigned_url(
+        'get_object', Params=params, ExpiresIn=settings.FILESHARE_PRESIGN_TTL
+    )
+
+
+# Magic-byte signatures for the types we ever render inline. Used to reject a
+# file whose real content doesn't match its extension (e.g. HTML uploaded as
+# .pdf) — the cheap, no-infra complement to a full AV scanner.
+SIGNATURES = {
+    'pdf': [b'%PDF'],
+    'png': [b'\x89PNG\r\n\x1a\n'],
+    'gif': [b'GIF87a', b'GIF89a'],
+    'jpg': [b'\xff\xd8\xff'],
+    'jpeg': [b'\xff\xd8\xff'],
+    'webp': [b'RIFF'],
+}
+
+
+def head_bytes(key, n=16):
+    """Read the first n bytes of an object via a ranged GET (cheap)."""
+    try:
+        r = _s3().get_object(
+            Bucket=settings.FILESHARE_BUCKET, Key=key, Range=f'bytes=0-{n - 1}',
+        )
+        return r['Body'].read(n)
+    except Exception as e:
+        logger.warning("head_bytes(%s): %s", key, e)
+        return b''
+
+
+def signature_ok(key, original_name):
+    """True unless the file's real magic bytes contradict its extension (only
+    enforced for types we have a signature for — pdf/images)."""
+    ext = original_name.rsplit('.', 1)[-1].lower() if '.' in original_name else ''
+    sigs = SIGNATURES.get(ext)
+    if not sigs:
+        return True  # no signature on file for this type — nothing to check
+    head = head_bytes(key, 16)
+    if not head:
+        return True  # couldn't read — don't block on a transient S3 error
+    return any(head.startswith(s) for s in sigs)
+
+
 def head_size(key):
     """Return object size in bytes, or None if the object isn't there."""
     try:

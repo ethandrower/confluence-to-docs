@@ -2,8 +2,9 @@ import json
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.core import mail
 
-from portal.models import Company, PortalUser, Bucket, SharedFile, FileActivity
+from portal.models import Company, PortalUser, Bucket, SharedFile, FileActivity, ChecklistItem
 
 
 class ModelScopingTests(TestCase):
@@ -133,6 +134,32 @@ class ListAndManageTests(TestCase):
         self.assertEqual(r['Location'], 'https://s3/get')
         self.assertTrue(FileActivity.objects.filter(file=self.afile, action='download').exists())
 
+    @patch('portal.file_storage.presign_view', return_value='https://s3/inline')
+    def test_view_redirects_inline(self, _m):
+        self._login(self.a)
+        r = self.client.get(f'/api/files/{self.afile.id}/view')
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r['Location'], 'https://s3/inline')
+
+    def test_view_blocked_cross_company(self):
+        self._login(self.g)
+        r = self.client.get(f'/api/files/{self.afile.id}/view')
+        self.assertIn(r.status_code, (403, 404))
+
+    @patch('portal.file_storage.presign_view', return_value='https://s3/inline')
+    @patch('portal.file_storage.presign_get', return_value='https://s3/download')
+    def test_view_non_previewable_falls_back_to_download(self, _get, _view):
+        # A non-PDF/image (even if uploaded with a spoofed mime) must NOT be
+        # served inline — it should redirect to a plain download instead.
+        evil = SharedFile.objects.create(
+            bucket=self.afile.bucket, company=self.acme, uploaded_by=self.a,
+            original_name='note.txt', storage_key='k2', state='ready',
+            size_bytes=10, mime_type='text/html')
+        self._login(self.a)
+        r = self.client.get(f'/api/files/{evil.id}/view')
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r['Location'], 'https://s3/download')  # not the inline URL
+
 
 class AdminFilesTests(TestCase):
     def setUp(self):
@@ -165,6 +192,156 @@ class AdminFilesTests(TestCase):
         self.assertEqual(r.status_code, 200)
         files = [f for b in r.json()['buckets'] for f in b['files']]
         self.assertEqual(len(files), 1)
+
+
+class InboxTests(TestCase):
+    def setUp(self):
+        self.acme = Company.objects.create(name='Acme')
+        self.globex = Company.objects.create(name='Globex')
+        self.admin = PortalUser.objects.create(email='p@citemed.com', role='admin')
+        self.cust = PortalUser.objects.create(email='a@acme.com', company=self.acme, role='customer')
+        from portal.views.files import get_general_bucket
+        self.f1 = SharedFile.objects.create(bucket=get_general_bucket(self.acme), company=self.acme,
+                                            original_name='a.pdf', storage_key='k1', state='ready', size_bytes=10)
+        self.f2 = SharedFile.objects.create(bucket=get_general_bucket(self.globex), company=self.globex,
+                                            original_name='b.pdf', storage_key='k2', state='ready', size_bytes=20)
+
+    def _login(self, u):
+        s = self.client.session
+        s['portal_user_id'] = u.id
+        s.save()
+
+    def test_customer_blocked_from_inbox(self):
+        self._login(self.cust)
+        self.assertEqual(self.client.get('/api/admin/files/inbox/').status_code, 403)
+
+    def test_inbox_returns_files_across_all_companies(self):
+        self._login(self.admin)
+        r = self.client.get('/api/admin/files/inbox/')
+        self.assertEqual(r.status_code, 200)
+        names = {i['original_name'] for i in r.json()['items']}
+        self.assertEqual(names, {'a.pdf', 'b.pdf'})
+        self.assertEqual(r.json()['unprocessed_total'], 2)
+
+    def test_mark_processed_and_filter(self):
+        self._login(self.admin)
+        r = self.client.patch(f'/api/admin/files/{self.f1.id}/processed',
+                              data=json.dumps({'processed': True}), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.f1.refresh_from_db()
+        self.assertTrue(self.f1.processed)
+        self.assertTrue(FileActivity.objects.filter(file=self.f1, action='processed').exists())
+        # default inbox (unprocessed) now hides f1
+        items = self.client.get('/api/admin/files/inbox/').json()
+        self.assertEqual({i['original_name'] for i in items['items']}, {'b.pdf'})
+        self.assertEqual(items['unprocessed_total'], 1)
+        # status=all shows both
+        allitems = self.client.get('/api/admin/files/inbox/?status=all').json()['items']
+        self.assertEqual(len({i['id'] for i in allitems}), 2)
+
+    def test_inbox_company_filter(self):
+        self._login(self.admin)
+        items = self.client.get(f'/api/admin/files/inbox/?company={self.globex.id}').json()['items']
+        self.assertEqual({i['original_name'] for i in items}, {'b.pdf'})
+
+    def test_activity_feed_admin_only_and_lists_events(self):
+        from portal.views.files import log_activity
+        log_activity(self.acme, 'upload', actor=self.cust, name='a.pdf')
+        # customer blocked
+        self._login(self.cust)
+        self.assertEqual(self.client.get('/api/admin/files/activity/').status_code, 403)
+        # admin sees it
+        self._login(self.admin)
+        r = self.client.get('/api/admin/files/activity/')
+        self.assertEqual(r.status_code, 200)
+        actions = [a['action'] for a in r.json()['items']]
+        self.assertIn('upload', actions)
+
+
+class DemoLoginTests(TestCase):
+    def setUp(self):
+        # Seeded by migration 0013 (is_demo=True). Use it directly.
+        self.demo = PortalUser.objects.get(email='demo@citemed.com')
+        self.real = PortalUser.objects.create(email='real@acme.com', role='customer',
+                                             access_enabled=True, is_demo=False)
+
+    def test_seeded_demo_user_is_flagged(self):
+        self.assertTrue(self.demo.is_demo)
+        self.assertEqual(self.demo.role, 'customer')
+
+    def test_demo_user_logs_in_without_magic_link(self):
+        r = self.client.get('/api/auth/demo-login/', {'email': 'demo@citemed.com'})
+        self.assertEqual(r.status_code, 302)
+        me = self.client.get('/api/auth/me/')
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()['user']['email'], 'demo@citemed.com')
+
+    def test_real_user_cannot_use_demo_login(self):
+        r = self.client.get('/api/auth/demo-login/', {'email': 'real@acme.com'})
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)
+
+    def test_unknown_email_404(self):
+        self.assertEqual(self.client.get('/api/auth/demo-login/', {'email': 'nobody@x.com'}).status_code, 404)
+
+
+class ReviewAndChecklistTests(TestCase):
+    def setUp(self):
+        self.acme = Company.objects.create(name='Acme')
+        self.admin = PortalUser.objects.create(email='p@citemed.com', role='admin')
+        self.cust = PortalUser.objects.create(email='a@acme.com', company=self.acme, role='customer')
+        from portal.views.files import get_general_bucket
+        self.req = Bucket.objects.create(company=self.acme, kind='request', title='Q3 PMS', status='open')
+        self.f = SharedFile.objects.create(bucket=self.req, company=self.acme, uploaded_by=self.cust,
+                                           original_name='a.pdf', storage_key='k', state='ready', size_bytes=10)
+
+    def _login(self, u):
+        s = self.client.session
+        s['portal_user_id'] = u.id
+        s.save()
+
+    def test_admin_sets_review_and_revision_emails_customer(self):
+        self._login(self.admin)
+        mail.outbox = []
+        r = self.client.patch(f'/api/admin/files/{self.f.id}/review',
+                              data=json.dumps({'review_status': 'revision', 'notes': 'Fix page 2.'}),
+                              content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.f.refresh_from_db()
+        self.assertEqual(self.f.review_status, 'revision')
+        self.assertEqual(self.f.review_notes, 'Fix page 2.')
+        self.assertTrue(FileActivity.objects.filter(file=self.f, action='status_change').exists())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('a@acme.com', mail.outbox[0].to)
+
+    def test_customer_sees_notes_only_on_revision(self):
+        # pending → notes hidden from customer
+        self.f.review_status = 'pending'; self.f.review_notes = 'secret'; self.f.save()
+        self._login(self.cust)
+        data = self.client.get('/api/files/buckets/').json()
+        f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
+        self.assertEqual(f['review_notes'], '')
+        # revision → notes visible
+        self.f.review_status = 'revision'; self.f.save()
+        data = self.client.get('/api/files/buckets/').json()
+        f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
+        self.assertEqual(f['review_notes'], 'secret')
+
+    def test_checklist_create_link_and_visible(self):
+        self._login(self.admin)
+        item = self.client.post('/api/admin/files/checklist/', data=json.dumps({
+            'bucket_id': self.req.id, 'text': 'Signed PMS report'}), content_type='application/json').json()
+        self.assertEqual(item['text'], 'Signed PMS report')
+        # link the file to the checklist slot
+        r = self.client.patch(f"/api/admin/files/checklist/{item['id']}/",
+                             data=json.dumps({'linked_file_id': self.f.id}), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['linked_file_name'], 'a.pdf')
+        # checklist surfaces in the customer bucket view
+        self._login(self.cust)
+        data = self.client.get('/api/files/buckets/').json()
+        b = next(x for x in data['buckets'] if x['id'] == self.req.id)
+        self.assertEqual(len(b['checklist']), 1)
 
 
 class RequestAuthoringTests(TestCase):

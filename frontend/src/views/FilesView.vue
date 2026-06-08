@@ -1,11 +1,17 @@
 <template>
   <AppShell hide-sidebar>
     <template #content>
-      <div class="fs">
+      <div class="fs" :class="{ 'has-preview': preview }">
         <!-- Sidebar -->
         <aside class="fs-side" aria-label="File buckets">
           <div class="fs-group">
-            <h2 class="fs-group-title">Requests from CiteMed</h2>
+            <div class="fs-group-head">
+              <h2 class="fs-group-title">Requests from CiteMed</h2>
+              <button class="refresh-mini" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh requests" @click="store.load()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+                Refresh
+              </button>
+            </div>
             <p v-if="!store.requests.length && !store.loading" class="fs-group-empty">Nothing requested yet.</p>
             <button
               v-for="b in store.requests"
@@ -50,15 +56,36 @@
 
           <template v-else-if="active">
             <header class="fs-head">
-              <h1>{{ active.title }}</h1>
-              <p v-if="active.kind === 'request'" class="fs-submeta">
-                <span v-if="active.requested_by_name">Requested by {{ active.requested_by_name }}</span>
-                <span v-if="active.created_at"> · {{ relDate(active.created_at) }}</span>
-                <span v-if="active.due_at" class="fs-due" :class="duePill(active) ? `due--${duePill(active).tone}` : ''"> · Due {{ shortDate(active.due_at) }}</span>
-              </p>
+              <div>
+                <h1>{{ active.title }}</h1>
+                <p v-if="active.kind === 'request'" class="fs-submeta">
+                  <span v-if="active.requested_by_name">Requested by {{ active.requested_by_name }}</span>
+                  <span v-if="active.created_at"> · {{ relDate(active.created_at) }}</span>
+                  <span v-if="active.due_at" class="fs-due" :class="duePill(active) ? `due--${duePill(active).tone}` : ''"> · Due {{ shortDate(active.due_at) }}</span>
+                </p>
+              </div>
+              <button class="refresh-btn" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh" @click="store.load()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+                {{ store.loading ? 'Refreshing…' : 'Refresh' }}
+              </button>
             </header>
 
             <p v-if="active.description" class="fs-desc">{{ active.description }}</p>
+
+            <div v-if="active.kind === 'request' && active.checklist && active.checklist.length" class="fs-check">
+              <div class="fs-check-head">
+                <span class="fs-check-label">Requested documents</span>
+                <span class="fs-check-count">{{ checklistReceived(active) }} / {{ active.checklist.length }} received</span>
+              </div>
+              <div class="fs-check-bar"><div :style="{ width: checklistPct(active) + '%' }" /></div>
+              <ul class="fs-check-list">
+                <li v-for="c in active.checklist" :key="c.id" :class="{ done: c.linked_file }">
+                  <span class="fs-check-dot" :class="c.linked_file && 'on'" />
+                  <span class="fs-check-text">{{ c.text }}</span>
+                  <span v-if="c.linked_file" class="fs-check-recv">Received</span>
+                </li>
+              </ul>
+            </div>
 
             <FileUploader :bucket-id="active.id" :label="uploadLabel" :key="active.id" @uploaded="onUploaded" />
 
@@ -69,16 +96,23 @@
               </div>
 
               <ul v-if="filtered.length" class="rows">
-                <li v-for="f in filtered" :key="f.id" class="row" :class="{ flash: flash.has(f.original_name) }">
+                <li v-for="f in filtered" :key="f.id" class="row" :class="{ flash: flash.has(f.original_name), 'row-active': preview && preview.id === f.id }">
                   <span class="tile" :data-cat="cat(f.original_name)">{{ ext(f.original_name) }}</span>
                   <div class="row-main">
                     <template v-if="editingId === f.id">
                       <input ref="renameInput" v-model="editName" class="rename" @keydown.enter="saveRename(f)" @keydown.esc="cancelRename" @blur="saveRename(f)" />
                     </template>
                     <span v-else class="row-name" :title="f.original_name">{{ f.original_name }}</span>
-                    <span class="row-sub">{{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}</span>
+                    <span class="row-sub">
+                      {{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}
+                      <span v-if="f.review_status" class="rv-badge" :class="`rv-badge--${f.review_status}`">{{ reviewLabel(f.review_status) }}</span>
+                    </span>
+                    <span v-if="f.review_notes" class="rv-note">{{ f.review_notes }}</span>
                   </div>
                   <span class="row-actions">
+                    <button v-if="previewable(f.original_name)" class="ico" :class="preview && preview.id === f.id && 'ico--on'" :title="preview && preview.id === f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
                     <a class="ico" :href="store.downloadUrl(f.id)" title="Download" aria-label="Download">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     </a>
@@ -100,6 +134,8 @@
 
           <p v-else class="fs-placeholder">Select a request or your files to get started.</p>
         </section>
+
+        <Transition name="pane"><FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="preview = null" /></Transition>
       </div>
 
       <!-- toast -->
@@ -126,6 +162,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FileUploader from '@/components/files/FileUploader.vue'
+import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
 import { useFilesStore } from '@/stores/files'
 
 const store = useFilesStore()
@@ -136,6 +173,13 @@ const editName = ref('')
 const renameInput = ref(null)
 const toast = ref('')
 const flash = ref(new Set())
+const preview = ref(null)  // { id, src, name }
+
+function previewable(name) { return /\.(pdf|png|jpe?g|gif|webp)$/i.test(name) }
+function openPreview(f) {
+  if (preview.value?.id === f.id) { preview.value = null; return }  // toggle
+  preview.value = { id: f.id, src: `/api/files/${f.id}/view`, name: f.original_name }
+}
 
 onMounted(store.load)
 
@@ -148,16 +192,17 @@ const filtered = computed(() => {
 })
 
 /* Status: quiet dot + label. Color reserved for action/urgency only. */
-function statusLabel(b) {
-  if (b.status === 'complete') return 'Complete'
-  if (b.status === 'partial') return 'In progress'
-  return b.files.length ? 'Open' : 'Awaiting upload'
+// Customer-facing request status, derived from what's actually happened
+// (not the raw admin 'open' flag) so it never goes stale.
+function reqState(b) {
+  if (b.status === 'complete') return ['Complete', 'success']
+  if (!b.files.length) return ['Awaiting your upload', 'warning']
+  if (b.files.some((f) => f.review_status === 'revision')) return ['Action needed', 'danger']
+  if (b.files.every((f) => f.review_status === 'approved')) return ['Approved', 'success']
+  return ['Awaiting review', 'warning']  // files uploaded, not yet approved/revised
 }
-function statusTone(b) {
-  if (b.status === 'complete') return 'done'
-  if (b.status === 'open' && !b.files.length) return 'action'
-  return 'muted'
-}
+function statusLabel(b) { return reqState(b)[0] }
+function statusTone(b) { return reqState(b)[1] }
 function duePill(b) {
   if (!b.due_at || b.status === 'complete') return null
   const days = Math.ceil((new Date(b.due_at) - Date.now()) / 86400000)
@@ -208,6 +253,13 @@ function relDate(d) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function shortDate(d) { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
+// Customer collapses both pre-decision states (pending / in-review) to "Awaiting review".
+function reviewLabel(s) { return { pending: 'Awaiting review', review: 'Awaiting review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
+function checklistReceived(b) { return (b.checklist || []).filter((c) => c.linked_file).length }
+function checklistPct(b) {
+  const total = (b.checklist || []).length
+  return total ? Math.round(checklistReceived(b) / total * 100) : 0
+}
 function ext(name) {
   const dot = name.lastIndexOf('.')
   return dot === -1 ? 'FILE' : name.slice(dot + 1).toUpperCase().slice(0, 4)
@@ -225,15 +277,30 @@ function cat(name) {
 
 <style scoped>
 .fs {
-  display: grid;
-  grid-template-columns: 272px 1fr;
+  display: flex;
   gap: 28px;
+  align-items: flex-start;
   max-width: 1120px;
   margin: 0 auto;
   padding: clamp(1.25rem, 3vw, 2rem);
-  align-items: start;
 }
-@media (max-width: 840px) { .fs { grid-template-columns: 1fr; } }
+.fs.has-preview { max-width: 1320px; }
+.fs-side { flex: 0 0 272px; }
+.fs-main { flex: 1 1 auto; min-width: 0; }
+.fs :deep(.pvp) { flex: 0 0 clamp(340px, 42%, 600px); }
+@media (max-width: 1100px) { .fs.has-preview .fs-side { display: none; } }
+@media (max-width: 840px) { .fs { flex-wrap: wrap; } .fs-side { flex-basis: 100%; } }
+
+/* Pane reveal: width + fade together, eased out */
+.pane-enter-active, .pane-leave-active { transition: max-width 0.34s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, transform 0.34s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
+.pane-enter-from, .pane-leave-to { max-width: 0; opacity: 0; transform: translateX(18px); }
+.pane-enter-to, .pane-leave-from { max-width: 640px; }
+@media (prefers-reduced-motion: reduce) {
+  .pane-enter-active, .pane-leave-active { transition: none; }
+  .pane-enter-from, .pane-leave-to { max-width: 640px; transform: none; }
+}
+.row.row-active { border-color: var(--brand-accent); background: color-mix(in srgb, var(--brand-accent) 6%, var(--card)); }
+.ico--on { background: var(--accent); color: var(--primary); }
 
 /* ── Sidebar ── */
 .fs-group { margin-bottom: 1.5rem; }
@@ -258,19 +325,37 @@ function cat(name) {
 .b-title { font-size: 0.9rem; font-weight: 600; color: var(--foreground); line-height: 1.3; }
 .b-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 
-.status { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 550; color: var(--muted-foreground); }
+.status { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 600; color: var(--muted-foreground); }
 .status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.status--action { color: var(--brand-accent); }
-.status--done { color: var(--muted-foreground); }
+.status--success { color: var(--success); }
+.status--warning { color: var(--warning); }
+.status--info { color: var(--info); }
+.status--danger { color: var(--destructive); }
 .status--muted { color: var(--muted-foreground); }
 
 .due { font-size: 0.72rem; font-weight: 550; color: var(--muted-foreground); }
-.due--soon { color: var(--muted-foreground); font-weight: 650; }  /* emphasis via weight, not hue */
-.due--over { color: var(--destructive); font-weight: 650; }       /* overdue = the one earned warning color */
+.due--soon { color: var(--warning); font-weight: 650; }
+.due--over { color: var(--destructive); font-weight: 650; }
 
 /* ── Detail ── */
 .fs-main { min-width: 0; }
+.fs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .fs-head h1 { font-family: var(--font-ui); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; color: var(--foreground); }
+.refresh-btn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+.refresh-btn svg { width: 15px; height: 15px; }
+.refresh-btn:hover { color: var(--brand-accent); border-color: var(--brand-accent); }
+.refresh-btn:disabled { opacity: 0.6; cursor: default; }
+.refresh-btn.is-spinning svg { animation: rspin 0.7s linear infinite; }
+@keyframes rspin { to { transform: rotate(360deg); } }
+
+.fs-group-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+.fs-group-head .fs-group-title { margin-bottom: 0; }
+.refresh-mini { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--muted-foreground); font: inherit; font-size: 0.68rem; font-weight: 600; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.refresh-mini svg { width: 12px; height: 12px; }
+.refresh-mini:hover { color: var(--brand-accent); }
+.refresh-mini:disabled { opacity: 0.6; cursor: default; }
+.refresh-mini.is-spinning svg { animation: rspin 0.7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg, .refresh-mini.is-spinning svg { animation: none; } }
 .fs-submeta { color: var(--muted-foreground); font-size: 0.85rem; margin-top: 0.25rem; }
 .fs-due.due--over { color: var(--destructive); font-weight: 600; }
 .fs-due.due--soon { color: var(--muted-foreground); font-weight: 600; }
@@ -284,6 +369,26 @@ function cat(name) {
   color: var(--foreground); font-size: 0.9rem; line-height: 1.55;
 }
 .fs-placeholder { color: var(--muted-foreground); padding: 3rem 0; text-align: center; }
+
+/* Requested-documents checklist (read-only for customer) */
+.fs-check { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.85rem 1rem; margin: 1rem 0 1.25rem; background: var(--card); }
+.fs-check-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.fs-check-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: var(--muted-foreground); }
+.fs-check-count { font-size: 0.78rem; color: var(--muted-foreground); }
+.fs-check-bar { height: 5px; border-radius: 999px; background: var(--secondary); overflow: hidden; margin-bottom: 0.6rem; }
+.fs-check-bar div { height: 100%; background: var(--success); transition: width 0.3s ease; }
+.fs-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.fs-check-list li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; color: var(--foreground); }
+.fs-check-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--input); flex-shrink: 0; }
+.fs-check-dot.on { background: var(--success); border-color: var(--success); }
+.fs-check-recv { margin-left: auto; font-size: 0.68rem; font-weight: 700; color: var(--success); }
+
+/* Review status badge + note (customer) — colour carries the state */
+.rv-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; border-radius: 999px; color: var(--muted-foreground); background: var(--secondary); }
+.rv-badge--pending, .rv-badge--review { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
+.rv-badge--approved { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 14%, transparent); }
+.rv-note { font-size: 0.76rem; color: var(--destructive); margin-top: 0.15rem; }
 
 /* ── File list ── */
 .files { margin-top: 1.5rem; }
