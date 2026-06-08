@@ -14,6 +14,8 @@ urlpatterns = [
     path('admin/files/companies/', files_admin.companies, name='admin-files-companies'),
     path('admin/files/companies/<int:company_id>/', files_admin.company_files, name='admin-files-company'),
     path('admin/files/companies/<int:company_id>/download-all', files_admin.company_download_all, name='admin-files-zip'),
+    path('admin/files/requests/', files_admin.create_request, name='admin-files-create-request'),
+    path('admin/files/requests/<int:bucket_id>/', files_admin.update_request, name='admin-files-update-request'),
     path('admin/files/<int:file_id>/download', files_admin.admin_file_download, name='admin-files-download'),
 
     # File sharing (customer + shared)

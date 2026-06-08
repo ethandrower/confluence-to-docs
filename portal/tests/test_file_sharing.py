@@ -165,3 +165,48 @@ class AdminFilesTests(TestCase):
         self.assertEqual(r.status_code, 200)
         files = [f for b in r.json()['buckets'] for f in b['files']]
         self.assertEqual(len(files), 1)
+
+
+class RequestAuthoringTests(TestCase):
+    def setUp(self):
+        self.acme = Company.objects.create(name='Acme')
+        self.admin = PortalUser.objects.create(email='p@citemed.com', role='admin')
+        self.cust = PortalUser.objects.create(email='a@acme.com', company=self.acme, role='customer')
+
+    def _login(self, u):
+        s = self.client.session
+        s['portal_user_id'] = u.id
+        s.save()
+
+    def test_admin_creates_request_and_customer_sees_it(self):
+        self._login(self.admin)
+        r = self.client.post('/api/admin/files/requests/', data=json.dumps({
+            'company_id': self.acme.id, 'title': 'Q3 PMS Report',
+            'description': 'Upload your PMS report.', 'due_at': '2026-07-01', 'status': 'open',
+        }), content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        b = r.json()
+        self.assertEqual(b['kind'], 'request')
+        self.assertEqual(b['requested_by_name'], 'p@citemed.com')
+        self.assertTrue(FileActivity.objects.filter(bucket_id=b['id'], action='request_created').exists())
+        # customer sees the request in their bucket list
+        self._login(self.cust)
+        r2 = self.client.get('/api/files/buckets/')
+        titles = [x['title'] for x in r2.json()['buckets']]
+        self.assertIn('Q3 PMS Report', titles)
+
+    def test_customer_cannot_create_request(self):
+        self._login(self.cust)
+        r = self.client.post('/api/admin/files/requests/', data=json.dumps({
+            'company_id': self.acme.id, 'title': 'X'}), content_type='application/json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_admin_edits_request(self):
+        self._login(self.admin)
+        b = self.client.post('/api/admin/files/requests/', data=json.dumps({
+            'company_id': self.acme.id, 'title': 'Orig'}), content_type='application/json').json()
+        r = self.client.patch(f"/api/admin/files/requests/{b['id']}/", data=json.dumps({
+            'title': 'Updated', 'status': 'complete'}), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['title'], 'Updated')
+        self.assertEqual(r.json()['status'], 'complete')

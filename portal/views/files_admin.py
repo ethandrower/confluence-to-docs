@@ -3,15 +3,34 @@ and a "download all" zip. Gated to portal admins via require_portal_admin.
 Read-only on the admin side in V1 (no upload/rename/delete) for audit-trail
 simplicity."""
 import io
+import json
 import zipfile
 
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
+from django.utils.dateparse import parse_datetime, parse_date
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 from portal import file_storage
 from portal.decorators import require_portal_admin
 from portal.models import Company, Bucket, SharedFile
 from portal.serializers import BucketSerializer
 from portal.views.files import get_general_bucket, log_activity
+
+
+def _parse_due(value):
+    """Accept an ISO datetime or a plain YYYY-MM-DD date; return aware datetime or None."""
+    if not value:
+        return None
+    dt = parse_datetime(value)
+    if dt is None:
+        d = parse_date(value)
+        if d:
+            dt = timezone.datetime(d.year, d.month, d.day)
+    if dt and timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    return dt
 
 
 @require_portal_admin
@@ -65,6 +84,57 @@ def company_download_all(request, company_id):
     resp = HttpResponse(buf.getvalue(), content_type='application/zip')
     resp['Content-Disposition'] = f'attachment; filename="{company.name}-files.zip"'
     return resp
+
+
+@csrf_exempt
+@require_portal_admin
+@require_http_methods(['POST'])
+def create_request(request):
+    """CSM/admin creates a request bucket asking a company for specific docs."""
+    data = json.loads(request.body or '{}')
+    company = Company.objects.filter(id=data.get('company_id')).first()
+    if not company:
+        return JsonResponse({'error': 'Company not found.'}, status=404)
+    title = (data.get('title') or '').strip()
+    if not title:
+        return JsonResponse({'error': 'Title required.'}, status=400)
+    status = data.get('status') or 'open'
+    if status not in ('open', 'partial', 'complete'):
+        status = 'open'
+    b = Bucket.objects.create(
+        company=company, kind=Bucket.KIND_REQUEST, title=title,
+        description=data.get('description', ''), due_at=_parse_due(data.get('due_at')),
+        status=status, requested_by=request.portal_user,
+    )
+    log_activity(company, 'request_created', actor=request.portal_user, bucket=b, title=title)
+    return JsonResponse(BucketSerializer(b).data, status=201)
+
+
+@csrf_exempt
+@require_portal_admin
+@require_http_methods(['PATCH', 'DELETE'])
+def update_request(request, bucket_id):
+    b = Bucket.objects.filter(id=bucket_id, kind=Bucket.KIND_REQUEST).first()
+    if not b:
+        return JsonResponse({'error': 'Request not found.'}, status=404)
+    if request.method == 'DELETE':
+        log_activity(b.company, 'request_deleted', actor=request.portal_user, title=b.title)
+        b.delete()
+        return JsonResponse({'ok': True})
+    data = json.loads(request.body or '{}')
+    if 'title' in data:
+        title = (data.get('title') or '').strip()
+        if not title:
+            return JsonResponse({'error': 'Title required.'}, status=400)
+        b.title = title
+    if 'description' in data:
+        b.description = data.get('description', '')
+    if 'due_at' in data:
+        b.due_at = _parse_due(data.get('due_at'))
+    if 'status' in data and data.get('status') in ('open', 'partial', 'complete'):
+        b.status = data.get('status')
+    b.save()
+    return JsonResponse(BucketSerializer(b).data)
 
 
 @require_portal_admin

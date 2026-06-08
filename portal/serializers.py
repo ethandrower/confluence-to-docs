@@ -67,11 +67,19 @@ class SharedFileSerializer(serializers.ModelSerializer):
 
 class BucketSerializer(serializers.ModelSerializer):
     files = serializers.SerializerMethodField()
+    requested_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Bucket
-        fields = ['id', 'kind', 'title', 'description', 'due_at', 'status', 'files']
+        fields = [
+            'id', 'kind', 'title', 'description', 'due_at', 'status',
+            'requested_by_name', 'created_at', 'files',
+        ]
 
     def get_files(self, obj):
         qs = obj.files.filter(deleted_at__isnull=True, state=SharedFile.STATE_READY)
         return SharedFileSerializer(qs, many=True).data
+
+    def get_requested_by_name(self, obj):
+        u = obj.requested_by
+        return (u.name or u.email) if u else None
