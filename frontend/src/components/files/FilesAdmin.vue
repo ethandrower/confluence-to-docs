@@ -12,6 +12,7 @@
       </button>
       <button class="refresh-btn" :class="refreshing && 'is-spinning'" :disabled="refreshing" title="Refresh" aria-label="Refresh" @click="refresh">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+        {{ refreshing ? 'Refreshing…' : 'Refresh' }}
       </button>
     </div>
 
@@ -113,6 +114,10 @@
           <div class="fd-head">
             <h3>{{ selectedCompany.name }}</h3>
             <div class="fd-head-actions">
+              <button class="refresh-btn" :class="refreshing && 'is-spinning'" :disabled="refreshing" title="Refresh this company" aria-label="Refresh" @click="refresh">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+                {{ refreshing ? 'Refreshing…' : 'Refresh' }}
+              </button>
               <a v-if="companyFileCount" class="btn-outline" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Download all
@@ -504,10 +509,11 @@ tbody tr:hover td { background: var(--accent); }
 
 /* ── Files: segmented modes + inbox ── */
 .files-modes { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
-.refresh-btn { margin-left: auto; display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
-.refresh-btn svg { width: 16px; height: 16px; }
+.refresh-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.refresh-btn svg { width: 15px; height: 15px; }
 .refresh-btn:hover { color: var(--primary); border-color: var(--primary); }
 .refresh-btn:disabled { opacity: 0.6; cursor: default; }
+.files-modes .refresh-btn { margin-left: auto; }
 .refresh-btn.is-spinning svg { animation: rspin 0.7s linear infinite; }
 @keyframes rspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg { animation: none; } }

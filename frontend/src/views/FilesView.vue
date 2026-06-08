@@ -5,7 +5,13 @@
         <!-- Sidebar -->
         <aside class="fs-side" aria-label="File buckets">
           <div class="fs-group">
-            <h2 class="fs-group-title">Requests from CiteMed</h2>
+            <div class="fs-group-head">
+              <h2 class="fs-group-title">Requests from CiteMed</h2>
+              <button class="refresh-mini" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh requests" @click="store.load()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+                Refresh
+              </button>
+            </div>
             <p v-if="!store.requests.length && !store.loading" class="fs-group-empty">Nothing requested yet.</p>
             <button
               v-for="b in store.requests"
@@ -60,6 +66,7 @@
               </div>
               <button class="refresh-btn" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh" @click="store.load()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+                {{ store.loading ? 'Refreshing…' : 'Refresh' }}
               </button>
             </header>
 
@@ -333,13 +340,21 @@ function cat(name) {
 .fs-main { min-width: 0; }
 .fs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .fs-head h1 { font-family: var(--font-ui); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; color: var(--foreground); }
-.refresh-btn { flex-shrink: 0; display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
-.refresh-btn svg { width: 16px; height: 16px; }
+.refresh-btn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+.refresh-btn svg { width: 15px; height: 15px; }
 .refresh-btn:hover { color: var(--brand-accent); border-color: var(--brand-accent); }
 .refresh-btn:disabled { opacity: 0.6; cursor: default; }
 .refresh-btn.is-spinning svg { animation: rspin 0.7s linear infinite; }
 @keyframes rspin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg { animation: none; } }
+
+.fs-group-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+.fs-group-head .fs-group-title { margin-bottom: 0; }
+.refresh-mini { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--muted-foreground); font: inherit; font-size: 0.68rem; font-weight: 600; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.refresh-mini svg { width: 12px; height: 12px; }
+.refresh-mini:hover { color: var(--brand-accent); }
+.refresh-mini:disabled { opacity: 0.6; cursor: default; }
+.refresh-mini.is-spinning svg { animation: rspin 0.7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg, .refresh-mini.is-spinning svg { animation: none; } }
 .fs-submeta { color: var(--muted-foreground); font-size: 0.85rem; margin-top: 0.25rem; }
 .fs-due.due--over { color: var(--destructive); font-weight: 600; }
 .fs-due.due--soon { color: var(--muted-foreground); font-weight: 600; }
