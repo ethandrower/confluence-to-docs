@@ -127,6 +127,7 @@
               </ul>
               <div v-else class="empty">
                 <p v-if="q">No files match “{{ q }}”.</p>
+                <p v-else-if="isFirstRun">Welcome! Upload documents for the CiteMed team using the box above. If CiteMed asks you for specific files, those requests will appear under <strong>“Requests from CiteMed”</strong> on the left.</p>
                 <p v-else>Nothing here yet — drop files above to send them to CiteMed.</p>
               </div>
             </div>
@@ -185,6 +186,9 @@ onMounted(store.load)
 
 const active = computed(() => store.activeBucket)
 const uploadLabel = computed(() => (active.value?.kind === 'request' ? 'this request' : ''))
+const isFirstRun = computed(() =>
+  !store.requests.length && store.buckets.every((b) => !b.files.length)
+)
 const filtered = computed(() => {
   if (!active.value) return []
   const t = q.value.toLowerCase().trim()

@@ -175,6 +175,7 @@ class Bucket(models.Model):
     )
     due_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='general')
+    last_reminder_at = models.DateTimeField(null=True, blank=True)  # due-date reminder throttle
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

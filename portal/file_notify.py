@@ -90,6 +90,35 @@ def notify_revision(file):
     )
 
 
+def notify_request_complete(bucket):
+    """Closes the loop: tell the customer their submission was accepted."""
+    _send(
+        'Your submission is complete',
+        _company_emails(bucket.company),
+        heading='Your documents have been accepted',
+        body=f'CiteMed has completed review of “{bucket.title}”. '
+             'No further action is needed — thank you.',
+        cta_label='View in your portal', cta_url=f'{_site()}/files',
+    )
+
+
+def notify_due_reminder(bucket, overdue=False):
+    """Nudge the customer about an open request that's due soon or overdue."""
+    if overdue:
+        heading = 'A document request is overdue'
+        body = (f'“{bucket.title}” was due and we haven’t received everything yet. '
+                'Please upload the requested files when you can.')
+    else:
+        heading = 'Reminder: documents requested by CiteMed'
+        body = (f'“{bucket.title}” is due soon. Please upload the requested files in your portal.')
+    _send(
+        'Reminder: CiteMed needs documents from you',
+        _company_emails(bucket.company),
+        heading=heading, body=body,
+        cta_label='Upload documents', cta_url=f'{_site()}/files',
+    )
+
+
 def notify_upload(file):
     """Tell the CSM who created the request that the customer uploaded."""
     csm = getattr(file.bucket, 'requested_by', None)
