@@ -151,7 +151,10 @@
                     <tr v-if="preview"><th>File</th><th>Client</th><th></th></tr>
                     <tr v-else><th>File</th><th>Client</th><th>Request</th><th>Uploaded</th><th>By</th><th></th></tr>
                   </thead>
-                  <tbody>
+                  <tbody v-if="inboxLoading">
+                    <tr v-for="n in 4" :key="'sk'+n" class="sk-row"><td :colspan="preview ? 3 : 6"><span class="sk-bar" /></td></tr>
+                  </tbody>
+                  <tbody v-else>
                     <tr v-for="i in inboxItems" :key="i.id" :class="[i.processed && 'is-processed', preview && preview.id===i.id && 'row-active']">
                       <td>{{ i.original_name }} <span class="dim">· {{ fmtSize(i.size_bytes) }}</span></td>
                       <td><button class="link" @click="selectCompany(i.company.id); filesMode='company'">{{ i.company.name }}</button></td>
@@ -169,7 +172,7 @@
                           <a class="act" :href="`/api/admin/files/${i.id}/download`" title="Download" aria-label="Download">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                           </a>
-                          <button v-if="!preview" class="done-btn" :class="i.processed && 'is-on'" @click="toggleProcessed(i)" :title="i.processed ? 'Processed — click to undo' : 'Mark as processed'">
+                          <button v-if="!preview" class="done-btn" :class="i.processed && 'is-on'" @click="toggleProcessed(i)" :aria-pressed="i.processed" :aria-label="i.processed ? `Mark ${i.original_name} not processed` : `Mark ${i.original_name} processed`" :title="i.processed ? 'Processed — click to undo' : 'Mark as processed'">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             {{ i.processed ? 'Done' : 'Mark done' }}
                           </button>
@@ -231,7 +234,7 @@
                     <div v-for="c in b.checklist" :key="c.id" class="check-row">
                       <span class="check-dot" :class="c.linked_file && 'check-dot--on'" />
                       <span class="check-text">{{ c.text }}</span>
-                      <select class="check-link" :value="c.linked_file || ''" @change="linkChecklist(c, $event.target.value)">
+                      <select class="check-link" :value="c.linked_file || ''" :aria-label="`Link a file to: ${c.text}`" @change="linkChecklist(c, $event.target.value)">
                         <option value="">— link a file —</option>
                         <option v-for="f in b.files" :key="f.id" :value="f.id">{{ f.original_name }}</option>
                       </select>
@@ -250,7 +253,7 @@
                         <span class="fd-sub">{{ fmtSize(f.size_bytes) }} · {{ fmtFileDate(f.uploaded_at) }} · {{ f.uploaded_by_name || '—' }}</span>
                         <span v-if="f.review_notes" class="fd-note">Note: {{ f.review_notes }}</span>
                       </span>
-                      <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status" @change="setReview(f, $event.target.value)">
+                      <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status" :aria-label="`Review status for ${f.original_name}`" @change="setReview(f, $event.target.value)">
                         <option value="pending">Pending</option>
                         <option value="review">In review</option>
                         <option value="approved">Approved</option>
@@ -501,6 +504,7 @@ const inboxItems = ref([])
 const inboxStatus = ref('unprocessed')
 const inboxCompany = ref('')
 const inboxUnprocessed = ref(0)
+const inboxLoading = ref(false)
 
 async function loadFileCompanies() {
   if (fileCompanies.value.length) return
@@ -508,13 +512,18 @@ async function loadFileCompanies() {
   if (r.ok) fileCompanies.value = (await r.json()).companies
 }
 async function loadInbox() {
-  const params = new URLSearchParams({ status: inboxStatus.value })
-  if (inboxCompany.value) params.set('company', inboxCompany.value)
-  const r = await fetch(`/api/admin/files/inbox/?${params}`, { credentials: 'include' })
-  if (r.ok) {
-    const data = await r.json()
-    inboxItems.value = data.items
-    inboxUnprocessed.value = data.unprocessed_total
+  inboxLoading.value = true
+  try {
+    const params = new URLSearchParams({ status: inboxStatus.value })
+    if (inboxCompany.value) params.set('company', inboxCompany.value)
+    const r = await fetch(`/api/admin/files/inbox/?${params}`, { credentials: 'include' })
+    if (r.ok) {
+      const data = await r.json()
+      inboxItems.value = data.items
+      inboxUnprocessed.value = data.unprocessed_total
+    }
+  } finally {
+    inboxLoading.value = false
   }
 }
 async function openFiles() {
@@ -869,6 +878,12 @@ tbody tr:hover td { background: var(--accent); }
 .inbox-actions { display: flex; gap: 14px; justify-content: flex-end; }
 .is-processed td { color: var(--muted-foreground); }
 .row-active > td { background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+
+/* Inbox loading skeleton */
+.sk-row td { padding: 10px; }
+.sk-bar { display: block; height: 16px; border-radius: 6px; background: linear-gradient(90deg, var(--muted) 25%, var(--secondary) 37%, var(--muted) 63%); background-size: 400% 100%; animation: sk-shimmer 1.4s ease infinite; }
+@keyframes sk-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sk-bar { animation: none; } }
 
 /* Split preview (inbox + company) — flex so the table shrinks smoothly */
 .split { display: flex; gap: 16px; align-items: flex-start; }
