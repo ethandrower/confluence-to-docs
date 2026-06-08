@@ -48,9 +48,8 @@ def _ext_ok(name):
 
 
 def _own_file(request, file_id):
-    return SharedFile.objects.filter(
-        id=file_id, company_id=request.portal_user.company_id, deleted_at__isnull=True,
-    ).first()
+    # Route through the scoped manager so isolation lives in one place.
+    return SharedFile.for_user(request.portal_user).filter(id=file_id).first()
 
 
 # ── Listing ──────────────────────────────────────────────────────────────
@@ -111,9 +110,7 @@ def upload_init(request):
 def upload_complete(request):
     user = request.portal_user
     data = json.loads(request.body or '{}')
-    f = SharedFile.objects.filter(
-        id=data.get('file_id'), company_id=user.company_id, deleted_at__isnull=True,
-    ).first()
+    f = SharedFile.for_user(user).filter(id=data.get('file_id')).first()
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
     size = file_storage.head_size(f.storage_key)
