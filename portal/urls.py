@@ -12,6 +12,7 @@ urlpatterns = [
 
     # Admin — file sharing
     path('admin/files/inbox/', files_admin.inbox, name='admin-files-inbox'),
+    path('admin/files/activity/', files_admin.activity, name='admin-files-activity'),
     path('admin/files/<int:file_id>/processed', files_admin.set_processed, name='admin-files-processed'),
     path('admin/files/companies/', files_admin.companies, name='admin-files-companies'),
     path('admin/files/companies/<int:company_id>/', files_admin.company_files, name='admin-files-company'),

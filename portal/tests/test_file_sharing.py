@@ -244,6 +244,19 @@ class InboxTests(TestCase):
         items = self.client.get(f'/api/admin/files/inbox/?company={self.globex.id}').json()['items']
         self.assertEqual({i['original_name'] for i in items}, {'b.pdf'})
 
+    def test_activity_feed_admin_only_and_lists_events(self):
+        from portal.views.files import log_activity
+        log_activity(self.acme, 'upload', actor=self.cust, name='a.pdf')
+        # customer blocked
+        self._login(self.cust)
+        self.assertEqual(self.client.get('/api/admin/files/activity/').status_code, 403)
+        # admin sees it
+        self._login(self.admin)
+        r = self.client.get('/api/admin/files/activity/')
+        self.assertEqual(r.status_code, 200)
+        actions = [a['action'] for a in r.json()['items']]
+        self.assertIn('upload', actions)
+
 
 class ReviewAndChecklistTests(TestCase):
     def setUp(self):

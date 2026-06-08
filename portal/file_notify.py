@@ -34,10 +34,16 @@ def _send(subject, body, recipients):
         return
 
     def _do():
-        try:
-            send_mail(subject, body, _from(), recipients, fail_silently=True)
-        except Exception as e:  # pragma: no cover - defensive
-            logger.warning("file_notify send failed (%s): %s", subject, e)
+        import time
+        for attempt in range(3):
+            try:
+                sent = send_mail(subject, body, _from(), recipients, fail_silently=False)
+                if sent:
+                    return
+            except Exception as e:
+                logger.warning("file_notify send attempt %d failed (%s): %s", attempt + 1, subject, e)
+            time.sleep(2 * (attempt + 1))  # 2s, 4s backoff
+        logger.error("file_notify gave up after retries (%s) → %s", subject, recipients)
 
     # Real mail backends (SMTP/Mailgun) can be slow — send off the request
     # thread so they never delay an upload/request. In tests/dev (locmem or

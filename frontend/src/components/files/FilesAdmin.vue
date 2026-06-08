@@ -7,6 +7,29 @@
       <button role="tab" :aria-selected="filesMode==='company'" class="seg" :class="filesMode==='company' && 'seg--active'" @click="filesMode='company'">
         By company
       </button>
+      <button role="tab" :aria-selected="filesMode==='activity'" class="seg" :class="filesMode==='activity' && 'seg--active'" @click="openActivity">
+        Activity
+      </button>
+    </div>
+
+    <!-- ACTIVITY: append-only audit trail -->
+    <div v-show="filesMode==='activity'" class="activity">
+      <span class="panel-hint">Every upload, download, review, and status change — newest first.</span>
+      <div class="table-wrap" style="margin-top:12px">
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>Action</th><th>File</th><th>Client</th></tr></thead>
+          <tbody>
+            <tr v-for="a in activityItems" :key="a.id">
+              <td class="dim">{{ fmtWhen(a.created_at) }}</td>
+              <td>{{ a.actor }}</td>
+              <td><span class="act-tag" :class="`act-tag--${a.action}`">{{ actionLabel(a.action) }}</span></td>
+              <td>{{ a.file || '—' }}</td>
+              <td>{{ a.company || '—' }}</td>
+            </tr>
+            <tr v-if="!activityItems.length"><td colspan="5" class="empty">No activity yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- INBOX: recent uploads across all clients -->
@@ -244,6 +267,27 @@ function openInbox() {
   loadInbox()
 }
 
+// Activity (audit trail)
+const activityItems = ref([])
+async function loadActivity() {
+  const r = await fetch('/api/admin/files/activity/?limit=200', { credentials: 'include' })
+  if (r.ok) activityItems.value = (await r.json()).items
+}
+function openActivity() {
+  preview.value = null
+  filesMode.value = 'activity'
+  loadActivity()
+}
+const ACTION_LABELS = {
+  upload: 'Uploaded', download: 'Downloaded', rename: 'Renamed', delete: 'Deleted',
+  status_change: 'Review changed', note: 'Note', request_created: 'Request created',
+  request_deleted: 'Request deleted', processed: 'Marked processed', unprocessed: 'Unmarked',
+}
+function actionLabel(a) { return ACTION_LABELS[a] || a }
+function fmtWhen(d) {
+  return new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 const preview = ref(null)  // { id, src, name }
 function previewable(name) { return /\.(pdf|png|jpe?g|gif|webp)$/i.test(name) }
 function openPreview(id, name) {
@@ -444,6 +488,12 @@ tbody tr:hover td { background: var(--accent); }
 .done-btn svg { width: 14px; height: 14px; }
 .done-btn:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); color: var(--foreground); }
 .done-btn.is-on { background: color-mix(in srgb, var(--primary) 12%, var(--card)); border-color: color-mix(in srgb, var(--primary) 40%, transparent); color: var(--primary); }
+
+/* Activity audit trail */
+.act-tag { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px; color: var(--muted-foreground); background: var(--muted); }
+.act-tag--upload { color: var(--primary); background: var(--accent); }
+.act-tag--delete, .act-tag--request_deleted { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
+.act-tag--status_change, .act-tag--request_created { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
 
 /* Inbox loading skeleton */
 .sk-row td { padding: 10px; }

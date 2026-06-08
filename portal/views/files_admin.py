@@ -20,7 +20,7 @@ _ZIP_SPOOL = 64 * 1024 * 1024   # keep ≤64 MB in RAM, then spill to disk
 
 from portal import file_storage, file_notify
 from portal.decorators import require_portal_admin
-from portal.models import Company, Bucket, SharedFile, ChecklistItem
+from portal.models import Company, Bucket, SharedFile, ChecklistItem, FileActivity
 from portal.serializers import BucketSerializer, SharedFileSerializer, ChecklistItemSerializer
 from portal.views.files import get_general_bucket, log_activity
 
@@ -323,6 +323,33 @@ def checklist_item(request, item_id):
             item.linked_file = f
     item.save()
     return JsonResponse(ChecklistItemSerializer(item).data)
+
+
+@require_portal_admin
+def activity(request):
+    """Append-only audit trail of file-sharing actions (newest first).
+    Optional ?company=<id> filter, ?limit (default 100, max 500)."""
+    qs = FileActivity.objects.select_related('actor', 'company', 'file').order_by('-created_at')
+    company_id = request.GET.get('company')
+    if company_id:
+        qs = qs.filter(company_id=company_id)
+    try:
+        limit = min(int(request.GET.get('limit', 100)), 500)
+    except (TypeError, ValueError):
+        limit = 100
+    items = []
+    for a in qs[:limit]:
+        detail = a.detail if isinstance(a.detail, dict) else {}
+        items.append({
+            'id': a.id,
+            'action': a.action,
+            'actor': (a.actor.name or a.actor.email) if a.actor else 'system',
+            'company': a.company.name if a.company else None,
+            'file': a.file.original_name if a.file else detail.get('name'),
+            'detail': detail,
+            'created_at': a.created_at.isoformat(),
+        })
+    return JsonResponse({'items': items})
 
 
 @require_portal_admin

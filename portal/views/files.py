@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 from portal import file_storage
 from portal.decorators import require_portal_user
 from portal.models import Bucket, SharedFile, FileActivity
+from portal.rate_limit import is_rate_limited
 from portal.serializers import BucketSerializer
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,10 @@ def upload_init(request):
     user = request.portal_user
     if not user.company_id:
         return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
+    # Bound how fast one account can mint upload slots (the rest of auth is
+    # rate-limited; this endpoint creates rows + presigned URLs).
+    if is_rate_limited('file-upload-init', str(user.id), 120, 3600):
+        return JsonResponse({'error': 'Too many uploads right now — please slow down.'}, status=429)
     data = json.loads(request.body or '{}')
     name = (data.get('name') or '').strip()
     size = int(data.get('size') or 0)
@@ -120,6 +125,11 @@ def upload_complete(request):
         file_storage.delete_object(f.storage_key)
         f.delete()
         return JsonResponse({'error': 'File exceeds the size limit.'}, status=400)
+    # Reject content that contradicts its extension (HTML-as-PDF, etc.).
+    if not file_storage.signature_ok(f.storage_key, f.original_name):
+        file_storage.delete_object(f.storage_key)
+        f.delete()
+        return JsonResponse({'error': "File content doesn't match its type."}, status=400)
     f.size_bytes = size
     f.state = SharedFile.STATE_READY
     f.save(update_fields=['size_bytes', 'state'])
