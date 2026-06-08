@@ -164,9 +164,14 @@ if _S3_BUCKET:
         MEDIA_URL = env('MEDIA_URL', default=f'https://{_S3_BUCKET}.s3.amazonaws.com/')
 
 # ── Customer file-sharing ──────────────────────────────────────────────
-# For now this reuses the docs S3 bucket under a dedicated `fileshare/` key
-# prefix; point FILESHARE_BUCKET at a separate private bucket later without
-# touching app code. Objects are reached only via short-lived presigned URLs.
+# The dedicated `citemed-fileshare` bucket (same IAM user as doc images).
+# Objects are reached only via short-lived presigned URLs. These S3 creds are
+# read independently of the *default storage* bucket so file sharing can use
+# S3 even when doc images are on the local filesystem (e.g. local dev).
+AWS_ACCESS_KEY_ID = globals().get('AWS_ACCESS_KEY_ID') or env('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = globals().get('AWS_SECRET_ACCESS_KEY') or env('AWS_SECRET_ACCESS_KEY', default='')
+AWS_S3_REGION_NAME = globals().get('AWS_S3_REGION_NAME') or env('AWS_S3_REGION_NAME', default='us-east-1')
+
 FILESHARE_BUCKET = env('FILESHARE_BUCKET', default='') or _S3_BUCKET
 FILESHARE_KEY_PREFIX = env('FILESHARE_KEY_PREFIX', default='fileshare')
 FILESHARE_MAX_BYTES = env.int('FILESHARE_MAX_BYTES', default=5 * 1024 ** 3)  # 5 GB
