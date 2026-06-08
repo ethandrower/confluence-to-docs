@@ -199,7 +199,7 @@ function reqState(b) {
   if (!b.files.length) return ['Awaiting your upload', 'warning']
   if (b.files.some((f) => f.review_status === 'revision')) return ['Action needed', 'danger']
   if (b.files.every((f) => f.review_status === 'approved')) return ['Approved', 'success']
-  return ['In review', 'info']  // files uploaded, awaiting/under CiteMed review
+  return ['Awaiting review', 'warning']  // files uploaded, not yet approved/revised
 }
 function statusLabel(b) { return reqState(b)[0] }
 function statusTone(b) { return reqState(b)[1] }

@@ -25,21 +25,23 @@
           <option v-for="c in fileCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>When</th><th>Who</th><th>Action</th><th>File</th><th>Client</th></tr></thead>
-          <tbody>
-            <tr v-for="a in activityItems" :key="a.id">
-              <td class="dim">{{ fmtWhen(a.created_at) }}</td>
-              <td>{{ a.actor }}</td>
-              <td><span class="act-tag" :class="`act-tag--${a.action}`">{{ actionLabel(a.action) }}</span></td>
-              <td>{{ a.file || '—' }}</td>
-              <td>{{ a.company || '—' }}</td>
-            </tr>
-            <tr v-if="!activityItems.length"><td colspan="5" class="empty">No activity yet.</td></tr>
-          </tbody>
-        </table>
+      <div v-for="g in activityGroups" :key="g.company" class="act-group">
+        <h3 class="act-company">{{ g.company }} <span class="act-count">{{ g.items.length }}</span></h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Who</th><th>Action</th><th>File</th></tr></thead>
+            <tbody>
+              <tr v-for="a in g.items" :key="a.id">
+                <td class="dim">{{ fmtWhen(a.created_at) }}</td>
+                <td>{{ a.actor }}</td>
+                <td><span class="act-tag" :class="`act-tag--${a.action}`">{{ actionLabel(a.action) }}</span></td>
+                <td>{{ a.file || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+      <p v-if="!activityItems.length" class="empty">No activity yet.</p>
     </div>
 
     <!-- INBOX: recent uploads across all clients -->
@@ -182,8 +184,7 @@
                   <span v-if="f.review_notes" class="fd-note">Note: {{ f.review_notes }}</span>
                 </span>
                 <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status" :aria-label="`Review status for ${f.original_name}`" @change="setReview(f, $event.target.value)">
-                  <option value="pending">Pending</option>
-                  <option value="review">In review</option>
+                  <option value="pending">Awaiting review</option>
                   <option value="approved">Approved</option>
                   <option value="revision">Needs revision</option>
                 </select>
@@ -318,6 +319,16 @@ function openInbox() {
 // Activity (audit trail)
 const activityItems = ref([])
 const activityCompany = ref('')
+// Group the (newest-first) feed by company; group order follows recency.
+const activityGroups = computed(() => {
+  const map = new Map()
+  for (const a of activityItems.value) {
+    const key = a.company || '—'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(a)
+  }
+  return Array.from(map, ([company, items]) => ({ company, items }))
+})
 async function loadActivity() {
   const params = new URLSearchParams({ limit: '200' })
   if (activityCompany.value) params.set('company', activityCompany.value)
@@ -559,6 +570,9 @@ tbody tr:hover td { background: var(--accent); }
 .act-tag--processed { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
 .act-tag--delete, .act-tag--request_deleted { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
 .act-tag--status_change, .act-tag--request_created { color: var(--info); background: color-mix(in srgb, var(--info) 10%, transparent); }
+.act-group { margin-bottom: 20px; }
+.act-company { display: flex; align-items: center; gap: 8px; font-family: var(--font-ui); font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0 0 8px; }
+.act-count { font-size: 11px; font-weight: 700; color: var(--muted-foreground); background: var(--muted); border-radius: 999px; padding: 1px 8px; }
 
 /* Inbox loading skeleton */
 .sk-row td { padding: 10px; }
@@ -627,7 +641,7 @@ tbody tr:hover td { background: var(--accent); }
 .fd-sub { font-size: 0.74rem; color: var(--muted-foreground); }
 .fd-note { font-size: 0.74rem; color: var(--destructive); margin-top: 2px; }
 .review-select { height: 30px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); font: inherit; font-size: 12.5px; font-weight: 600; padding: 0 6px; }
-.rv--pending { color: var(--muted-foreground); }
+.rv--pending { color: var(--warning); }
 .rv--review { color: var(--info); border-color: color-mix(in srgb, var(--info) 45%, var(--input)); }
 .rv--approved { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--input)); }
 .rv--revision { color: var(--destructive); border-color: color-mix(in srgb, var(--destructive) 45%, var(--input)); }
