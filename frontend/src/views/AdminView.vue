@@ -36,6 +36,9 @@
           <button role="tab" :aria-selected="tab==='companies'" class="tab" :class="tab==='companies' && 'tab--active'" @click="tab='companies'">
             Companies <span class="tab-count">{{ store.companies.length }}</span>
           </button>
+          <button role="tab" :aria-selected="tab==='files'" class="tab" :class="tab==='files' && 'tab--active'" @click="openFiles">
+            Files
+          </button>
         </div>
 
         <p v-if="store.error" class="admin-error">{{ store.error }}</p>
@@ -112,6 +115,53 @@
                 <tr v-if="!store.companies.length"><td colspan="4" class="empty">No companies yet.</td></tr>
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <!-- FILES -->
+        <section v-show="tab==='files'" class="panel">
+          <div class="panel-bar">
+            <span class="panel-hint">Files customers have shared, by company. Read-only here.</span>
+          </div>
+          <div class="files-admin">
+            <aside class="company-switcher">
+              <input v-model="fileCompanyQuery" class="cs-search" type="search" placeholder="Search companies…" aria-label="Search companies" />
+              <ul class="cs-list">
+                <li v-for="c in filteredFileCompanies" :key="c.id">
+                  <button class="cs-item" :class="c.id===selectedCompanyId && 'cs-item--active'" @click="selectCompany(c.id)">
+                    <span class="cs-name">{{ c.name }}</span>
+                    <span class="cs-counts">{{ c.file_count }} file{{ c.file_count===1?'':'s' }}<span v-if="c.open_request_count"> · {{ c.open_request_count }} open</span></span>
+                  </button>
+                </li>
+                <li v-if="!fileCompanies.length" class="cs-empty">No companies.</li>
+              </ul>
+            </aside>
+
+            <div class="files-detail">
+              <template v-if="selectedCompany">
+                <div class="fd-head">
+                  <h3>{{ selectedCompany.name }}</h3>
+                  <a v-if="companyFileCount" class="btn-primary" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">Download all</a>
+                </div>
+                <div v-for="b in companyBuckets" :key="b.id" class="fd-bucket">
+                  <h4>{{ b.title }} <span v-if="b.kind==='request'" class="role role--admin">request</span></h4>
+                  <table v-if="b.files.length">
+                    <thead><tr><th>Name</th><th>Size</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
+                    <tbody>
+                      <tr v-for="f in b.files" :key="f.id">
+                        <td>{{ f.original_name }}</td>
+                        <td class="tabular">{{ fmtSize(f.size_bytes) }}</td>
+                        <td>{{ fmtFileDate(f.uploaded_at) }}</td>
+                        <td>{{ f.uploaded_by_name || '—' }}</td>
+                        <td class="ta-r"><a :href="`/api/admin/files/${f.id}/download`">Download</a></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p v-else class="empty">No files in this bucket.</p>
+                </div>
+              </template>
+              <p v-else class="fd-placeholder">Select a company to view its files.</p>
+            </div>
           </div>
         </section>
       </div>
@@ -286,6 +336,45 @@ function formatDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// ── Files tab (read-only company switcher) ──────────────────────────
+const fileCompanies = ref([])
+const fileCompanyQuery = ref('')
+const selectedCompanyId = ref(null)
+const companyBuckets = ref([])
+const selectedCompany = ref(null)
+
+const filteredFileCompanies = computed(() => {
+  const q = fileCompanyQuery.value.toLowerCase().trim()
+  return q ? fileCompanies.value.filter((c) => c.name.toLowerCase().includes(q)) : fileCompanies.value
+})
+const companyFileCount = computed(() => companyBuckets.value.reduce((n, b) => n + b.files.length, 0))
+
+async function openFiles() {
+  tab.value = 'files'
+  if (fileCompanies.value.length) return
+  const r = await fetch('/api/admin/files/companies/', { credentials: 'include' })
+  if (r.ok) fileCompanies.value = (await r.json()).companies
+}
+async function selectCompany(id) {
+  selectedCompanyId.value = id
+  const r = await fetch(`/api/admin/files/companies/${id}/`, { credentials: 'include' })
+  if (r.ok) {
+    const data = await r.json()
+    selectedCompany.value = data.company
+    companyBuckets.value = data.buckets
+  }
+}
+function fmtSize(b) {
+  if (!b) return '—'
+  const u = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  while (b >= 1024 && i < 3) { b /= 1024; i++ }
+  return `${b.toFixed(i ? 1 : 0)} ${u[i]}`
+}
+function fmtFileDate(d) {
+  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 onMounted(() => store.fetchAll())
 </script>
 
@@ -401,4 +490,24 @@ tbody tr:hover td { background: var(--accent); }
 
 .modal-enter-active, .modal-leave-active { transition: opacity 0.18s; }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
+
+/* Files tab */
+.files-admin { display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 720px) { .files-admin { grid-template-columns: 1fr; } }
+.company-switcher { border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--card); }
+.cs-search { width: 100%; height: 36px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 13.5px; margin-bottom: 8px; }
+.cs-search:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+.cs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
+.cs-item { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; cursor: pointer; background: none; border: none; }
+.cs-item:hover { background: var(--muted); }
+.cs-item--active { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.cs-name { font-size: 14px; font-weight: 550; color: var(--foreground); }
+.cs-counts { font-size: 12px; color: var(--muted-foreground); }
+.cs-empty { padding: 10px; font-size: 13px; color: var(--muted-foreground); }
+.files-detail { min-width: 0; }
+.fd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.fd-head h3 { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 600; color: var(--foreground); margin: 0; }
+.fd-bucket { margin-bottom: 22px; }
+.fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+.fd-placeholder { color: var(--muted-foreground); font-size: 0.95rem; padding: 24px 0; }
 </style>
