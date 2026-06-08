@@ -4,7 +4,7 @@
       <button role="tab" :aria-selected="filesMode==='inbox'" class="seg" :class="filesMode==='inbox' && 'seg--active'" @click="openInbox">
         Inbox <span v-if="inboxUnprocessed" class="seg-badge">{{ inboxUnprocessed }}</span>
       </button>
-      <button role="tab" :aria-selected="filesMode==='company'" class="seg" :class="filesMode==='company' && 'seg--active'" @click="filesMode='company'">
+      <button role="tab" :aria-selected="filesMode==='company'" class="seg" :class="filesMode==='company' && 'seg--active'" @click="openCompanyTab">
         By company
       </button>
       <button role="tab" :aria-selected="filesMode==='activity'" class="seg" :class="filesMode==='activity' && 'seg--active'" @click="openActivity">
@@ -344,6 +344,15 @@ function openInbox() {
   preview.value = null
   filesMode.value = 'inbox'
   loadInbox()
+}
+async function openCompanyTab() {
+  preview.value = null
+  filesMode.value = 'company'
+  await loadFileCompanies()
+  // Never show a blank pane: auto-open the first company if none is selected.
+  if (!selectedCompanyId.value && fileCompanies.value.length) {
+    await selectCompany(fileCompanies.value[0].id)
+  }
 }
 
 // Activity (audit trail)
