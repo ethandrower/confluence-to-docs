@@ -45,7 +45,12 @@
   --accent: #DEEBFA;              /* Dull Blue 2 — tinted active/hover */
   --accent-foreground: #0C377B;
   --destructive: #C0392B;
-  --border: #E4E8F0;              /* Grey 3 */
+  /* Semantic status hues (light) — each carries meaning, not decoration.
+     info reuses the brand accent; danger reuses --destructive. */
+  --success: #1F8B4C;            /* approved / received / complete */
+  --warning: #9A6A15;            /* in-progress / due-soon / partial */
+  --info: #2C5BB8;               /* in-review / open / informational */
+  --border: #E4E8F0;             /* Grey 3 */
   --border-subtle: #EBEEF4;
   --divider: #C2CAD8;             /* stronger rule for header dividers / cards */
   --input: #DBE2F0;               /* Grey 4 */
@@ -79,6 +84,10 @@
   --accent: #25324A;              /* blue-tinted dark surface */
   --accent-foreground: #DEEBFA;
   --destructive: #E15A4B;
+  /* Semantic status hues (dark) — luminous variants for dark surfaces. */
+  --success: #4FCB87;            /* approved / received / complete */
+  --warning: #E0B250;            /* in-progress / due-soon / partial */
+  --info: #75B5FF;               /* in-review / open / informational */
   --border: #343C49;
   --border-subtle: #2D3442;
   --divider: #4A5160;             /* Grey 8-ish — stronger rule on dark */

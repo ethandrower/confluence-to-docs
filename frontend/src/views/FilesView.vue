@@ -186,9 +186,10 @@ function statusLabel(b) {
   return b.files.length ? 'Open' : 'Awaiting upload'
 }
 function statusTone(b) {
-  if (b.status === 'complete') return 'done'
-  if (b.status === 'open' && !b.files.length) return 'action'
-  return 'muted'
+  if (b.status === 'complete') return 'success'
+  if (b.status === 'partial') return 'warning'
+  if (b.status === 'open' && !b.files.length) return 'warning'  // awaiting your upload
+  return 'info'                                                  // open, files in
 }
 function duePill(b) {
   if (!b.due_at || b.status === 'complete') return null
@@ -311,15 +312,16 @@ function cat(name) {
 .b-title { font-size: 0.9rem; font-weight: 600; color: var(--foreground); line-height: 1.3; }
 .b-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 
-.status { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 550; color: var(--muted-foreground); }
+.status { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 600; color: var(--muted-foreground); }
 .status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.status--action { color: var(--brand-accent); }
-.status--done { color: var(--muted-foreground); }
+.status--success { color: var(--success); }
+.status--warning { color: var(--warning); }
+.status--info { color: var(--info); }
 .status--muted { color: var(--muted-foreground); }
 
 .due { font-size: 0.72rem; font-weight: 550; color: var(--muted-foreground); }
-.due--soon { color: var(--muted-foreground); font-weight: 650; }  /* emphasis via weight, not hue */
-.due--over { color: var(--destructive); font-weight: 650; }       /* overdue = the one earned warning color */
+.due--soon { color: var(--warning); font-weight: 650; }
+.due--over { color: var(--destructive); font-weight: 650; }
 
 /* ── Detail ── */
 .fs-main { min-width: 0; }
@@ -344,17 +346,18 @@ function cat(name) {
 .fs-check-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: var(--muted-foreground); }
 .fs-check-count { font-size: 0.78rem; color: var(--muted-foreground); }
 .fs-check-bar { height: 5px; border-radius: 999px; background: var(--secondary); overflow: hidden; margin-bottom: 0.6rem; }
-.fs-check-bar div { height: 100%; background: var(--primary); transition: width 0.3s ease; }
+.fs-check-bar div { height: 100%; background: var(--success); transition: width 0.3s ease; }
 .fs-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
 .fs-check-list li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; color: var(--foreground); }
 .fs-check-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--input); flex-shrink: 0; }
-.fs-check-dot.on { background: var(--primary); border-color: var(--primary); }
-.fs-check-recv { margin-left: auto; font-size: 0.68rem; font-weight: 600; color: var(--muted-foreground); }
+.fs-check-dot.on { background: var(--success); border-color: var(--success); }
+.fs-check-recv { margin-left: auto; font-size: 0.68rem; font-weight: 700; color: var(--success); }
 
-/* Review status badge + note (customer) */
+/* Review status badge + note (customer) — colour carries the state */
 .rv-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; border-radius: 999px; color: var(--muted-foreground); background: var(--secondary); }
-.rv-badge--approved { color: var(--primary); }
-.rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
+.rv-badge--review { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.rv-badge--approved { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 14%, transparent); }
 .rv-note { font-size: 0.76rem; color: var(--destructive); margin-top: 0.15rem; }
 
 /* ── File list ── */
