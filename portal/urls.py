@@ -18,6 +18,9 @@ urlpatterns = [
     path('admin/files/companies/<int:company_id>/download-all', files_admin.company_download_all, name='admin-files-zip'),
     path('admin/files/requests/', files_admin.create_request, name='admin-files-create-request'),
     path('admin/files/requests/<int:bucket_id>/', files_admin.update_request, name='admin-files-update-request'),
+    path('admin/files/<int:file_id>/review', files_admin.set_review, name='admin-files-review'),
+    path('admin/files/checklist/', files_admin.create_checklist_item, name='admin-files-checklist-create'),
+    path('admin/files/checklist/<int:item_id>/', files_admin.checklist_item, name='admin-files-checklist-item'),
     path('admin/files/<int:file_id>/download', files_admin.admin_file_download, name='admin-files-download'),
     path('admin/files/<int:file_id>/view', files_admin.admin_file_view, name='admin-files-view'),
 

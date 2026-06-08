@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import DocPage, PortalUser, Bucket, SharedFile
+from .models import DocPage, PortalUser, Bucket, SharedFile, ChecklistItem
 
 
 class DocPageTreeSerializer(serializers.ModelSerializer):
@@ -52,6 +52,7 @@ class PortalUserSerializer(serializers.ModelSerializer):
 
 class SharedFileSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.SerializerMethodField()
+    review_notes = serializers.SerializerMethodField()
 
     class Meta:
         model = SharedFile
@@ -64,22 +65,46 @@ class SharedFileSerializer(serializers.ModelSerializer):
         u = obj.uploaded_by
         return (u.name or u.email) if u else None
 
+    def get_review_notes(self, obj):
+        # Staff always see notes; customers only when the file needs their
+        # attention (in review / needs revision).
+        if self.context.get('staff') or obj.review_status in ('review', 'revision'):
+            return obj.review_notes
+        return ''
+
+
+class ChecklistItemSerializer(serializers.ModelSerializer):
+    linked_file_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChecklistItem
+        fields = ['id', 'text', 'position', 'linked_file', 'linked_file_name']
+
+    def get_linked_file_name(self, obj):
+        return obj.linked_file.original_name if obj.linked_file else None
+
 
 class BucketSerializer(serializers.ModelSerializer):
     files = serializers.SerializerMethodField()
     requested_by_name = serializers.SerializerMethodField()
+    checklist = serializers.SerializerMethodField()
 
     class Meta:
         model = Bucket
         fields = [
             'id', 'kind', 'title', 'description', 'due_at', 'status',
-            'requested_by_name', 'created_at', 'files',
+            'requested_by_name', 'created_at', 'files', 'checklist',
         ]
 
     def get_files(self, obj):
         qs = obj.files.filter(deleted_at__isnull=True, state=SharedFile.STATE_READY)
-        return SharedFileSerializer(qs, many=True).data
+        return SharedFileSerializer(qs, many=True, context=self.context).data
 
     def get_requested_by_name(self, obj):
         u = obj.requested_by
         return (u.name or u.email) if u else None
+
+    def get_checklist(self, obj):
+        if obj.kind != Bucket.KIND_REQUEST:
+            return []
+        return ChecklistItemSerializer(obj.checklist.all(), many=True).data

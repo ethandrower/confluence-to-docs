@@ -12,10 +12,10 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from portal import file_storage
+from portal import file_storage, file_notify
 from portal.decorators import require_portal_admin
-from portal.models import Company, Bucket, SharedFile
-from portal.serializers import BucketSerializer
+from portal.models import Company, Bucket, SharedFile, ChecklistItem
+from portal.serializers import BucketSerializer, SharedFileSerializer, ChecklistItemSerializer
 from portal.views.files import get_general_bucket, log_activity
 
 
@@ -59,7 +59,7 @@ def company_files(request, company_id):
     buckets = Bucket.objects.filter(company=company)
     return JsonResponse({
         'company': {'id': company.id, 'name': company.name},
-        'buckets': BucketSerializer(buckets, many=True).data,
+        'buckets': BucketSerializer(buckets, many=True, context={'staff': True}).data,
     })
 
 
@@ -107,7 +107,8 @@ def create_request(request):
         status=status, requested_by=request.portal_user,
     )
     log_activity(company, 'request_created', actor=request.portal_user, bucket=b, title=title)
-    return JsonResponse(BucketSerializer(b).data, status=201)
+    file_notify.notify_request_created(b)
+    return JsonResponse(BucketSerializer(b, context={'staff': True}).data, status=201)
 
 
 @csrf_exempt
@@ -196,6 +197,87 @@ def set_processed(request, file_id):
     log_activity(f.company, 'processed' if processed else 'unprocessed',
                  actor=request.portal_user, file=f, name=f.original_name)
     return JsonResponse({'ok': True, 'processed': f.processed})
+
+
+REVIEW_STATES = ('pending', 'review', 'approved', 'revision')
+
+
+@csrf_exempt
+@require_portal_admin
+@require_http_methods(['PATCH'])
+def set_review(request, file_id):
+    """Set a file's review status + notes. Emails the customer on 'revision'."""
+    f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).select_related('company').first()
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    data = json.loads(request.body or '{}')
+    from django.utils import timezone
+
+    new_status = data.get('review_status')
+    status_changed = False
+    if new_status in REVIEW_STATES and new_status != f.review_status:
+        f.review_status = new_status
+        status_changed = True
+    if 'notes' in data:
+        f.review_notes = (data.get('notes') or '').strip()
+    f.reviewed_by = request.portal_user
+    f.reviewed_at = timezone.now()
+    f.save(update_fields=['review_status', 'review_notes', 'reviewed_by', 'reviewed_at'])
+
+    if status_changed:
+        log_activity(f.company, 'status_change', actor=request.portal_user, file=f, to=f.review_status)
+        if f.review_status == 'revision':
+            file_notify.notify_revision(f)
+    return JsonResponse(SharedFileSerializer(f, context={'staff': True}).data)
+
+
+@csrf_exempt
+@require_portal_admin
+@require_http_methods(['POST'])
+def create_checklist_item(request):
+    data = json.loads(request.body or '{}')
+    bucket = Bucket.objects.filter(id=data.get('bucket_id'), kind=Bucket.KIND_REQUEST).first()
+    if not bucket:
+        return JsonResponse({'error': 'Request bucket not found.'}, status=404)
+    text = (data.get('text') or '').strip()
+    if not text:
+        return JsonResponse({'error': 'Text required.'}, status=400)
+    position = bucket.checklist.count()
+    item = ChecklistItem.objects.create(
+        bucket=bucket, text=text, position=position, created_by=request.portal_user,
+    )
+    return JsonResponse(ChecklistItemSerializer(item).data, status=201)
+
+
+@csrf_exempt
+@require_portal_admin
+@require_http_methods(['PATCH', 'DELETE'])
+def checklist_item(request, item_id):
+    item = ChecklistItem.objects.select_related('bucket').filter(id=item_id).first()
+    if not item:
+        return JsonResponse({'error': 'Item not found.'}, status=404)
+    if request.method == 'DELETE':
+        item.delete()
+        return JsonResponse({'ok': True})
+    data = json.loads(request.body or '{}')
+    if 'text' in data:
+        text = (data.get('text') or '').strip()
+        if not text:
+            return JsonResponse({'error': 'Text required.'}, status=400)
+        item.text = text
+    if 'linked_file_id' in data:
+        fid = data.get('linked_file_id')
+        if fid is None:
+            item.linked_file = None
+        else:
+            f = SharedFile.objects.filter(
+                id=fid, company_id=item.bucket.company_id, deleted_at__isnull=True,
+            ).first()
+            if not f:
+                return JsonResponse({'error': 'File not found in this company.'}, status=404)
+            item.linked_file = f
+    item.save()
+    return JsonResponse(ChecklistItemSerializer(item).data)
 
 
 @require_portal_admin

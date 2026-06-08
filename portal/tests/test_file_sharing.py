@@ -2,8 +2,9 @@ import json
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.core import mail
 
-from portal.models import Company, PortalUser, Bucket, SharedFile, FileActivity
+from portal.models import Company, PortalUser, Bucket, SharedFile, FileActivity, ChecklistItem
 
 
 class ModelScopingTests(TestCase):
@@ -228,6 +229,65 @@ class InboxTests(TestCase):
         self._login(self.admin)
         items = self.client.get(f'/api/admin/files/inbox/?company={self.globex.id}').json()['items']
         self.assertEqual({i['original_name'] for i in items}, {'b.pdf'})
+
+
+class ReviewAndChecklistTests(TestCase):
+    def setUp(self):
+        self.acme = Company.objects.create(name='Acme')
+        self.admin = PortalUser.objects.create(email='p@citemed.com', role='admin')
+        self.cust = PortalUser.objects.create(email='a@acme.com', company=self.acme, role='customer')
+        from portal.views.files import get_general_bucket
+        self.req = Bucket.objects.create(company=self.acme, kind='request', title='Q3 PMS', status='open')
+        self.f = SharedFile.objects.create(bucket=self.req, company=self.acme, uploaded_by=self.cust,
+                                           original_name='a.pdf', storage_key='k', state='ready', size_bytes=10)
+
+    def _login(self, u):
+        s = self.client.session
+        s['portal_user_id'] = u.id
+        s.save()
+
+    def test_admin_sets_review_and_revision_emails_customer(self):
+        self._login(self.admin)
+        mail.outbox = []
+        r = self.client.patch(f'/api/admin/files/{self.f.id}/review',
+                              data=json.dumps({'review_status': 'revision', 'notes': 'Fix page 2.'}),
+                              content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.f.refresh_from_db()
+        self.assertEqual(self.f.review_status, 'revision')
+        self.assertEqual(self.f.review_notes, 'Fix page 2.')
+        self.assertTrue(FileActivity.objects.filter(file=self.f, action='status_change').exists())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('a@acme.com', mail.outbox[0].to)
+
+    def test_customer_sees_notes_only_on_revision(self):
+        # pending → notes hidden from customer
+        self.f.review_status = 'pending'; self.f.review_notes = 'secret'; self.f.save()
+        self._login(self.cust)
+        data = self.client.get('/api/files/buckets/').json()
+        f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
+        self.assertEqual(f['review_notes'], '')
+        # revision → notes visible
+        self.f.review_status = 'revision'; self.f.save()
+        data = self.client.get('/api/files/buckets/').json()
+        f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
+        self.assertEqual(f['review_notes'], 'secret')
+
+    def test_checklist_create_link_and_visible(self):
+        self._login(self.admin)
+        item = self.client.post('/api/admin/files/checklist/', data=json.dumps({
+            'bucket_id': self.req.id, 'text': 'Signed PMS report'}), content_type='application/json').json()
+        self.assertEqual(item['text'], 'Signed PMS report')
+        # link the file to the checklist slot
+        r = self.client.patch(f"/api/admin/files/checklist/{item['id']}/",
+                             data=json.dumps({'linked_file_id': self.f.id}), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['linked_file_name'], 'a.pdf')
+        # checklist surfaces in the customer bucket view
+        self._login(self.cust)
+        data = self.client.get('/api/files/buckets/').json()
+        b = next(x for x in data['buckets'] if x['id'] == self.req.id)
+        self.assertEqual(len(b['checklist']), 1)
 
 
 class RequestAuthoringTests(TestCase):

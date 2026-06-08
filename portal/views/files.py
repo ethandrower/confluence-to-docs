@@ -128,6 +128,8 @@ def upload_complete(request):
     f.save(update_fields=['size_bytes', 'state'])
     log_activity(user.company, 'upload', actor=user, file=f, bucket=f.bucket,
                  name=f.original_name, size=size)
+    from portal import file_notify
+    file_notify.notify_upload(f)
     return JsonResponse({'ok': True, 'file_id': f.id})
 
 
