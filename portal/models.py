@@ -71,6 +71,10 @@ class PortalUser(models.Model):
         'Company', null=True, blank=True, on_delete=models.SET_NULL, related_name='users'
     )
     access_enabled = models.BooleanField(default=True)
+    # Demo/sandbox accounts may sign in WITHOUT a magic link (see
+    # auth.demo_login) so staff can open the customer portal in a second
+    # browser. Only ever set on throwaway sandbox accounts — never real users.
+    is_demo = models.BooleanField(default=False)
     jsm_customer_id = models.CharField(max_length=64, blank=True)
     is_jsm_customer = models.BooleanField(default=False)
     jsm_checked_at = models.DateTimeField(null=True)

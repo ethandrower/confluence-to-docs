@@ -183,9 +183,8 @@
                   <span class="fd-sub">{{ fmtSize(f.size_bytes) }} · {{ fmtFileDate(f.uploaded_at) }} · {{ f.uploaded_by_name || '—' }}</span>
                   <span v-if="f.review_notes" class="fd-note">Note: {{ f.review_notes }}</span>
                 </span>
-                <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status" :aria-label="`Review status for ${f.original_name}`" @change="setReview(f, $event.target.value)">
+                <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status === 'review' ? 'pending' : f.review_status" :aria-label="`Review status for ${f.original_name}`" @change="setReview(f, $event.target.value)">
                   <option value="pending">Needs review</option>
-                  <option value="review">In review</option>
                   <option value="approved">Approved</option>
                   <option value="revision">Needs revision</option>
                 </select>

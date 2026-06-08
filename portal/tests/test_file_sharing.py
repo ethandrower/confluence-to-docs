@@ -258,6 +258,33 @@ class InboxTests(TestCase):
         self.assertIn('upload', actions)
 
 
+class DemoLoginTests(TestCase):
+    def setUp(self):
+        # Seeded by migration 0013 (is_demo=True). Use it directly.
+        self.demo = PortalUser.objects.get(email='demo@citemed.com')
+        self.real = PortalUser.objects.create(email='real@acme.com', role='customer',
+                                             access_enabled=True, is_demo=False)
+
+    def test_seeded_demo_user_is_flagged(self):
+        self.assertTrue(self.demo.is_demo)
+        self.assertEqual(self.demo.role, 'customer')
+
+    def test_demo_user_logs_in_without_magic_link(self):
+        r = self.client.get('/api/auth/demo-login/', {'email': 'demo@citemed.com'})
+        self.assertEqual(r.status_code, 302)
+        me = self.client.get('/api/auth/me/')
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()['user']['email'], 'demo@citemed.com')
+
+    def test_real_user_cannot_use_demo_login(self):
+        r = self.client.get('/api/auth/demo-login/', {'email': 'real@acme.com'})
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)
+
+    def test_unknown_email_404(self):
+        self.assertEqual(self.client.get('/api/auth/demo-login/', {'email': 'nobody@x.com'}).status_code, 404)
+
+
 class ReviewAndChecklistTests(TestCase):
     def setUp(self):
         self.acme = Company.objects.create(name='Acme')

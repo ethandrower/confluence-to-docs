@@ -41,6 +41,7 @@ urlpatterns = [
     # Auth
     path('auth/request-magic-link/', auth.request_magic_link, name='request-magic-link'),
     path('auth/verify/', auth.verify_magic_link, name='verify-magic-link'),
+    path('auth/demo-login/', auth.demo_login, name='demo-login'),  # is_demo accounts only
     path('auth/me/', auth.me, name='auth-me'),
     path('auth/logout/', auth.logout, name='auth-logout'),
 
