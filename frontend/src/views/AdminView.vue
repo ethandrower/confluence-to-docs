@@ -160,10 +160,20 @@
                         <td>{{ fmtFileDate(i.uploaded_at) }}</td>
                         <td>{{ i.uploaded_by_name || '—' }}</td>
                       </template>
-                      <td class="ta-r inbox-actions">
-                        <button v-if="previewable(i.original_name)" class="link" @click="openPreview(i.id, i.original_name)">{{ preview && preview.id===i.id ? 'Close' : 'Preview' }}</button>
-                        <a :href="`/api/admin/files/${i.id}/download`">Download</a>
-                        <button v-if="!preview" class="link" @click="toggleProcessed(i)">{{ i.processed ? 'Undo' : 'Mark processed' }}</button>
+                      <td class="ta-r">
+                        <span class="row-acts">
+                          <button v-if="previewable(i.original_name)" class="act" :class="preview && preview.id===i.id && 'act--on'" :title="preview && preview.id===i.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(i.id, i.original_name)">
+                            <svg v-if="preview && preview.id===i.id" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18 18 6M6 6l12 12"/></svg>
+                            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                          </button>
+                          <a class="act" :href="`/api/admin/files/${i.id}/download`" title="Download" aria-label="Download">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                          </a>
+                          <button v-if="!preview" class="done-btn" :class="i.processed && 'is-on'" @click="toggleProcessed(i)" :title="i.processed ? 'Processed — click to undo' : 'Mark as processed'">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            {{ i.processed ? 'Done' : 'Mark done' }}
+                          </button>
+                        </span>
                       </td>
                     </tr>
                     <tr v-if="!inboxItems.length"><td :colspan="preview ? 3 : 6" class="empty">{{ inboxStatus==='unprocessed' ? 'Nothing waiting — all caught up.' : 'No files yet.' }}</td></tr>
@@ -249,9 +259,14 @@
                       <button class="ico-sm" title="Add / edit note" @click="editNote(f)" aria-label="Edit note">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
                       </button>
-                      <span class="fd-actions">
-                        <button v-if="previewable(f.original_name)" class="link" @click="openPreview(f.id, f.original_name)">{{ preview && preview.id===f.id ? 'Close' : 'Preview' }}</button>
-                        <a :href="`/api/admin/files/${f.id}/download`">Download</a>
+                      <span class="row-acts">
+                        <button v-if="previewable(f.original_name)" class="act" :class="preview && preview.id===f.id && 'act--on'" :title="preview && preview.id===f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f.id, f.original_name)">
+                          <svg v-if="preview && preview.id===f.id" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18 18 6M6 6l12 12"/></svg>
+                          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <a class="act" :href="`/api/admin/files/${f.id}/download`" title="Download" aria-label="Download">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </a>
                       </span>
                     </li>
                   </ul>
@@ -839,6 +854,17 @@ tbody tr:hover td { background: var(--accent); }
 .sm-seg button.on { background: color-mix(in srgb, var(--primary) 10%, var(--card)); color: var(--primary); }
 .link { background: none; border: none; color: var(--brand-accent); cursor: pointer; font: inherit; padding: 0; }
 .link:hover { text-decoration: underline; }
+
+/* Row action group: icon buttons + a labeled "done" toggle */
+.row-acts { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.act { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted-foreground); cursor: pointer; transition: background-color 0.13s ease, color 0.13s ease, border-color 0.13s ease; }
+.act svg { width: 16px; height: 16px; }
+.act:hover { background: var(--secondary); color: var(--foreground); }
+.act--on { background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
+.done-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 12.5px; font-weight: 550; cursor: pointer; transition: all 0.13s ease; }
+.done-btn svg { width: 14px; height: 14px; }
+.done-btn:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); color: var(--foreground); }
+.done-btn.is-on { background: color-mix(in srgb, var(--primary) 12%, var(--card)); border-color: color-mix(in srgb, var(--primary) 40%, transparent); color: var(--primary); }
 .dim { color: var(--muted-foreground); font-size: 12px; }
 .inbox-actions { display: flex; gap: 14px; justify-content: flex-end; }
 .is-processed td { color: var(--muted-foreground); }
