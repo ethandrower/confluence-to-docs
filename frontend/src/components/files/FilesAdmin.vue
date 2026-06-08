@@ -120,7 +120,7 @@
               </button>
             </div>
           </div>
-          <div v-for="b in companyBuckets" :key="b.id" class="fd-bucket">
+          <div v-for="b in orderedBuckets" :key="b.id" class="fd-bucket">
             <div class="fd-bucket-head">
               <div class="fd-bucket-title">
                 <h4>{{ b.title }}</h4>
@@ -182,7 +182,7 @@
                 </span>
               </li>
             </ul>
-            <p v-else class="empty">No files in this bucket.</p>
+            <p v-else class="bucket-empty">No files uploaded yet.</p>
           </div>
         </template>
         <p v-else class="fd-placeholder">Select a company to view its files.</p>
@@ -239,6 +239,12 @@ const filteredFileCompanies = computed(() => {
   return q ? fileCompanies.value.filter((c) => c.name.toLowerCase().includes(q)) : fileCompanies.value
 })
 const companyFileCount = computed(() => companyBuckets.value.reduce((n, b) => n + b.files.length, 0))
+// Active requests first, the freeform "General uploads" bucket last.
+const orderedBuckets = computed(() => {
+  const reqs = companyBuckets.value.filter((b) => b.kind === 'request')
+  const gen = companyBuckets.value.filter((b) => b.kind !== 'request')
+  return [...reqs, ...gen]
+})
 
 const filesMode = ref('inbox')
 const inboxItems = ref([])
@@ -532,6 +538,7 @@ tbody tr:hover td { background: var(--accent); }
 .fd-head h3 { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 600; color: var(--foreground); margin: 0; }
 .fd-head-actions { display: flex; align-items: center; gap: 8px; }
 .fd-bucket { margin-bottom: 22px; }
+.bucket-empty { font-size: 0.82rem; color: var(--muted-foreground); padding: 4px 2px 2px; margin: 0; }
 .fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0; }
 .fd-bucket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .fd-bucket-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
