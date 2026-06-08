@@ -146,3 +146,109 @@ def update_search_vector(sender, instance, **kwargs):
         DocPage.objects.filter(pk=instance.pk).update(
             search_vector=f"{instance.title} {instance.raw_storage}"
         )
+
+
+# ── Customer file sharing ───────────────────────────────────────────────
+class Bucket(models.Model):
+    """A flat grouping of shared files for one company. Either a staff-created
+    'request' (asking the customer for specific docs) or the customer's
+    'general' uploads bucket. Explicitly NOT a folder tree — no nesting."""
+    KIND_REQUEST = 'request'
+    KIND_GENERAL = 'general'
+    KIND_CHOICES = [(KIND_REQUEST, 'Request'), (KIND_GENERAL, 'General')]
+    STATUS_CHOICES = [
+        ('open', 'Open'), ('partial', 'Partial'),
+        ('complete', 'Complete'), ('general', 'General'),
+    ]
+
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='buckets')
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_GENERAL)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    requested_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='requested_buckets',
+    )
+    due_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='general')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['kind', '-created_at']
+
+    def __str__(self):
+        return f'{self.company.name} — {self.title}'
+
+
+class SharedFile(models.Model):
+    STATE_UPLOADING = 'uploading'
+    STATE_READY = 'ready'
+    REVIEW_CHOICES = [
+        ('pending', 'Pending'), ('review', 'In review'),
+        ('approved', 'Approved'), ('revision', 'Needs revision'),
+    ]
+
+    bucket = models.ForeignKey(Bucket, on_delete=models.CASCADE, related_name='files')
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='shared_files')
+    uploaded_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='uploaded_files',
+    )
+    original_name = models.CharField(max_length=512)
+    storage_key = models.CharField(max_length=1024)
+    size_bytes = models.BigIntegerField(null=True, blank=True)
+    mime_type = models.CharField(max_length=255, blank=True)
+    state = models.CharField(max_length=16, default=STATE_UPLOADING)
+    review_status = models.CharField(max_length=16, choices=REVIEW_CHOICES, default='pending')
+    review_notes = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='reviewed_files',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        indexes = [
+            models.Index(fields=['company', 'deleted_at']),
+        ]
+
+    def __str__(self):
+        return self.original_name
+
+
+class ChecklistItem(models.Model):
+    """A required-document slot on a request bucket (Phase 3). The model lands
+    now to avoid a later migration; endpoints come in Phase 3."""
+    bucket = models.ForeignKey(Bucket, on_delete=models.CASCADE, related_name='checklist')
+    text = models.CharField(max_length=512)
+    position = models.IntegerField(default=0)
+    linked_file = models.ForeignKey(
+        SharedFile, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='satisfies',
+    )
+    created_by = models.ForeignKey('PortalUser', null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['position', 'id']
+
+
+class FileActivity(models.Model):
+    """Append-only audit trail for every file-sharing action. Never deleted."""
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='file_activity')
+    file = models.ForeignKey(SharedFile, null=True, blank=True, on_delete=models.SET_NULL)
+    bucket = models.ForeignKey(Bucket, null=True, blank=True, on_delete=models.SET_NULL)
+    actor = models.ForeignKey('PortalUser', null=True, blank=True, on_delete=models.SET_NULL)
+    action = models.CharField(max_length=32)  # upload|download|rename|delete|status_change|request_created|note
+    detail = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['company', '-created_at']),
+        ]
