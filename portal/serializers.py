@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import DocPage, PortalUser
+from .models import DocPage, PortalUser, Bucket, SharedFile
 
 
 class DocPageTreeSerializer(serializers.ModelSerializer):
@@ -48,3 +48,30 @@ class PortalUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = PortalUser
         fields = ['id', 'email', 'name']
+
+
+class SharedFileSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SharedFile
+        fields = [
+            'id', 'original_name', 'size_bytes', 'mime_type', 'state',
+            'review_status', 'review_notes', 'uploaded_at', 'uploaded_by_name',
+        ]
+
+    def get_uploaded_by_name(self, obj):
+        u = obj.uploaded_by
+        return (u.name or u.email) if u else None
+
+
+class BucketSerializer(serializers.ModelSerializer):
+    files = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Bucket
+        fields = ['id', 'kind', 'title', 'description', 'due_at', 'status', 'files']
+
+    def get_files(self, obj):
+        qs = obj.files.filter(deleted_at__isnull=True, state=SharedFile.STATE_READY)
+        return SharedFileSerializer(qs, many=True).data

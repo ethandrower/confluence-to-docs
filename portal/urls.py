@@ -1,5 +1,5 @@
 from django.urls import path
-from portal.views import docs, auth, tickets, admin_api
+from portal.views import docs, auth, tickets, admin_api, files, files_admin
 
 urlpatterns = [
     # Admin (manage users + companies) — gated to portal admins
@@ -9,6 +9,19 @@ urlpatterns = [
     path('admin/users/<int:user_id>/', admin_api.user_detail, name='admin-user-detail'),
     path('admin/sync/', admin_api.sync_docs, name='admin-sync'),
     path('admin/add-page/', admin_api.add_page, name='admin-add-page'),
+
+    # Admin — file sharing
+    path('admin/files/companies/', files_admin.companies, name='admin-files-companies'),
+    path('admin/files/companies/<int:company_id>/', files_admin.company_files, name='admin-files-company'),
+    path('admin/files/companies/<int:company_id>/download-all', files_admin.company_download_all, name='admin-files-zip'),
+    path('admin/files/<int:file_id>/download', files_admin.admin_file_download, name='admin-files-download'),
+
+    # File sharing (customer + shared)
+    path('files/buckets/', files.buckets_list, name='files-buckets'),
+    path('files/upload-init', files.upload_init, name='files-upload-init'),
+    path('files/upload-complete', files.upload_complete, name='files-upload-complete'),
+    path('files/<int:file_id>', files.file_detail, name='files-file'),
+    path('files/<int:file_id>/download', files.file_download, name='files-download'),
 
     # Docs
     path('docs/', docs.page_tree, name='page-tree'),

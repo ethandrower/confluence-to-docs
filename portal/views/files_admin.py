@@ -1,0 +1,79 @@
+"""Admin file-sharing endpoints (Phase 1): company switcher, per-company view,
+and a "download all" zip. Gated to portal admins via require_portal_admin.
+Read-only on the admin side in V1 (no upload/rename/delete) for audit-trail
+simplicity."""
+import io
+import zipfile
+
+from django.http import JsonResponse, HttpResponse
+
+from portal import file_storage
+from portal.decorators import require_portal_admin
+from portal.models import Company, Bucket, SharedFile
+from portal.serializers import BucketSerializer
+from portal.views.files import get_general_bucket, log_activity
+
+
+@require_portal_admin
+def companies(request):
+    out = []
+    for c in Company.objects.all().order_by('name'):
+        file_count = SharedFile.objects.filter(
+            company=c, deleted_at__isnull=True, state=SharedFile.STATE_READY,
+        ).count()
+        open_requests = Bucket.objects.filter(
+            company=c, kind=Bucket.KIND_REQUEST,
+        ).exclude(status='complete').count()
+        out.append({
+            'id': c.id, 'name': c.name,
+            'file_count': file_count, 'open_request_count': open_requests,
+        })
+    return JsonResponse({'companies': out})
+
+
+@require_portal_admin
+def company_files(request, company_id):
+    company = Company.objects.filter(id=company_id).first()
+    if not company:
+        return JsonResponse({'error': 'Company not found.'}, status=404)
+    get_general_bucket(company)
+    buckets = Bucket.objects.filter(company=company)
+    return JsonResponse({
+        'company': {'id': company.id, 'name': company.name},
+        'buckets': BucketSerializer(buckets, many=True).data,
+    })
+
+
+@require_portal_admin
+def company_download_all(request, company_id):
+    company = Company.objects.filter(id=company_id).first()
+    if not company:
+        return JsonResponse({'error': 'Company not found.'}, status=404)
+    files = SharedFile.objects.filter(
+        company=company, deleted_at__isnull=True, state=SharedFile.STATE_READY,
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        import requests
+        for f in files:
+            try:
+                data = requests.get(file_storage.presign_get(f.storage_key), timeout=120).content
+                zf.writestr(f.original_name, data)
+            except Exception:
+                continue
+    log_activity(company, 'download', actor=request.portal_user, bulk=True, count=files.count())
+    resp = HttpResponse(buf.getvalue(), content_type='application/zip')
+    resp['Content-Disposition'] = f'attachment; filename="{company.name}-files.zip"'
+    return resp
+
+
+@require_portal_admin
+def admin_file_download(request, file_id):
+    """Presigned download of any company's file (admin-scoped)."""
+    f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).first()
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    from django.http import HttpResponseRedirect
+    url = file_storage.presign_get(f.storage_key, download_name=f.original_name)
+    log_activity(f.company, 'download', actor=request.portal_user, file=f, name=f.original_name)
+    return HttpResponseRedirect(url)

@@ -22,11 +22,13 @@ def require_portal_user(view_func):
         # Lazy import to avoid circular imports with views.
         from portal.models import PortalUser
 
-        if not PortalUser.objects.filter(pk=user_id).exists():
+        user = PortalUser.objects.filter(pk=user_id).first()
+        if not user:
             # Stale session — clear and reject.
             request.session.flush()
             return JsonResponse({'error': 'Authentication required'}, status=401)
 
+        request.portal_user = user
         return view_func(request, *args, **kwargs)
 
     return wrapped
