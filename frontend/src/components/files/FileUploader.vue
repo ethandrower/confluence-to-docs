@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { useFilesStore } from '@/stores/files'
 
 const props = defineProps({
@@ -60,7 +60,7 @@ function open() {
 async function handle(fileList) {
   const names = []
   for (const file of Array.from(fileList)) {
-    const entry = { name: file.name, pct: 0, error: '' }
+    const entry = reactive({ name: file.name, pct: 0, error: '' })
     active.value.push(entry)
     try {
       await store.upload(file, props.bucketId, (p) => (entry.pct = p))
