@@ -110,8 +110,14 @@
           <div class="fd-head">
             <h3>{{ selectedCompany.name }}</h3>
             <div class="fd-head-actions">
-              <button class="btn-ghost" @click="openRequest()">+ New request</button>
-              <a v-if="companyFileCount" class="btn-primary" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">Download all</a>
+              <a v-if="companyFileCount" class="btn-outline" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download all
+              </a>
+              <button class="btn-primary" @click="openRequest()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                New request
+              </button>
             </div>
           </div>
           <div v-for="b in companyBuckets" :key="b.id" class="fd-bucket">
@@ -438,9 +444,13 @@ tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--accent); }
 .ta-r { text-align: right; white-space: nowrap; }
 .empty { text-align: center; color: var(--muted-foreground); padding: 28px; }
-.btn-primary { background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: 8px; transition: filter 0.15s; }
+.btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 8px 14px; border-radius: 8px; cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s; }
 .btn-primary:hover { filter: brightness(0.94); }
 .btn-primary:disabled { opacity: 0.6; }
+.btn-primary svg { width: 15px; height: 15px; }
+.btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: 8px; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
+.btn-outline svg { width: 15px; height: 15px; }
 .btn-ghost { color: var(--muted-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
 .btn-ghost:hover { background: var(--muted); color: var(--foreground); }
 
