@@ -167,3 +167,20 @@ def file_download(request, file_id):
     log_activity(request.portal_user.company, 'download', actor=request.portal_user,
                  file=f, name=f.original_name)
     return HttpResponseRedirect(url)
+
+
+def guess_mime(f):
+    if f.mime_type:
+        return f.mime_type
+    import mimetypes
+    return mimetypes.guess_type(f.original_name)[0] or 'application/octet-stream'
+
+
+@require_portal_user
+@require_http_methods(['GET'])
+def file_view(request, file_id):
+    """Inline preview (PDF/image) — redirects to a presigned inline URL."""
+    f = _own_file(request, file_id)
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    return HttpResponseRedirect(file_storage.presign_view(f.storage_key, guess_mime(f)))

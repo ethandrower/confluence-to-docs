@@ -133,6 +133,18 @@ class ListAndManageTests(TestCase):
         self.assertEqual(r['Location'], 'https://s3/get')
         self.assertTrue(FileActivity.objects.filter(file=self.afile, action='download').exists())
 
+    @patch('portal.file_storage.presign_view', return_value='https://s3/inline')
+    def test_view_redirects_inline(self, _m):
+        self._login(self.a)
+        r = self.client.get(f'/api/files/{self.afile.id}/view')
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r['Location'], 'https://s3/inline')
+
+    def test_view_blocked_cross_company(self):
+        self._login(self.g)
+        r = self.client.get(f'/api/files/{self.afile.id}/view')
+        self.assertIn(r.status_code, (403, 404))
+
 
 class AdminFilesTests(TestCase):
     def setUp(self):

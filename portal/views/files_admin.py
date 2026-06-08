@@ -204,7 +204,16 @@ def admin_file_download(request, file_id):
     f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).first()
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
-    from django.http import HttpResponseRedirect
     url = file_storage.presign_get(f.storage_key, download_name=f.original_name)
     log_activity(f.company, 'download', actor=request.portal_user, file=f, name=f.original_name)
     return HttpResponseRedirect(url)
+
+
+@require_portal_admin
+def admin_file_view(request, file_id):
+    """Inline preview (PDF/image) of any company's file (admin-scoped)."""
+    f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).first()
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    from portal.views.files import guess_mime
+    return HttpResponseRedirect(file_storage.presign_view(f.storage_key, guess_mime(f)))

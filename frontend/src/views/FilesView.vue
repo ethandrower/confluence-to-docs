@@ -79,6 +79,9 @@
                     <span class="row-sub">{{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}</span>
                   </div>
                   <span class="row-actions">
+                    <button v-if="previewable(f.original_name)" class="ico" title="Preview" aria-label="Preview" @click="openPreview(f)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
                     <a class="ico" :href="store.downloadUrl(f.id)" title="Download" aria-label="Download">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     </a>
@@ -101,6 +104,8 @@
           <p v-else class="fs-placeholder">Select a request or your files to get started.</p>
         </section>
       </div>
+
+      <FilePreview :src="previewSrc" :name="previewName" @close="previewSrc = null" />
 
       <!-- toast -->
       <Transition name="toast">
@@ -126,6 +131,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FileUploader from '@/components/files/FileUploader.vue'
+import FilePreview from '@/components/files/FilePreview.vue'
 import { useFilesStore } from '@/stores/files'
 
 const store = useFilesStore()
@@ -136,6 +142,14 @@ const editName = ref('')
 const renameInput = ref(null)
 const toast = ref('')
 const flash = ref(new Set())
+const previewSrc = ref(null)
+const previewName = ref('')
+
+function previewable(name) { return /\.(pdf|png|jpe?g|gif|webp)$/i.test(name) }
+function openPreview(f) {
+  previewName.value = f.original_name
+  previewSrc.value = `/api/files/${f.id}/view`
+}
 
 onMounted(store.load)
 

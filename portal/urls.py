@@ -19,6 +19,7 @@ urlpatterns = [
     path('admin/files/requests/', files_admin.create_request, name='admin-files-create-request'),
     path('admin/files/requests/<int:bucket_id>/', files_admin.update_request, name='admin-files-update-request'),
     path('admin/files/<int:file_id>/download', files_admin.admin_file_download, name='admin-files-download'),
+    path('admin/files/<int:file_id>/view', files_admin.admin_file_view, name='admin-files-view'),
 
     # File sharing (customer + shared)
     path('files/buckets/', files.buckets_list, name='files-buckets'),
@@ -26,6 +27,7 @@ urlpatterns = [
     path('files/upload-complete', files.upload_complete, name='files-upload-complete'),
     path('files/<int:file_id>', files.file_detail, name='files-file'),
     path('files/<int:file_id>/download', files.file_download, name='files-download'),
+    path('files/<int:file_id>/view', files.file_view, name='files-view'),
 
     # Docs
     path('docs/', docs.page_tree, name='page-tree'),

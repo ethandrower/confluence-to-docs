@@ -65,6 +65,17 @@ def presign_get(key, download_name=None):
     )
 
 
+def presign_view(key, mime=None):
+    """Presigned GET that renders inline (for PDF/image preview in an iframe)
+    rather than forcing a download."""
+    params = {'Bucket': settings.FILESHARE_BUCKET, 'Key': key, 'ResponseContentDisposition': 'inline'}
+    if mime:
+        params['ResponseContentType'] = mime
+    return _s3().generate_presigned_url(
+        'get_object', Params=params, ExpiresIn=settings.FILESHARE_PRESIGN_TTL
+    )
+
+
 def head_size(key):
     """Return object size in bytes, or None if the object isn't there."""
     try:

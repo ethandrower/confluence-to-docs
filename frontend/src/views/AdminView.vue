@@ -155,6 +155,7 @@
                     <td>{{ fmtFileDate(i.uploaded_at) }}</td>
                     <td>{{ i.uploaded_by_name || '—' }}</td>
                     <td class="ta-r inbox-actions">
+                      <button v-if="previewable(i.original_name)" class="link" @click="openPreview(i.id, i.original_name)">Preview</button>
                       <a :href="`/api/admin/files/${i.id}/download`">Download</a>
                       <button class="link" @click="toggleProcessed(i)">{{ i.processed ? 'Undo' : 'Mark processed' }}</button>
                     </td>
@@ -206,7 +207,10 @@
                         <td class="tabular">{{ fmtSize(f.size_bytes) }}</td>
                         <td>{{ fmtFileDate(f.uploaded_at) }}</td>
                         <td>{{ f.uploaded_by_name || '—' }}</td>
-                        <td class="ta-r"><a :href="`/api/admin/files/${f.id}/download`">Download</a></td>
+                        <td class="ta-r inbox-actions">
+                          <button v-if="previewable(f.original_name)" class="link" @click="openPreview(f.id, f.original_name)">Preview</button>
+                          <a :href="`/api/admin/files/${f.id}/download`">Download</a>
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -304,6 +308,8 @@
           </div>
         </div>
       </Transition>
+
+      <FilePreview :src="previewSrc" :name="previewName" @close="previewSrc = null" />
     </template>
   </AppShell>
 </template>
@@ -311,6 +317,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
+import FilePreview from '@/components/files/FilePreview.vue'
 import { useAdminStore } from '@/stores/admin.js'
 import { useAuthStore } from '@/stores/auth.js'
 
@@ -464,6 +471,14 @@ function openInbox() {
   filesMode.value = 'inbox'
   loadInbox()
 }
+const previewSrc = ref(null)
+const previewName = ref('')
+function previewable(name) { return /\.(pdf|png|jpe?g|gif|webp)$/i.test(name) }
+function openPreview(id, name) {
+  previewName.value = name
+  previewSrc.value = `/api/admin/files/${id}/view`
+}
+
 async function toggleProcessed(item) {
   const next = !item.processed
   const r = await fetch(`/api/admin/files/${item.id}/processed`, {
