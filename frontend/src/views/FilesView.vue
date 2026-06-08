@@ -60,6 +60,21 @@
 
             <p v-if="active.description" class="fs-desc">{{ active.description }}</p>
 
+            <div v-if="active.kind === 'request' && active.checklist && active.checklist.length" class="fs-check">
+              <div class="fs-check-head">
+                <span class="fs-check-label">Requested documents</span>
+                <span class="fs-check-count">{{ checklistReceived(active) }} / {{ active.checklist.length }} received</span>
+              </div>
+              <div class="fs-check-bar"><div :style="{ width: checklistPct(active) + '%' }" /></div>
+              <ul class="fs-check-list">
+                <li v-for="c in active.checklist" :key="c.id" :class="{ done: c.linked_file }">
+                  <span class="fs-check-dot" :class="c.linked_file && 'on'" />
+                  <span class="fs-check-text">{{ c.text }}</span>
+                  <span v-if="c.linked_file" class="fs-check-recv">Received</span>
+                </li>
+              </ul>
+            </div>
+
             <FileUploader :bucket-id="active.id" :label="uploadLabel" :key="active.id" @uploaded="onUploaded" />
 
             <div class="files">
@@ -76,7 +91,11 @@
                       <input ref="renameInput" v-model="editName" class="rename" @keydown.enter="saveRename(f)" @keydown.esc="cancelRename" @blur="saveRename(f)" />
                     </template>
                     <span v-else class="row-name" :title="f.original_name">{{ f.original_name }}</span>
-                    <span class="row-sub">{{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}</span>
+                    <span class="row-sub">
+                      {{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}
+                      <span v-if="f.review_status && f.review_status !== 'pending'" class="rv-badge" :class="`rv-badge--${f.review_status}`">{{ reviewLabel(f.review_status) }}</span>
+                    </span>
+                    <span v-if="f.review_notes" class="rv-note">{{ f.review_notes }}</span>
                   </div>
                   <span class="row-actions">
                     <button v-if="previewable(f.original_name)" class="ico" title="Preview" aria-label="Preview" @click="openPreview(f)">
@@ -222,6 +241,12 @@ function relDate(d) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function shortDate(d) { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
+function reviewLabel(s) { return { review: 'In review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
+function checklistReceived(b) { return (b.checklist || []).filter((c) => c.linked_file).length }
+function checklistPct(b) {
+  const total = (b.checklist || []).length
+  return total ? Math.round(checklistReceived(b) / total * 100) : 0
+}
 function ext(name) {
   const dot = name.lastIndexOf('.')
   return dot === -1 ? 'FILE' : name.slice(dot + 1).toUpperCase().slice(0, 4)
@@ -298,6 +323,25 @@ function cat(name) {
   color: var(--foreground); font-size: 0.9rem; line-height: 1.55;
 }
 .fs-placeholder { color: var(--muted-foreground); padding: 3rem 0; text-align: center; }
+
+/* Requested-documents checklist (read-only for customer) */
+.fs-check { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.85rem 1rem; margin: 1rem 0 1.25rem; background: var(--card); }
+.fs-check-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.fs-check-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: var(--muted-foreground); }
+.fs-check-count { font-size: 0.78rem; color: var(--muted-foreground); }
+.fs-check-bar { height: 5px; border-radius: 999px; background: var(--secondary); overflow: hidden; margin-bottom: 0.6rem; }
+.fs-check-bar div { height: 100%; background: var(--primary); transition: width 0.3s ease; }
+.fs-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.fs-check-list li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; color: var(--foreground); }
+.fs-check-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--input); flex-shrink: 0; }
+.fs-check-dot.on { background: var(--primary); border-color: var(--primary); }
+.fs-check-recv { margin-left: auto; font-size: 0.68rem; font-weight: 600; color: var(--muted-foreground); }
+
+/* Review status badge + note (customer) */
+.rv-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; border-radius: 999px; color: var(--muted-foreground); background: var(--secondary); }
+.rv-badge--approved { color: var(--primary); }
+.rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
+.rv-note { font-size: 0.76rem; color: var(--destructive); margin-top: 0.15rem; }
 
 /* ── File list ── */
 .files { margin-top: 1.5rem; }

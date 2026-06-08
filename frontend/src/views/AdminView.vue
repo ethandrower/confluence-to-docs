@@ -191,29 +191,62 @@
                   </div>
                 </div>
                 <div v-for="b in companyBuckets" :key="b.id" class="fd-bucket">
-                  <h4>
-                    {{ b.title }}
-                    <span v-if="b.kind==='request'" class="role role--admin">request</span>
+                  <div class="fd-bucket-head">
+                    <div class="fd-bucket-title">
+                      <h4>{{ b.title }}</h4>
+                      <span v-if="b.kind==='request'" class="kind-tag">Request</span>
+                      <span v-if="b.due_at" class="due" :class="`due--${dueTone(b)}`">{{ dueLabel(b) }}</span>
+                    </div>
                     <button v-if="b.kind==='request'" class="fd-edit" title="Edit request" @click="openRequest(b)" aria-label="Edit request">
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
                     </button>
-                  </h4>
+                  </div>
                   <p v-if="b.description" class="fd-desc">{{ b.description }}</p>
-                  <table v-if="b.files.length">
-                    <thead><tr><th>Name</th><th>Size</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="f in b.files" :key="f.id">
-                        <td>{{ f.original_name }}</td>
-                        <td class="tabular">{{ fmtSize(f.size_bytes) }}</td>
-                        <td>{{ fmtFileDate(f.uploaded_at) }}</td>
-                        <td>{{ f.uploaded_by_name || '—' }}</td>
-                        <td class="ta-r inbox-actions">
-                          <button v-if="previewable(f.original_name)" class="link" @click="openPreview(f.id, f.original_name)">Preview</button>
-                          <a :href="`/api/admin/files/${f.id}/download`">Download</a>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+
+                  <!-- Required-documents checklist (requests only) -->
+                  <div v-if="b.kind==='request'" class="checklist">
+                    <div class="checklist-head">
+                      <span class="checklist-label">Required documents</span>
+                      <span class="checklist-progress">{{ b.checklist.filter(c=>c.linked_file).length }} / {{ b.checklist.length }} received</span>
+                    </div>
+                    <div class="progress-bar"><div :style="{ width: checklistPct(b) + '%' }" /></div>
+                    <div v-for="c in b.checklist" :key="c.id" class="check-row">
+                      <span class="check-dot" :class="c.linked_file && 'check-dot--on'" />
+                      <span class="check-text">{{ c.text }}</span>
+                      <select class="check-link" :value="c.linked_file || ''" @change="linkChecklist(c, $event.target.value)">
+                        <option value="">— link a file —</option>
+                        <option v-for="f in b.files" :key="f.id" :value="f.id">{{ f.original_name }}</option>
+                      </select>
+                      <button class="ico-sm" title="Remove" @click="removeChecklist(c)" aria-label="Remove checklist item">×</button>
+                    </div>
+                    <div class="check-add">
+                      <input v-model="checklistDraft[b.id]" placeholder="Add a required document…" @keydown.enter="addChecklist(b)" />
+                      <button class="btn-ghost" @click="addChecklist(b)">Add</button>
+                    </div>
+                  </div>
+
+                  <ul v-if="b.files.length" class="fd-rows">
+                    <li v-for="f in b.files" :key="f.id" class="fd-row">
+                      <span class="fd-file">
+                        <span class="fd-name">{{ f.original_name }}</span>
+                        <span class="fd-sub">{{ fmtSize(f.size_bytes) }} · {{ fmtFileDate(f.uploaded_at) }} · {{ f.uploaded_by_name || '—' }}</span>
+                        <span v-if="f.review_notes" class="fd-note">Note: {{ f.review_notes }}</span>
+                      </span>
+                      <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status" @change="setReview(f, $event.target.value)">
+                        <option value="pending">Pending</option>
+                        <option value="review">In review</option>
+                        <option value="approved">Approved</option>
+                        <option value="revision">Needs revision</option>
+                      </select>
+                      <button class="ico-sm" title="Add / edit note" @click="editNote(f)" aria-label="Edit note">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                      </button>
+                      <span class="fd-actions">
+                        <button v-if="previewable(f.original_name)" class="link" @click="openPreview(f.id, f.original_name)">Preview</button>
+                        <a :href="`/api/admin/files/${f.id}/download`">Download</a>
+                      </span>
+                    </li>
+                  </ul>
                   <p v-else class="empty">No files in this bucket.</p>
                 </div>
               </template>
@@ -479,6 +512,63 @@ function openPreview(id, name) {
   previewSrc.value = `/api/admin/files/${id}/view`
 }
 
+// Review + checklist
+const checklistDraft = ref({})
+async function setReview(f, status) {
+  const r = await fetch(`/api/admin/files/${f.id}/review`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ review_status: status }),
+  })
+  if (r.ok) await selectCompany(selectedCompanyId.value)
+}
+async function editNote(f) {
+  const notes = prompt('Reviewer note (shown to the customer when status is In review / Needs revision):', f.review_notes || '')
+  if (notes === null) return
+  const r = await fetch(`/api/admin/files/${f.id}/review`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  })
+  if (r.ok) await selectCompany(selectedCompanyId.value)
+}
+async function addChecklist(b) {
+  const text = (checklistDraft.value[b.id] || '').trim()
+  if (!text) return
+  const r = await fetch('/api/admin/files/checklist/', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bucket_id: b.id, text }),
+  })
+  if (r.ok) { checklistDraft.value[b.id] = ''; await selectCompany(selectedCompanyId.value) }
+}
+async function linkChecklist(item, fileId) {
+  const r = await fetch(`/api/admin/files/checklist/${item.id}/`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ linked_file_id: fileId ? Number(fileId) : null }),
+  })
+  if (r.ok) await selectCompany(selectedCompanyId.value)
+}
+async function removeChecklist(item) {
+  const r = await fetch(`/api/admin/files/checklist/${item.id}/`, { method: 'DELETE', credentials: 'include' })
+  if (r.ok) await selectCompany(selectedCompanyId.value)
+}
+function checklistPct(b) {
+  if (!b.checklist.length) return 0
+  return Math.round(b.checklist.filter((c) => c.linked_file).length / b.checklist.length * 100)
+}
+function dueTone(b) {
+  const days = Math.ceil((new Date(b.due_at) - Date.now()) / 86400000)
+  return days < 0 ? 'over' : days <= 3 ? 'soon' : 'ok'
+}
+function dueLabel(b) {
+  const days = Math.ceil((new Date(b.due_at) - Date.now()) / 86400000)
+  if (days < 0) return 'Overdue'
+  if (days === 0) return 'Due today'
+  return `Due ${days}d`
+}
+
 async function toggleProcessed(item) {
   const next = !item.processed
   const r = await fetch(`/api/admin/files/${item.id}/processed`, {
@@ -680,9 +770,45 @@ tbody tr:hover td { background: var(--accent); }
 .fd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .fd-head h3 { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 600; color: var(--foreground); margin: 0; }
 .fd-bucket { margin-bottom: 22px; }
-.fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+.fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0; }
+.fd-bucket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.fd-bucket-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.kind-tag { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
 .fd-desc { font-size: 0.85rem; color: var(--muted-foreground); margin: -2px 0 10px; max-width: 70ch; }
 .fd-placeholder { color: var(--muted-foreground); font-size: 0.95rem; padding: 24px 0; }
+.due { font-size: 0.72rem; font-weight: 550; color: var(--muted-foreground); }
+.due--soon { font-weight: 650; }
+.due--over { color: var(--destructive); font-weight: 650; }
+
+/* Checklist */
+.checklist { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 0 0 14px; background: var(--card); }
+.checklist-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.checklist-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: var(--muted-foreground); }
+.checklist-progress { font-size: 0.78rem; color: var(--muted-foreground); }
+.progress-bar { height: 5px; border-radius: 999px; background: var(--secondary); overflow: hidden; margin-bottom: 10px; }
+.progress-bar div { height: 100%; background: var(--primary); transition: width 0.3s ease; }
+.check-row { display: grid; grid-template-columns: 14px 1fr 200px 24px; align-items: center; gap: 8px; padding: 4px 0; }
+.check-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--input); }
+.check-dot--on { background: var(--primary); border-color: var(--primary); }
+.check-text { font-size: 0.85rem; color: var(--foreground); }
+.check-link { height: 30px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); font: inherit; font-size: 12.5px; padding: 0 8px; max-width: 200px; }
+.check-add { display: flex; gap: 8px; margin-top: 8px; }
+.check-add input { flex: 1; height: 32px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; padding: 0 10px; }
+.ico-sm { width: 24px; height: 24px; display: inline-grid; place-items: center; border: none; background: none; color: var(--muted-foreground); border-radius: 6px; cursor: pointer; font-size: 16px; }
+.ico-sm svg { width: 13px; height: 13px; }
+.ico-sm:hover { background: var(--secondary); color: var(--foreground); }
+
+/* File rows (company view) */
+.fd-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fd-row { display: grid; grid-template-columns: 1fr 140px 28px auto; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; }
+.fd-file { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.fd-name { font-size: 0.88rem; font-weight: 550; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-sub { font-size: 0.74rem; color: var(--muted-foreground); }
+.fd-note { font-size: 0.74rem; color: var(--destructive); margin-top: 2px; }
+.review-select { height: 30px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); font: inherit; font-size: 12.5px; padding: 0 6px; }
+.rv--approved { color: var(--primary); }
+.rv--revision { color: var(--destructive); }
+.fd-actions { display: flex; gap: 12px; justify-content: flex-end; white-space: nowrap; }
 .fd-head-actions { display: flex; align-items: center; gap: 8px; }
 .fd-edit { background: none; border: none; color: var(--muted-foreground); cursor: pointer; padding: 2px; border-radius: 6px; display: inline-grid; place-items: center; }
 .fd-edit:hover { background: var(--muted); color: var(--foreground); }
