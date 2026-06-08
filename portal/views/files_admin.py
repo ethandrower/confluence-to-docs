@@ -138,6 +138,67 @@ def update_request(request, bucket_id):
 
 
 @require_portal_admin
+def inbox(request):
+    """Cross-client 'to-process' inbox: recent uploads across ALL companies.
+
+    Available to all CiteMed staff (owner/admin). Newest first. Optional
+    filters: ?status=unprocessed|all (default unprocessed), ?company=<id>,
+    ?limit=<n> (default 100, max 300).
+    """
+    status = request.GET.get('status', 'unprocessed')
+    qs = (
+        SharedFile.objects
+        .filter(deleted_at__isnull=True, state=SharedFile.STATE_READY)
+        .select_related('company', 'bucket', 'uploaded_by')
+    )
+    if status == 'unprocessed':
+        qs = qs.filter(processed=False)
+    company_id = request.GET.get('company')
+    if company_id:
+        qs = qs.filter(company_id=company_id)
+    try:
+        limit = min(int(request.GET.get('limit', 100)), 300)
+    except (TypeError, ValueError):
+        limit = 100
+
+    items = []
+    for f in qs.order_by('-uploaded_at')[:limit]:
+        items.append({
+            'id': f.id,
+            'original_name': f.original_name,
+            'size_bytes': f.size_bytes,
+            'uploaded_at': f.uploaded_at.isoformat(),
+            'uploaded_by_name': (f.uploaded_by.name or f.uploaded_by.email) if f.uploaded_by else None,
+            'company': {'id': f.company_id, 'name': f.company.name},
+            'bucket': {'id': f.bucket_id, 'title': f.bucket.title, 'kind': f.bucket.kind},
+            'processed': f.processed,
+        })
+    unprocessed_total = SharedFile.objects.filter(
+        deleted_at__isnull=True, state=SharedFile.STATE_READY, processed=False,
+    ).count()
+    return JsonResponse({'items': items, 'unprocessed_total': unprocessed_total})
+
+
+@csrf_exempt
+@require_portal_admin
+@require_http_methods(['PATCH'])
+def set_processed(request, file_id):
+    f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).first()
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    data = json.loads(request.body or '{}')
+    processed = bool(data.get('processed', True))
+    from django.utils import timezone
+    f.processed = processed
+    f.processed_at = timezone.now() if processed else None
+    f.processed_by = request.portal_user if processed else None
+    f.save(update_fields=['processed', 'processed_at', 'processed_by'])
+    log_activity(f.company, 'processed' if processed else 'unprocessed',
+                 actor=request.portal_user, file=f, name=f.original_name)
+    return JsonResponse({'ok': True, 'processed': f.processed})
+
+
+@require_portal_admin
 def admin_file_download(request, file_id):
     """Presigned download of any company's file (admin-scoped)."""
     f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).first()

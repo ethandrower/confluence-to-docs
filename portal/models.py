@@ -207,6 +207,14 @@ class SharedFile(models.Model):
         related_name='reviewed_files',
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    # Internal "we've handled / integrated this" flag for the staff inbox.
+    # Distinct from review_status (which is the customer-facing approve/revise loop).
+    processed = models.BooleanField(default=False)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    processed_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='processed_files',
+    )
     uploaded_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 

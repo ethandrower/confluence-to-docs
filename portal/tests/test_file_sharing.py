@@ -167,6 +167,57 @@ class AdminFilesTests(TestCase):
         self.assertEqual(len(files), 1)
 
 
+class InboxTests(TestCase):
+    def setUp(self):
+        self.acme = Company.objects.create(name='Acme')
+        self.globex = Company.objects.create(name='Globex')
+        self.admin = PortalUser.objects.create(email='p@citemed.com', role='admin')
+        self.cust = PortalUser.objects.create(email='a@acme.com', company=self.acme, role='customer')
+        from portal.views.files import get_general_bucket
+        self.f1 = SharedFile.objects.create(bucket=get_general_bucket(self.acme), company=self.acme,
+                                            original_name='a.pdf', storage_key='k1', state='ready', size_bytes=10)
+        self.f2 = SharedFile.objects.create(bucket=get_general_bucket(self.globex), company=self.globex,
+                                            original_name='b.pdf', storage_key='k2', state='ready', size_bytes=20)
+
+    def _login(self, u):
+        s = self.client.session
+        s['portal_user_id'] = u.id
+        s.save()
+
+    def test_customer_blocked_from_inbox(self):
+        self._login(self.cust)
+        self.assertEqual(self.client.get('/api/admin/files/inbox/').status_code, 403)
+
+    def test_inbox_returns_files_across_all_companies(self):
+        self._login(self.admin)
+        r = self.client.get('/api/admin/files/inbox/')
+        self.assertEqual(r.status_code, 200)
+        names = {i['original_name'] for i in r.json()['items']}
+        self.assertEqual(names, {'a.pdf', 'b.pdf'})
+        self.assertEqual(r.json()['unprocessed_total'], 2)
+
+    def test_mark_processed_and_filter(self):
+        self._login(self.admin)
+        r = self.client.patch(f'/api/admin/files/{self.f1.id}/processed',
+                              data=json.dumps({'processed': True}), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.f1.refresh_from_db()
+        self.assertTrue(self.f1.processed)
+        self.assertTrue(FileActivity.objects.filter(file=self.f1, action='processed').exists())
+        # default inbox (unprocessed) now hides f1
+        items = self.client.get('/api/admin/files/inbox/').json()
+        self.assertEqual({i['original_name'] for i in items['items']}, {'b.pdf'})
+        self.assertEqual(items['unprocessed_total'], 1)
+        # status=all shows both
+        allitems = self.client.get('/api/admin/files/inbox/?status=all').json()['items']
+        self.assertEqual(len({i['id'] for i in allitems}), 2)
+
+    def test_inbox_company_filter(self):
+        self._login(self.admin)
+        items = self.client.get(f'/api/admin/files/inbox/?company={self.globex.id}').json()['items']
+        self.assertEqual({i['original_name'] for i in items}, {'b.pdf'})
+
+
 class RequestAuthoringTests(TestCase):
     def setUp(self):
         self.acme = Company.objects.create(name='Acme')
