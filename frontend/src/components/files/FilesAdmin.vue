@@ -133,27 +133,32 @@
             </div>
             <p v-if="b.description" class="fd-desc">{{ b.description }}</p>
 
-            <!-- Required-documents checklist (requests only) -->
-            <div v-if="b.kind==='request'" class="checklist">
-              <div class="checklist-head">
-                <span class="checklist-label">Required documents</span>
-                <span class="checklist-progress">{{ b.checklist.filter(c=>c.linked_file).length }} / {{ b.checklist.length }} received</span>
+            <!-- Required-documents checklist (requests only, optional) -->
+            <template v-if="b.kind==='request'">
+              <div v-if="b.checklist.length || showAdd[b.id]" class="checklist">
+                <template v-if="b.checklist.length">
+                  <div class="checklist-head">
+                    <span class="checklist-label">Required documents</span>
+                    <span class="checklist-progress">{{ b.checklist.filter(c=>c.linked_file).length }} / {{ b.checklist.length }} received</span>
+                  </div>
+                  <div class="progress-bar"><div :style="{ width: checklistPct(b) + '%' }" /></div>
+                  <div v-for="c in b.checklist" :key="c.id" class="check-row">
+                    <span class="check-dot" :class="c.linked_file && 'check-dot--on'" />
+                    <span class="check-text">{{ c.text }}</span>
+                    <select class="check-link" :value="c.linked_file || ''" :aria-label="`Link a file to: ${c.text}`" @change="linkChecklist(c, $event.target.value)">
+                      <option value="">— link a file —</option>
+                      <option v-for="f in b.files" :key="f.id" :value="f.id">{{ f.original_name }}</option>
+                    </select>
+                    <button class="ico-sm" title="Remove" @click="removeChecklist(c)" aria-label="Remove checklist item">×</button>
+                  </div>
+                </template>
+                <div class="check-add">
+                  <input v-model="checklistDraft[b.id]" placeholder="Add a required document…" @keydown.enter="addChecklist(b)" />
+                  <button class="btn-ghost" @click="addChecklist(b)">Add</button>
+                </div>
               </div>
-              <div class="progress-bar"><div :style="{ width: checklistPct(b) + '%' }" /></div>
-              <div v-for="c in b.checklist" :key="c.id" class="check-row">
-                <span class="check-dot" :class="c.linked_file && 'check-dot--on'" />
-                <span class="check-text">{{ c.text }}</span>
-                <select class="check-link" :value="c.linked_file || ''" :aria-label="`Link a file to: ${c.text}`" @change="linkChecklist(c, $event.target.value)">
-                  <option value="">— link a file —</option>
-                  <option v-for="f in b.files" :key="f.id" :value="f.id">{{ f.original_name }}</option>
-                </select>
-                <button class="ico-sm" title="Remove" @click="removeChecklist(c)" aria-label="Remove checklist item">×</button>
-              </div>
-              <div class="check-add">
-                <input v-model="checklistDraft[b.id]" placeholder="Add a required document…" @keydown.enter="addChecklist(b)" />
-                <button class="btn-ghost" @click="addChecklist(b)">Add</button>
-              </div>
-            </div>
+              <button v-else class="checklist-add-link" @click="showAdd[b.id]=true">+ Add a required-documents checklist (optional)</button>
+            </template>
 
             <ul v-if="b.files.length" class="fd-rows">
               <li v-for="f in b.files" :key="f.id" class="fd-row" :class="preview && preview.id===f.id && 'row-active'">
@@ -310,6 +315,7 @@ function closePreview() { preview.value = null }
 
 // Review + checklist
 const checklistDraft = ref({})
+const showAdd = ref({})  // per-bucket: reveal the (optional) checklist editor
 async function setReview(f, status) {
   const r = await fetch(`/api/admin/files/${f.id}/review`, {
     method: 'PATCH', credentials: 'include',
@@ -539,6 +545,8 @@ tbody tr:hover td { background: var(--accent); }
 .fd-head-actions { display: flex; align-items: center; gap: 8px; }
 .fd-bucket { margin-bottom: 22px; }
 .bucket-empty { font-size: 0.82rem; color: var(--muted-foreground); padding: 4px 2px 2px; margin: 0; }
+.checklist-add-link { display: inline-flex; align-items: center; background: none; border: none; color: var(--brand-accent); cursor: pointer; font: inherit; font-size: 0.8rem; font-weight: 550; padding: 2px 0; margin: 0 0 10px; }
+.checklist-add-link:hover { text-decoration: underline; }
 .fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0; }
 .fd-bucket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .fd-bucket-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
