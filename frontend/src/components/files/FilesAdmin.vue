@@ -91,6 +91,10 @@
                     <a class="act" :href="`/api/admin/files/${i.id}/download`" title="Download" aria-label="Download">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     </a>
+                    <button v-if="!preview" class="act act--comment" title="Internal comments" aria-label="Comments" @click="openComments(i.id, i.original_name)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      <span v-if="i.comment_count" class="act-badge">{{ i.comment_count }}</span>
+                    </button>
                     <template v-if="!preview">
                       <template v-if="i.review_status==='pending' || i.review_status==='review'">
                         <button class="mini-btn mini-btn--approve" @click="reviewInbox(i, 'approved')">Approve</button>
@@ -207,6 +211,10 @@
                   <a class="act" :href="`/api/admin/files/${f.id}/download`" title="Download" aria-label="Download">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   </a>
+                  <button class="act act--comment" title="Internal comments" aria-label="Comments" @click="openComments(f.id, f.original_name)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span v-if="f.comment_count" class="act-badge">{{ f.comment_count }}</span>
+                  </button>
                 </span>
               </li>
             </ul>
@@ -251,6 +259,32 @@
           <div class="modal-actions">
             <button class="btn-ghost" @click="reqModal=false">Cancel</button>
             <button class="btn-primary" :disabled="reqSaving" @click="saveRequest">{{ reqSaving ? 'Saving…' : (reqEditing ? 'Save' : 'Create request') }}</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Internal comments modal -->
+    <Transition name="modal">
+      <div v-if="commentsFile" class="modal-overlay" @click.self="commentsFile=null">
+        <div class="modal comments-modal" role="dialog" aria-modal="true">
+          <h2 class="modal-title">Comments</h2>
+          <p class="comments-file">{{ commentsFile.name }}</p>
+          <p class="comments-internal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+            Internal — only the CiteMed team can see this.
+          </p>
+          <div class="comments-thread">
+            <div v-for="c in comments" :key="c.id" class="comment">
+              <div class="comment-head"><span class="comment-author">{{ c.author }}</span><span class="comment-time">{{ fmtWhen(c.created_at) }}</span></div>
+              <p class="comment-body">{{ c.body }}</p>
+            </div>
+            <p v-if="!comments.length" class="comments-empty">No comments yet — start the discussion below.</p>
+          </div>
+          <textarea v-model="commentDraft" class="comment-input" rows="3" placeholder="Write a comment for the team…"></textarea>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="commentsFile=null">Close</button>
+            <button class="btn-primary" :disabled="commentsAdding || !commentDraft.trim()" @click="addComment">{{ commentsAdding ? 'Posting…' : 'Add comment' }}</button>
           </div>
         </div>
       </div>
@@ -355,6 +389,46 @@ async function openCompanyTab() {
   }
 }
 
+// Internal comments
+const commentsFile = ref(null)   // { id, name }
+const comments = ref([])
+const commentDraft = ref('')
+const commentsAdding = ref(false)
+async function openComments(id, name) {
+  commentsFile.value = { id, name }
+  comments.value = []
+  commentDraft.value = ''
+  const r = await fetch(`/api/admin/files/${id}/comments`, { credentials: 'include' })
+  if (r.ok) comments.value = (await r.json()).comments
+}
+function bumpCommentCount(id) {
+  const i = inboxItems.value.find((x) => x.id === id)
+  if (i) i.comment_count = (i.comment_count || 0) + 1
+  for (const b of companyBuckets.value) {
+    const f = b.files.find((x) => x.id === id)
+    if (f) f.comment_count = (f.comment_count || 0) + 1
+  }
+}
+async function addComment() {
+  const body = commentDraft.value.trim()
+  if (!body || !commentsFile.value) return
+  commentsAdding.value = true
+  try {
+    const r = await fetch(`/api/admin/files/${commentsFile.value.id}/comments`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    })
+    if (r.ok) {
+      comments.value.push(await r.json())
+      commentDraft.value = ''
+      bumpCommentCount(commentsFile.value.id)
+    }
+  } finally {
+    commentsAdding.value = false
+  }
+}
+
 // Activity (audit trail)
 const activityItems = ref([])
 const activityCompany = ref('')
@@ -381,7 +455,7 @@ function openActivity() {
 }
 const ACTION_LABELS = {
   upload: 'Uploaded', download: 'Downloaded', rename: 'Renamed', delete: 'Deleted',
-  status_change: 'Review changed', note: 'Note', request_created: 'Request created',
+  status_change: 'Review changed', note: 'Note', comment: 'Commented', request_created: 'Request created',
   request_deleted: 'Request deleted', processed: 'Marked processed', unprocessed: 'Unmarked',
 }
 function actionLabel(a) { return ACTION_LABELS[a] || a }
@@ -603,7 +677,9 @@ tbody tr:hover td { background: var(--accent); }
 
 /* Row action group */
 .row-acts { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
-.act { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted-foreground); cursor: pointer; transition: background-color 0.13s ease, color 0.13s ease, border-color 0.13s ease; }
+.act { position: relative; display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted-foreground); cursor: pointer; transition: background-color 0.13s ease, color 0.13s ease, border-color 0.13s ease; }
+.act-badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--card); }
+.act--comment:hover { color: var(--primary); }
 .act svg { width: 16px; height: 16px; }
 .act:hover { background: var(--secondary); color: var(--foreground); }
 .act--on { background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
@@ -618,6 +694,22 @@ tbody tr:hover td { background: var(--accent); }
 .act-tag--processed { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
 .act-tag--delete, .act-tag--request_deleted { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
 .act-tag--status_change, .act-tag--request_created { color: var(--info); background: color-mix(in srgb, var(--info) 10%, transparent); }
+/* Comments modal */
+.comments-modal { max-width: 480px; }
+.comments-file { font-size: 0.82rem; color: var(--muted-foreground); margin: -8px 0 10px; word-break: break-word; }
+.comments-internal { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 600; color: var(--muted-foreground); background: var(--muted); border-radius: 7px; padding: 6px 10px; margin: 0 0 12px; }
+.comments-internal svg { width: 13px; height: 13px; flex-shrink: 0; }
+.comments-thread { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+.comment { border-left: 2px solid var(--border); padding-left: 10px; }
+.comment-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.comment-author { font-size: 0.82rem; font-weight: 650; color: var(--foreground); }
+.comment-time { font-size: 0.7rem; color: var(--muted-foreground); }
+.comment-body { font-size: 0.86rem; color: var(--foreground); line-height: 1.45; margin: 0; white-space: pre-wrap; }
+.comments-empty { font-size: 0.85rem; color: var(--muted-foreground); text-align: center; padding: 16px 0; }
+.comment-input { width: 100%; border: 1px solid var(--input); border-radius: 8px; background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; padding: 8px 11px; resize: vertical; }
+.comment-input:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+.act-tag--comment { color: var(--info); background: color-mix(in srgb, var(--info) 10%, transparent); }
+
 .act-group { margin-bottom: 20px; }
 .act-company { display: flex; align-items: center; gap: 8px; font-family: var(--font-ui); font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0 0 8px; }
 .act-count { font-size: 11px; font-weight: 700; color: var(--muted-foreground); background: var(--muted); border-radius: 999px; padding: 1px 8px; }

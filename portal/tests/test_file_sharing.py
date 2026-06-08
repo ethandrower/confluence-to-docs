@@ -344,6 +344,24 @@ class ReviewAndChecklistTests(TestCase):
         f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
         self.assertEqual(f['review_notes'], 'secret')
 
+    def test_internal_comments_add_list_and_hidden_from_customer(self):
+        self._login(self.admin)
+        # add a comment
+        r = self.client.post(f'/api/admin/files/{self.f.id}/comments',
+                            data=json.dumps({'body': 'Is page 2 the latest?'}), content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        # list shows it
+        items = self.client.get(f'/api/admin/files/{self.f.id}/comments').json()['comments']
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['body'], 'Is page 2 the latest?')
+        self.assertTrue(FileActivity.objects.filter(file=self.f, action='comment').exists())
+        # customer can't touch the comments endpoint, and comment_count is 0 (staff-only)
+        self._login(self.cust)
+        self.assertIn(self.client.get(f'/api/admin/files/{self.f.id}/comments').status_code, (401, 403))
+        data = self.client.get('/api/files/buckets/').json()
+        f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
+        self.assertEqual(f['comment_count'], 0)
+
     def test_checklist_create_link_and_visible(self):
         self._login(self.admin)
         item = self.client.post('/api/admin/files/checklist/', data=json.dumps({

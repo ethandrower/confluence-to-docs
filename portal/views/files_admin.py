@@ -20,7 +20,7 @@ _ZIP_SPOOL = 64 * 1024 * 1024   # keep ≤64 MB in RAM, then spill to disk
 
 from portal import file_storage, file_notify
 from portal.decorators import require_portal_admin
-from portal.models import Company, Bucket, SharedFile, ChecklistItem, FileActivity
+from portal.models import Company, Bucket, SharedFile, ChecklistItem, FileActivity, FileComment, FileComment
 from portal.serializers import BucketSerializer, SharedFileSerializer, ChecklistItemSerializer
 from portal.views.files import get_general_bucket, log_activity
 
@@ -221,6 +221,7 @@ def inbox(request):
             'bucket': {'id': f.bucket_id, 'title': f.bucket.title, 'kind': f.bucket.kind},
             'review_status': f.review_status,
             'review_notes': f.review_notes,
+            'comment_count': f.comments.count(),
         })
     awaiting_total = SharedFile.objects.filter(
         deleted_at__isnull=True, state=SharedFile.STATE_READY, review_status__in=AWAITING,
@@ -333,6 +334,34 @@ def checklist_item(request, item_id):
             item.linked_file = f
     item.save()
     return JsonResponse(ChecklistItemSerializer(item).data)
+
+
+def _comment_dict(c):
+    return {
+        'id': c.id,
+        'author': (c.author.name or c.author.email) if c.author else 'CiteMed',
+        'body': c.body,
+        'created_at': c.created_at.isoformat(),
+    }
+
+
+@csrf_exempt
+@require_portal_admin
+@require_http_methods(['GET', 'POST'])
+def file_comments(request, file_id):
+    """Internal staff comment thread on a file (admin-only; never customer-facing)."""
+    f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).first()
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    if request.method == 'GET':
+        return JsonResponse({'comments': [_comment_dict(c) for c in f.comments.select_related('author')]})
+    data = json.loads(request.body or '{}')
+    body = (data.get('body') or '').strip()
+    if not body:
+        return JsonResponse({'error': 'Comment cannot be empty.'}, status=400)
+    c = FileComment.objects.create(file=f, author=request.portal_user, body=body)
+    log_activity(f.company, 'comment', actor=request.portal_user, file=f, name=f.original_name)
+    return JsonResponse(_comment_dict(c), status=201)
 
 
 @require_portal_admin

@@ -283,6 +283,18 @@ class ChecklistItem(models.Model):
         ordering = ['position', 'id']
 
 
+class FileComment(models.Model):
+    """Internal CiteMed-staff discussion on a shared file. NEVER exposed to the
+    customer — only the admin API returns these."""
+    file = models.ForeignKey(SharedFile, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey('PortalUser', null=True, blank=True, on_delete=models.SET_NULL)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
 class FileActivity(models.Model):
     """Append-only audit trail for every file-sharing action. Never deleted."""
     company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='file_activity')

@@ -53,13 +53,19 @@ class PortalUserSerializer(serializers.ModelSerializer):
 class SharedFileSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.SerializerMethodField()
     review_notes = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = SharedFile
         fields = [
             'id', 'original_name', 'size_bytes', 'mime_type', 'state',
             'review_status', 'review_notes', 'uploaded_at', 'uploaded_by_name',
+            'comment_count',
         ]
+
+    def get_comment_count(self, obj):
+        # Internal comments — only meaningful (and only counted) for staff.
+        return obj.comments.count() if self.context.get('staff') else 0
 
     def get_uploaded_by_name(self, obj):
         u = obj.uploaded_by

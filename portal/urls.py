@@ -20,6 +20,7 @@ urlpatterns = [
     path('admin/files/requests/', files_admin.create_request, name='admin-files-create-request'),
     path('admin/files/requests/<int:bucket_id>/', files_admin.update_request, name='admin-files-update-request'),
     path('admin/files/<int:file_id>/review', files_admin.set_review, name='admin-files-review'),
+    path('admin/files/<int:file_id>/comments', files_admin.file_comments, name='admin-files-comments'),
     path('admin/files/checklist/', files_admin.create_checklist_item, name='admin-files-checklist-create'),
     path('admin/files/checklist/<int:item_id>/', files_admin.checklist_item, name='admin-files-checklist-item'),
     path('admin/files/<int:file_id>/download', files_admin.admin_file_download, name='admin-files-download'),
