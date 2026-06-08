@@ -123,7 +123,7 @@
           <p v-else class="fs-placeholder">Select a request or your files to get started.</p>
         </section>
 
-        <FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="preview = null" />
+        <Transition name="pane"><FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="preview = null" /></Transition>
       </div>
 
       <!-- toast -->
@@ -270,8 +270,15 @@ function cat(name) {
   margin: 0 auto;
   padding: clamp(1.25rem, 3vw, 2rem);
   align-items: start;
+  transition: grid-template-columns 0.28s ease;
 }
 @media (max-width: 840px) { .fs { grid-template-columns: 1fr; } }
+.pane-enter-active, .pane-leave-active { transition: opacity 0.22s ease, transform 0.22s ease; }
+.pane-enter-from, .pane-leave-to { opacity: 0; transform: translateX(14px); }
+@media (prefers-reduced-motion: reduce) {
+  .fs, .pane-enter-active, .pane-leave-active { transition: none; }
+  .pane-enter-from, .pane-leave-to { transform: none; }
+}
 .fs.has-preview { grid-template-columns: 240px minmax(0, 1fr) minmax(340px, 0.95fr); max-width: 1320px; }
 @media (max-width: 1100px) { .fs.has-preview { grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr); } .fs.has-preview .fs-side { display: none; } }
 @media (max-width: 760px) { .fs.has-preview { grid-template-columns: 1fr; } }

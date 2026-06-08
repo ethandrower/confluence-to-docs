@@ -170,7 +170,7 @@
                   </tbody>
                 </table>
               </div>
-              <FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="closePreview" />
+              <Transition name="pane"><FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="closePreview" /></Transition>
             </div>
           </div>
 
@@ -260,7 +260,7 @@
               </template>
               <p v-else class="fd-placeholder">Select a company to view its files.</p>
             </div>
-            <FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="closePreview" />
+            <Transition name="pane"><FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="closePreview" /></Transition>
           </div>
         </section>
       </div>
@@ -763,7 +763,7 @@ tbody tr:hover td { background: var(--accent); }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
 
 /* Files tab */
-.files-admin { display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start; }
+.files-admin { display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start; transition: grid-template-columns 0.28s ease; }
 @media (max-width: 720px) { .files-admin { grid-template-columns: 1fr; } }
 .company-switcher { border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--card); }
 .cs-search { width: 100%; height: 36px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 13.5px; margin-bottom: 8px; }
@@ -843,9 +843,16 @@ tbody tr:hover td { background: var(--accent); }
 .row-active > td { background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
 
 /* Split preview (inbox + company) */
-.split { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.split { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; transition: grid-template-columns 0.28s ease; }
 .split.has-preview { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr); }
 .files-admin.has-preview { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr); }
+.review-select, .cs-item, .seg, .b-card, .row { transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+.pane-enter-active, .pane-leave-active { transition: opacity 0.22s ease, transform 0.22s ease; }
+.pane-enter-from, .pane-leave-to { opacity: 0; transform: translateX(14px); }
+@media (prefers-reduced-motion: reduce) {
+  .split, .files-admin, .pane-enter-active, .pane-leave-active { transition: none; }
+  .pane-enter-from, .pane-leave-to { transform: none; }
+}
 .files-detail.compact .review-select,
 .files-detail.compact .fd-row .ico-sm,
 .files-detail.compact .fd-sub,
