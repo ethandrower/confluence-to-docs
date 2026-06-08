@@ -184,7 +184,7 @@
                   <span v-if="f.review_notes" class="fd-note">Note: {{ f.review_notes }}</span>
                 </span>
                 <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status" :aria-label="`Review status for ${f.original_name}`" @change="setReview(f, $event.target.value)">
-                  <option value="pending">Awaiting review</option>
+                  <option value="pending">In review</option>
                   <option value="approved">Approved</option>
                   <option value="revision">Needs revision</option>
                 </select>
@@ -640,7 +640,8 @@ tbody tr:hover td { background: var(--accent); }
 .fd-name { font-size: 0.88rem; font-weight: 550; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fd-sub { font-size: 0.74rem; color: var(--muted-foreground); }
 .fd-note { font-size: 0.74rem; color: var(--destructive); margin-top: 2px; }
-.review-select { height: 30px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); font: inherit; font-size: 12.5px; font-weight: 600; padding: 0 6px; }
+.review-select { height: 30px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); color-scheme: light dark; font: inherit; font-size: 12.5px; font-weight: 600; padding: 0 8px; min-width: 120px; }
+.review-select option { background: var(--popover); color: var(--foreground); }
 .rv--pending { color: var(--warning); }
 .rv--review { color: var(--info); border-color: color-mix(in srgb, var(--info) 45%, var(--input)); }
 .rv--approved { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--input)); }
