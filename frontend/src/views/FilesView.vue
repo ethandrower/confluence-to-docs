@@ -253,7 +253,8 @@ function relDate(d) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function shortDate(d) { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
-function reviewLabel(s) { return { pending: 'Awaiting review', review: 'In review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
+// Customer collapses both pre-decision states (pending / in-review) to "Awaiting review".
+function reviewLabel(s) { return { pending: 'Awaiting review', review: 'Awaiting review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
 function checklistReceived(b) { return (b.checklist || []).filter((c) => c.linked_file).length }
 function checklistPct(b) {
   const total = (b.checklist || []).length
@@ -384,8 +385,7 @@ function cat(name) {
 
 /* Review status badge + note (customer) — colour carries the state */
 .rv-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; border-radius: 999px; color: var(--muted-foreground); background: var(--secondary); }
-.rv-badge--pending { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
-.rv-badge--review { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.rv-badge--pending, .rv-badge--review { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
 .rv-badge--approved { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
 .rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 14%, transparent); }
 .rv-note { font-size: 0.76rem; color: var(--destructive); margin-top: 0.15rem; }

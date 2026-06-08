@@ -30,6 +30,9 @@
        Grey 7 #626A7A · Grey 10 #242A35 · Brand navy #0C377B
        Dull Blue 2 #DEEBFA · Bright Blue #3578FF */
   --radius: 0.625rem;
+  /* Tell the browser this surface is light so native controls (date pickers,
+     selects, scrollbars) render correctly. .dark overrides to dark below. */
+  color-scheme: light;
   --background: #F5F6FA;          /* Grey 1 — app surface */
   --foreground: #242A35;          /* Grey 10 — primary text */
   --card: #FFFFFF;
@@ -69,6 +72,7 @@
 
 /* ── Dark theme (opt-in via .dark on <html>) ─────────────────────────── */
 .dark {
+  color-scheme: dark;
   --background: #1A1F27;
   --foreground: #F5F6FA;          /* Grey 1 */
   --card: #242A35;                /* Grey 10 */
