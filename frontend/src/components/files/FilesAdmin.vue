@@ -10,6 +10,9 @@
       <button role="tab" :aria-selected="filesMode==='activity'" class="seg" :class="filesMode==='activity' && 'seg--active'" @click="openActivity">
         Activity
       </button>
+      <button class="refresh-btn" :class="refreshing && 'is-spinning'" :disabled="refreshing" title="Refresh" aria-label="Refresh" @click="refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+      </button>
     </div>
 
     <!-- ACTIVITY: append-only audit trail -->
@@ -258,10 +261,27 @@ const inboxCompany = ref('')
 const inboxUnprocessed = ref(0)
 const inboxLoading = ref(false)
 
-async function loadFileCompanies() {
-  if (fileCompanies.value.length) return
+async function loadFileCompanies(force = false) {
+  if (!force && fileCompanies.value.length) return
   const r = await fetch('/api/admin/files/companies/', { credentials: 'include' })
   if (r.ok) fileCompanies.value = (await r.json()).companies
+}
+
+const refreshing = ref(false)
+async function refresh() {
+  refreshing.value = true
+  try {
+    if (filesMode.value === 'inbox') {
+      await loadInbox()
+    } else if (filesMode.value === 'company') {
+      await loadFileCompanies(true)
+      if (selectedCompanyId.value) await selectCompany(selectedCompanyId.value)
+    } else if (filesMode.value === 'activity') {
+      await loadActivity()
+    }
+  } finally {
+    refreshing.value = false
+  }
 }
 async function loadInbox() {
   inboxLoading.value = true
@@ -483,7 +503,14 @@ tbody tr:hover td { background: var(--accent); }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
 
 /* ── Files: segmented modes + inbox ── */
-.files-modes { display: flex; gap: 6px; margin-bottom: 16px; }
+.files-modes { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+.refresh-btn { margin-left: auto; display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.refresh-btn svg { width: 16px; height: 16px; }
+.refresh-btn:hover { color: var(--primary); border-color: var(--primary); }
+.refresh-btn:disabled { opacity: 0.6; cursor: default; }
+.refresh-btn.is-spinning svg { animation: rspin 0.7s linear infinite; }
+@keyframes rspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg { animation: none; } }
 .seg { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 13.5px; font-weight: 550; cursor: pointer; }
 .seg:hover { color: var(--foreground); }
 .seg--active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); color: var(--primary); }

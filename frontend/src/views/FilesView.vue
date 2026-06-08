@@ -50,12 +50,17 @@
 
           <template v-else-if="active">
             <header class="fs-head">
-              <h1>{{ active.title }}</h1>
-              <p v-if="active.kind === 'request'" class="fs-submeta">
-                <span v-if="active.requested_by_name">Requested by {{ active.requested_by_name }}</span>
-                <span v-if="active.created_at"> · {{ relDate(active.created_at) }}</span>
-                <span v-if="active.due_at" class="fs-due" :class="duePill(active) ? `due--${duePill(active).tone}` : ''"> · Due {{ shortDate(active.due_at) }}</span>
-              </p>
+              <div>
+                <h1>{{ active.title }}</h1>
+                <p v-if="active.kind === 'request'" class="fs-submeta">
+                  <span v-if="active.requested_by_name">Requested by {{ active.requested_by_name }}</span>
+                  <span v-if="active.created_at"> · {{ relDate(active.created_at) }}</span>
+                  <span v-if="active.due_at" class="fs-due" :class="duePill(active) ? `due--${duePill(active).tone}` : ''"> · Due {{ shortDate(active.due_at) }}</span>
+                </p>
+              </div>
+              <button class="refresh-btn" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh" @click="store.load()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+              </button>
             </header>
 
             <p v-if="active.description" class="fs-desc">{{ active.description }}</p>
@@ -326,7 +331,15 @@ function cat(name) {
 
 /* ── Detail ── */
 .fs-main { min-width: 0; }
+.fs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .fs-head h1 { font-family: var(--font-ui); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; color: var(--foreground); }
+.refresh-btn { flex-shrink: 0; display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+.refresh-btn svg { width: 16px; height: 16px; }
+.refresh-btn:hover { color: var(--brand-accent); border-color: var(--brand-accent); }
+.refresh-btn:disabled { opacity: 0.6; cursor: default; }
+.refresh-btn.is-spinning svg { animation: rspin 0.7s linear infinite; }
+@keyframes rspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg { animation: none; } }
 .fs-submeta { color: var(--muted-foreground); font-size: 0.85rem; margin-top: 0.25rem; }
 .fs-due.due--over { color: var(--destructive); font-weight: 600; }
 .fs-due.due--soon { color: var(--muted-foreground); font-weight: 600; }
