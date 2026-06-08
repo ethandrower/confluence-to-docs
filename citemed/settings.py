@@ -163,6 +163,20 @@ if _S3_BUCKET:
     else:
         MEDIA_URL = env('MEDIA_URL', default=f'https://{_S3_BUCKET}.s3.amazonaws.com/')
 
+# ── Customer file-sharing ──────────────────────────────────────────────
+# For now this reuses the docs S3 bucket under a dedicated `fileshare/` key
+# prefix; point FILESHARE_BUCKET at a separate private bucket later without
+# touching app code. Objects are reached only via short-lived presigned URLs.
+FILESHARE_BUCKET = env('FILESHARE_BUCKET', default='') or _S3_BUCKET
+FILESHARE_KEY_PREFIX = env('FILESHARE_KEY_PREFIX', default='fileshare')
+FILESHARE_MAX_BYTES = env.int('FILESHARE_MAX_BYTES', default=5 * 1024 ** 3)  # 5 GB
+FILESHARE_PRESIGN_TTL = env.int('FILESHARE_PRESIGN_TTL', default=3600)
+FILESHARE_ALLOWED_EXT = {
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'rtf',
+    'ris', 'enw', 'nbib', 'xml', 'bib',          # reference-library exports
+    'png', 'jpg', 'jpeg', 'gif', 'zip',
+}
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 days
