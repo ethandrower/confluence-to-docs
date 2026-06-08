@@ -1,0 +1,11 @@
+{{ heading }}
+
+{{ body }}
+{% if note %}
+Note: {{ note }}
+{% endif %}
+{{ cta_label }}: {{ cta_url }}
+
+—
+{{ product_name }}
+This is an automated message. Please do not reply.

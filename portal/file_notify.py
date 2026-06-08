@@ -1,19 +1,29 @@
-"""Best-effort email notifications for file sharing (Mailgun via Django mail).
+"""Best-effort, branded email notifications for file sharing.
 
-Every function swallows errors and logs — a failed email must never block the
-core action (upload, request, review).
+Uses the same branded HTML shell as the magic-link email
+(emails/notification.html / .txt). Every send is wrapped so a mail failure can
+never block the core action (upload, request, review); under a real mail
+backend it runs off the request thread.
 """
 import logging
 import threading
+import time
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 
 logger = logging.getLogger(__name__)
+
+PRODUCT_NAME = 'CiteMed Support'
 
 
 def _from():
     return getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'support@citemed.com'
+
+
+def _site():
+    return getattr(settings, 'FRONTEND_URL', 'https://support.citemed.com').rstrip('/')
 
 
 def _company_emails(company):
@@ -24,53 +34,60 @@ def _company_emails(company):
     ]
 
 
-def _site():
-    return getattr(settings, 'FRONTEND_URL', 'https://support.citemed.com').rstrip('/')
-
-
-def _send(subject, body, recipients):
+def _send(subject, recipients, *, heading, body, cta_label, cta_url, note=''):
+    """Render the branded template and send (HTML + text). Best-effort."""
     recipients = [r for r in recipients if r]
     if not recipients:
         return
+    ctx = {
+        'product_name': PRODUCT_NAME, 'heading': heading, 'body': body,
+        'note': note, 'cta_label': cta_label, 'cta_url': cta_url,
+    }
 
     def _do():
-        import time
         for attempt in range(3):
             try:
-                sent = send_mail(subject, body, _from(), recipients, fail_silently=False)
-                if sent:
+                text = render_to_string('emails/notification.txt', ctx)
+                html = render_to_string('emails/notification.html', ctx)
+                msg = EmailMultiAlternatives(subject, text, _from(), recipients)
+                msg.attach_alternative(html, 'text/html')
+                # Don't let Mailgun rewrite the CTA link for click-tracking.
+                msg.extra_headers = {'X-Mailgun-Track-Clicks': 'no'}
+                if msg.send():
                     return
             except Exception as e:
-                logger.warning("file_notify send attempt %d failed (%s): %s", attempt + 1, subject, e)
-            time.sleep(2 * (attempt + 1))  # 2s, 4s backoff
-        logger.error("file_notify gave up after retries (%s) → %s", subject, recipients)
+                logger.warning("file_notify attempt %d failed (%s): %s", attempt + 1, subject, e)
+            time.sleep(2 * (attempt + 1))
+        logger.error("file_notify gave up (%s) → %s", subject, recipients)
 
-    # Real mail backends (SMTP/Mailgun) can be slow — send off the request
-    # thread so they never delay an upload/request. In tests/dev (locmem or
-    # console backend) send synchronously so behaviour is deterministic.
     backend = getattr(settings, 'EMAIL_BACKEND', '')
     if 'locmem' in backend or 'console' in backend:
-        _do()
+        _do()  # synchronous in tests/dev for deterministic behaviour
     else:
         threading.Thread(target=_do, daemon=True).start()
 
 
 def notify_request_created(bucket):
-    body = (
-        f"CiteMed has requested documents from you: “{bucket.title}”.\n\n"
-        f"{bucket.description or ''}\n\n"
-        f"Upload them here: {_site()}/files"
+    desc = f" {bucket.description}" if bucket.description else ''
+    _send(
+        'CiteMed needs documents from you',
+        _company_emails(bucket.company),
+        heading='CiteMed has requested documents',
+        body=f'“{bucket.title}” —{desc} Please upload the requested files in your portal.',
+        cta_label='Upload documents', cta_url=f'{_site()}/files',
     )
-    _send("CiteMed needs documents from you", body, _company_emails(bucket.company))
 
 
 def notify_revision(file):
-    note = f"\n\nReviewer note: {file.review_notes}" if file.review_notes else ""
-    body = (
-        f"A file you shared needs revision: “{file.original_name}”.{note}\n\n"
-        f"Please re-upload an updated version here: {_site()}/files"
+    _send(
+        'A shared file needs revision',
+        _company_emails(file.company),
+        heading='A file you shared needs revision',
+        body=f'“{file.original_name}” needs an update before we can proceed. '
+             'Please review the note below and re-upload an updated version.',
+        note=file.review_notes,
+        cta_label='Re-upload the file', cta_url=f'{_site()}/files',
     )
-    _send("A shared file needs revision", body, _company_emails(file.company))
 
 
 def notify_upload(file):
@@ -78,8 +95,11 @@ def notify_upload(file):
     csm = getattr(file.bucket, 'requested_by', None)
     if not csm or not csm.email:
         return
-    body = (
-        f"{file.company.name} uploaded “{file.original_name}” "
-        f"to “{file.bucket.title}”.\n\nReview it in Manage → Files."
+    _send(
+        f'New upload from {file.company.name}',
+        [csm.email],
+        heading=f'New upload from {file.company.name}',
+        body=f'{file.company.name} uploaded “{file.original_name}” to “{file.bucket.title}”. '
+             'Review it in Manage → Files.',
+        cta_label='Review in the portal', cta_url=f'{_site()}/manage',
     )
-    _send(f"New upload from {file.company.name}", body, [csm.email])
