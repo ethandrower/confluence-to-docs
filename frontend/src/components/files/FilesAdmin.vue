@@ -10,6 +10,10 @@
       <button role="tab" :aria-selected="filesMode==='activity'" class="seg" :class="filesMode==='activity' && 'seg--active'" @click="openActivity">
         Activity
       </button>
+      <button class="btn-primary fm-new" @click="openRequest()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        New request
+      </button>
       <button class="refresh-btn" :class="refreshing && 'is-spinning'" :disabled="refreshing" title="Refresh" aria-label="Refresh" @click="refresh">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
         {{ refreshing ? 'Refreshing…' : 'Refresh' }}
@@ -216,6 +220,12 @@
         <div class="modal" role="dialog" aria-modal="true">
           <h2 class="modal-title">{{ reqEditing ? 'Edit request' : 'New request' }}</h2>
           <p v-if="reqError" class="form-error">{{ reqError }}</p>
+          <label v-if="!reqEditing" class="field"><span>Client</span>
+            <select v-model="reqForm.company_id">
+              <option value="">Select a client…</option>
+              <option v-for="c in fileCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </label>
           <label class="field"><span>Title</span>
             <input v-model="reqForm.title" type="text" placeholder="e.g. Q3 PMS report submission" />
           </label>
@@ -450,21 +460,27 @@ const reqModal = ref(false)
 const reqEditing = ref(null)
 const reqSaving = ref(false)
 const reqError = ref('')
-const reqForm = ref({ title: '', description: '', due_at: '', status: 'open' })
+const reqForm = ref({ title: '', description: '', due_at: '', status: 'open', company_id: '' })
 
 function openRequest(b = null) {
   reqEditing.value = b
   reqError.value = ''
   reqForm.value = b
-    ? { title: b.title, description: b.description || '', due_at: b.due_at ? b.due_at.slice(0, 10) : '', status: b.status === 'general' ? 'open' : b.status }
-    : { title: '', description: '', due_at: '', status: 'open' }
+    ? { title: b.title, description: b.description || '', due_at: b.due_at ? b.due_at.slice(0, 10) : '', status: b.status === 'general' ? 'open' : b.status, company_id: selectedCompanyId.value || '' }
+    : { title: '', description: '', due_at: '', status: 'open', company_id: selectedCompanyId.value || '' }
   reqModal.value = true
 }
 async function saveRequest() {
+  // Company comes from the picker (top-level) or the open company (drill-down).
+  const companyId = reqForm.value.company_id || selectedCompanyId.value
+  if (!reqEditing.value && !companyId) {
+    reqError.value = 'Please select a client.'
+    return
+  }
   reqSaving.value = true
   reqError.value = ''
   try {
-    const payload = { ...reqForm.value, due_at: reqForm.value.due_at || null, company_id: selectedCompanyId.value }
+    const payload = { ...reqForm.value, due_at: reqForm.value.due_at || null, company_id: companyId }
     const url = reqEditing.value
       ? `/api/admin/files/requests/${reqEditing.value.id}/`
       : '/api/admin/files/requests/'
@@ -476,7 +492,10 @@ async function saveRequest() {
     })
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save request')
     reqModal.value = false
-    await selectCompany(selectedCompanyId.value)
+    // Land on the request we just created/edited so the admin sees it.
+    filesMode.value = 'company'
+    await loadFileCompanies(true)
+    await selectCompany(Number(companyId))
   } catch (e) {
     reqError.value = e.message
   } finally {
@@ -533,7 +552,8 @@ tbody tr:hover td { background: var(--accent); }
 .refresh-btn svg { width: 15px; height: 15px; }
 .refresh-btn:hover { color: var(--primary); border-color: var(--primary); }
 .refresh-btn:disabled { opacity: 0.6; cursor: default; }
-.files-modes .refresh-btn { margin-left: auto; }
+.files-modes .fm-new { margin-left: auto; }
+.files-modes .fm-new svg { width: 15px; height: 15px; }
 .refresh-btn.is-spinning svg { animation: rspin 0.7s linear infinite; }
 @keyframes rspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg { animation: none; } }
