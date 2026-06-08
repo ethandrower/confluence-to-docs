@@ -263,25 +263,28 @@ function cat(name) {
 
 <style scoped>
 .fs {
-  display: grid;
-  grid-template-columns: 272px 1fr;
+  display: flex;
   gap: 28px;
+  align-items: flex-start;
   max-width: 1120px;
   margin: 0 auto;
   padding: clamp(1.25rem, 3vw, 2rem);
-  align-items: start;
-  transition: grid-template-columns 0.28s ease;
 }
-@media (max-width: 840px) { .fs { grid-template-columns: 1fr; } }
-.pane-enter-active, .pane-leave-active { transition: opacity 0.22s ease, transform 0.22s ease; }
-.pane-enter-from, .pane-leave-to { opacity: 0; transform: translateX(14px); }
+.fs.has-preview { max-width: 1320px; }
+.fs-side { flex: 0 0 272px; }
+.fs-main { flex: 1 1 auto; min-width: 0; }
+.fs :deep(.pvp) { flex: 0 0 clamp(340px, 42%, 600px); }
+@media (max-width: 1100px) { .fs.has-preview .fs-side { display: none; } }
+@media (max-width: 840px) { .fs { flex-wrap: wrap; } .fs-side { flex-basis: 100%; } }
+
+/* Pane reveal: width + fade together, eased out */
+.pane-enter-active, .pane-leave-active { transition: max-width 0.34s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, transform 0.34s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
+.pane-enter-from, .pane-leave-to { max-width: 0; opacity: 0; transform: translateX(18px); }
+.pane-enter-to, .pane-leave-from { max-width: 640px; }
 @media (prefers-reduced-motion: reduce) {
-  .fs, .pane-enter-active, .pane-leave-active { transition: none; }
-  .pane-enter-from, .pane-leave-to { transform: none; }
+  .pane-enter-active, .pane-leave-active { transition: none; }
+  .pane-enter-from, .pane-leave-to { max-width: 640px; transform: none; }
 }
-.fs.has-preview { grid-template-columns: 240px minmax(0, 1fr) minmax(340px, 0.95fr); max-width: 1320px; }
-@media (max-width: 1100px) { .fs.has-preview { grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr); } .fs.has-preview .fs-side { display: none; } }
-@media (max-width: 760px) { .fs.has-preview { grid-template-columns: 1fr; } }
 .row.row-active { border-color: var(--brand-accent); background: color-mix(in srgb, var(--brand-accent) 6%, var(--card)); }
 .ico--on { background: var(--accent); color: var(--primary); }
 
