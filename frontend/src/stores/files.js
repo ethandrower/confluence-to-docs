@@ -1,20 +1,33 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const api = (p) => `/api${p}`
 
 export const useFilesStore = defineStore('files', () => {
   const buckets = ref([])
   const loading = ref(false)
+  const activeBucketId = ref(null)
+
+  const requests = computed(() => buckets.value.filter((b) => b.kind === 'request'))
+  const generalBucket = computed(() => buckets.value.find((b) => b.kind === 'general') || null)
+  const activeBucket = computed(() => buckets.value.find((b) => b.id === activeBucketId.value) || null)
 
   async function load() {
     loading.value = true
     try {
       const r = await fetch(api('/files/buckets/'), { credentials: 'include' })
       buckets.value = r.ok ? (await r.json()).buckets : []
+      // Keep selection valid: prefer the current one, else first request, else general.
+      if (!buckets.value.some((b) => b.id === activeBucketId.value)) {
+        activeBucketId.value = requests.value[0]?.id ?? generalBucket.value?.id ?? null
+      }
     } finally {
       loading.value = false
     }
+  }
+
+  function select(id) {
+    activeBucketId.value = id
   }
 
   async function upload(file, bucketId, onProgress) {
@@ -66,5 +79,8 @@ export const useFilesStore = defineStore('files', () => {
 
   const downloadUrl = (id) => api(`/files/${id}/download`)
 
-  return { buckets, loading, load, upload, rename, remove, downloadUrl }
+  return {
+    buckets, loading, activeBucketId, requests, generalBucket, activeBucket,
+    load, select, upload, rename, remove, downloadUrl,
+  }
 })

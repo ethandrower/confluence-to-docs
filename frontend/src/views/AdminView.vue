@@ -141,10 +141,20 @@
               <template v-if="selectedCompany">
                 <div class="fd-head">
                   <h3>{{ selectedCompany.name }}</h3>
-                  <a v-if="companyFileCount" class="btn-primary" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">Download all</a>
+                  <div class="fd-head-actions">
+                    <button class="btn-ghost" @click="openRequest()">+ New request</button>
+                    <a v-if="companyFileCount" class="btn-primary" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">Download all</a>
+                  </div>
                 </div>
                 <div v-for="b in companyBuckets" :key="b.id" class="fd-bucket">
-                  <h4>{{ b.title }} <span v-if="b.kind==='request'" class="role role--admin">request</span></h4>
+                  <h4>
+                    {{ b.title }}
+                    <span v-if="b.kind==='request'" class="role role--admin">request</span>
+                    <button v-if="b.kind==='request'" class="fd-edit" title="Edit request" @click="openRequest(b)" aria-label="Edit request">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
+                    </button>
+                  </h4>
+                  <p v-if="b.description" class="fd-desc">{{ b.description }}</p>
                   <table v-if="b.files.length">
                     <thead><tr><th>Name</th><th>Size</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
                     <tbody>
@@ -215,6 +225,38 @@
             <div class="modal-actions">
               <button class="btn-ghost" @click="modal=null">Cancel</button>
               <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? (modal==='addpage' ? 'Adding…' : 'Saving…') : (modal==='addpage' ? 'Add page' : 'Save') }}</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- Request modal (file sharing) -->
+      <Transition name="modal">
+        <div v-if="reqModal" class="modal-overlay" @click.self="reqModal=false">
+          <div class="modal" role="dialog" aria-modal="true">
+            <h2 class="modal-title">{{ reqEditing ? 'Edit request' : 'New request' }}</h2>
+            <p v-if="reqError" class="form-error">{{ reqError }}</p>
+            <label class="field"><span>Title</span>
+              <input v-model="reqForm.title" type="text" placeholder="e.g. Q3 PMS report submission" />
+            </label>
+            <label class="field"><span>Description for customer</span>
+              <textarea v-model="reqForm.description" rows="3" placeholder="Tell the customer what to upload…"></textarea>
+            </label>
+            <div class="field-row">
+              <label class="field"><span>Due date</span>
+                <input v-model="reqForm.due_at" type="date" />
+              </label>
+              <label class="field"><span>Status</span>
+                <select v-model="reqForm.status">
+                  <option value="open">Open</option>
+                  <option value="partial">Partial</option>
+                  <option value="complete">Complete</option>
+                </select>
+              </label>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-ghost" @click="reqModal=false">Cancel</button>
+              <button class="btn-primary" :disabled="reqSaving" @click="saveRequest">{{ reqSaving ? 'Saving…' : (reqEditing ? 'Save' : 'Create request') }}</button>
             </div>
           </div>
         </div>
@@ -375,6 +417,45 @@ function fmtFileDate(d) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Request authoring
+const reqModal = ref(false)
+const reqEditing = ref(null)
+const reqSaving = ref(false)
+const reqError = ref('')
+const reqForm = ref({ title: '', description: '', due_at: '', status: 'open' })
+
+function openRequest(b = null) {
+  reqEditing.value = b
+  reqError.value = ''
+  reqForm.value = b
+    ? { title: b.title, description: b.description || '', due_at: b.due_at ? b.due_at.slice(0, 10) : '', status: b.status === 'general' ? 'open' : b.status }
+    : { title: '', description: '', due_at: '', status: 'open' }
+  reqModal.value = true
+}
+async function saveRequest() {
+  reqSaving.value = true
+  reqError.value = ''
+  try {
+    const payload = { ...reqForm.value, due_at: reqForm.value.due_at || null, company_id: selectedCompanyId.value }
+    const url = reqEditing.value
+      ? `/api/admin/files/requests/${reqEditing.value.id}/`
+      : '/api/admin/files/requests/'
+    const r = await fetch(url, {
+      method: reqEditing.value ? 'PATCH' : 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save request')
+    reqModal.value = false
+    await selectCompany(selectedCompanyId.value)
+  } catch (e) {
+    reqError.value = e.message
+  } finally {
+    reqSaving.value = false
+  }
+}
+
 onMounted(() => store.fetchAll())
 </script>
 
@@ -509,5 +590,12 @@ tbody tr:hover td { background: var(--accent); }
 .fd-head h3 { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 600; color: var(--foreground); margin: 0; }
 .fd-bucket { margin-bottom: 22px; }
 .fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+.fd-desc { font-size: 0.85rem; color: var(--muted-foreground); margin: -2px 0 10px; max-width: 70ch; }
 .fd-placeholder { color: var(--muted-foreground); font-size: 0.95rem; padding: 24px 0; }
+.fd-head-actions { display: flex; align-items: center; gap: 8px; }
+.fd-edit { background: none; border: none; color: var(--muted-foreground); cursor: pointer; padding: 2px; border-radius: 6px; display: inline-grid; place-items: center; }
+.fd-edit:hover { background: var(--muted); color: var(--foreground); }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field textarea { width: 100%; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
+.field textarea:focus { outline: 2px solid var(--ring); outline-offset: -1px; border-color: var(--ring); }
 </style>
