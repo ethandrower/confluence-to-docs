@@ -222,6 +222,8 @@ class SharedFile(models.Model):
         ordering = ['-uploaded_at']
         indexes = [
             models.Index(fields=['company', 'deleted_at']),
+            # Powers the cross-client inbox list + unprocessed count.
+            models.Index(fields=['state', 'processed', 'deleted_at', '-uploaded_at']),
         ]
 
     def __str__(self):

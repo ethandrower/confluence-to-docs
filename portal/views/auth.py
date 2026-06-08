@@ -204,6 +204,31 @@ def verify_magic_link(request):
 
 
 @require_GET
+def dev_login(request):
+    """Local-only auth bypass. Logs in as ?email=… and redirects into the app.
+
+    Hard-gated on settings.DEBUG — returns 404 in any non-debug environment so
+    this can never be used in production. Convenience for local testing of the
+    customer portal without minting magic links each time.
+    """
+    if not settings.DEBUG:
+        from django.http import Http404
+        raise Http404()
+
+    from django.http import HttpResponseRedirect
+    from portal.models import PortalUser
+
+    email = request.GET.get('email', '').strip()
+    user = PortalUser.objects.filter(email__iexact=email).first()
+    if not user:
+        return JsonResponse({'error': f'No PortalUser with email {email!r}'}, status=404)
+
+    request.session['portal_user_id'] = user.pk
+    request.session.save()
+    return HttpResponseRedirect(request.GET.get('next') or '/files')
+
+
+@require_GET
 def me(request):
     user_id = request.session.get('portal_user_id')
     if not user_id:

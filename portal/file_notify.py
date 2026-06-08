@@ -4,6 +4,7 @@ Every function swallows errors and logs — a failed email must never block the
 core action (upload, request, review).
 """
 import logging
+import threading
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -31,10 +32,21 @@ def _send(subject, body, recipients):
     recipients = [r for r in recipients if r]
     if not recipients:
         return
-    try:
-        send_mail(subject, body, _from(), recipients, fail_silently=True)
-    except Exception as e:  # pragma: no cover - defensive
-        logger.warning("file_notify send failed (%s): %s", subject, e)
+
+    def _do():
+        try:
+            send_mail(subject, body, _from(), recipients, fail_silently=True)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning("file_notify send failed (%s): %s", subject, e)
+
+    # Real mail backends (SMTP/Mailgun) can be slow — send off the request
+    # thread so they never delay an upload/request. In tests/dev (locmem or
+    # console backend) send synchronously so behaviour is deterministic.
+    backend = getattr(settings, 'EMAIL_BACKEND', '')
+    if 'locmem' in backend or 'console' in backend:
+        _do()
+    else:
+        threading.Thread(target=_do, daemon=True).start()
 
 
 def notify_request_created(bucket):

@@ -146,6 +146,20 @@ class ListAndManageTests(TestCase):
         r = self.client.get(f'/api/files/{self.afile.id}/view')
         self.assertIn(r.status_code, (403, 404))
 
+    @patch('portal.file_storage.presign_view', return_value='https://s3/inline')
+    @patch('portal.file_storage.presign_get', return_value='https://s3/download')
+    def test_view_non_previewable_falls_back_to_download(self, _get, _view):
+        # A non-PDF/image (even if uploaded with a spoofed mime) must NOT be
+        # served inline — it should redirect to a plain download instead.
+        evil = SharedFile.objects.create(
+            bucket=self.afile.bucket, company=self.acme, uploaded_by=self.a,
+            original_name='note.txt', storage_key='k2', state='ready',
+            size_bytes=10, mime_type='text/html')
+        self._login(self.a)
+        r = self.client.get(f'/api/files/{evil.id}/view')
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r['Location'], 'https://s3/download')  # not the inline URL
+
 
 class AdminFilesTests(TestCase):
     def setUp(self):

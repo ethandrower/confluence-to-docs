@@ -128,8 +128,11 @@ def upload_complete(request):
     f.save(update_fields=['size_bytes', 'state'])
     log_activity(user.company, 'upload', actor=user, file=f, bucket=f.bucket,
                  name=f.original_name, size=size)
-    from portal import file_notify
-    file_notify.notify_upload(f)
+    try:
+        from portal import file_notify
+        file_notify.notify_upload(f)
+    except Exception:
+        pass
     return JsonResponse({'ok': True, 'file_id': f.id})
 
 
@@ -171,18 +174,30 @@ def file_download(request, file_id):
     return HttpResponseRedirect(url)
 
 
-def guess_mime(f):
-    if f.mime_type:
-        return f.mime_type
-    import mimetypes
-    return mimetypes.guess_type(f.original_name)[0] or 'application/octet-stream'
+# Only these types are ever served *inline*. The content-type is derived from
+# the (validated) extension, NOT the client-supplied mime — otherwise a file
+# uploaded as .pdf but declared text/html could execute inline when previewed
+# (stored XSS). Anything else is served as a download instead.
+_INLINE_MIME = {
+    'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp',
+}
+
+
+def inline_mime(name):
+    ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    return _INLINE_MIME.get(ext)
 
 
 @require_portal_user
 @require_http_methods(['GET'])
 def file_view(request, file_id):
-    """Inline preview (PDF/image) — redirects to a presigned inline URL."""
+    """Inline preview (PDF/image). For non-previewable types, falls back to a
+    safe download so nothing untrusted is ever rendered inline."""
     f = _own_file(request, file_id)
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
-    return HttpResponseRedirect(file_storage.presign_view(f.storage_key, guess_mime(f)))
+    mime = inline_mime(f.original_name)
+    if not mime:
+        return HttpResponseRedirect(file_storage.presign_get(f.storage_key, download_name=f.original_name))
+    return HttpResponseRedirect(file_storage.presign_view(f.storage_key, mime))
