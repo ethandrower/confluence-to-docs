@@ -1,13 +1,11 @@
 """Best-effort, branded email notifications for file sharing.
 
 Uses the same branded HTML shell as the magic-link email
-(emails/notification.html / .txt). Every send is wrapped so a mail failure can
-never block the core action (upload, request, review); under a real mail
-backend it runs off the request thread.
+(emails/notification.html / .txt). Sent synchronously (like the magic-link
+email, which is proven on prod) and wrapped in try/except so a mail failure can
+never block the core action (upload, request, review).
 """
 import logging
-import threading
-import time
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -35,7 +33,8 @@ def _company_emails(company):
 
 
 def _send(subject, recipients, *, heading, body, cta_label, cta_url, note=''):
-    """Render the branded template and send (HTML + text). Best-effort."""
+    """Render the branded template and send (HTML + text), synchronously.
+    Best-effort — any failure is logged, never raised to the caller."""
     recipients = [r for r in recipients if r]
     if not recipients:
         return
@@ -43,28 +42,18 @@ def _send(subject, recipients, *, heading, body, cta_label, cta_url, note=''):
         'product_name': PRODUCT_NAME, 'heading': heading, 'body': body,
         'note': note, 'cta_label': cta_label, 'cta_url': cta_url,
     }
-
-    def _do():
-        for attempt in range(3):
-            try:
-                text = render_to_string('emails/notification.txt', ctx)
-                html = render_to_string('emails/notification.html', ctx)
-                msg = EmailMultiAlternatives(subject, text, _from(), recipients)
-                msg.attach_alternative(html, 'text/html')
-                # Don't let Mailgun rewrite the CTA link for click-tracking.
-                msg.extra_headers = {'X-Mailgun-Track-Clicks': 'no'}
-                if msg.send():
-                    return
-            except Exception as e:
-                logger.warning("file_notify attempt %d failed (%s): %s", attempt + 1, subject, e)
-            time.sleep(2 * (attempt + 1))
-        logger.error("file_notify gave up (%s) → %s", subject, recipients)
-
-    backend = getattr(settings, 'EMAIL_BACKEND', '')
-    if 'locmem' in backend or 'console' in backend:
-        _do()  # synchronous in tests/dev for deterministic behaviour
-    else:
-        threading.Thread(target=_do, daemon=True).start()
+    try:
+        text = render_to_string('emails/notification.txt', ctx)
+        html = render_to_string('emails/notification.html', ctx)
+        msg = EmailMultiAlternatives(
+            subject, text, _from(), recipients,
+            headers={'X-Mailgun-Track-Opens': 'no', 'X-Mailgun-Track-Clicks': 'no'},
+        )
+        msg.attach_alternative(html, 'text/html')
+        sent = msg.send()
+        logger.info("file_notify sent (%s) → %s (sent=%s)", subject, recipients, sent)
+    except Exception as e:
+        logger.error("file_notify failed (%s) → %s: %s", subject, recipients, e)
 
 
 def notify_request_created(bucket):
