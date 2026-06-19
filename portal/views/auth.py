@@ -164,7 +164,8 @@ def request_magic_link(request):
             render_to_string('emails/magic_link.html', ctx),
             'text/html',
         )
-        msg.send()
+        sent = msg.send()
+        logger.info("magic link send to %s → sent=%s", email, sent)
     except Exception as e:
         logger.error(f"Failed to send magic link email to {email}: {e}")
         # Don't expose email errors to prevent enumeration
