@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>File sharing — Stage 3 (CiteMed Admin) · CiteMed Portal</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --background: #F5F6FA;
+    --foreground: #242A35;
+    --card: #FFFFFF;
+    --primary: #0C377B;
+    --secondary: #E6EBF5;
+    --muted: #F5F6FA;
+    --muted-foreground: #626A7A;
+    --accent: #DEEBFA;
+    --accent-foreground: #0C377B;
+    --destructive: #C0392B;
+    --warn: #B45309;
+    --warn-bg: #FEF3C7;
+    --ok: #15803D;
+    --ok-bg: #DCFCE7;
+    --info: #1D4ED8;
+    --info-bg: #DBEAFE;
+    --border: #E4E8F0;
+    --border-subtle: #EBEEF4;
+    --divider: #C2CAD8;
+    --brand-accent: #3578FF;
+    --ring: #3578FF;
+    --radius: 10px;
+    --font-ui: 'Archivo', system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-ui); font-size: 15px; line-height: 1.55;
+    color: var(--foreground); background: var(--background);
+    -webkit-font-smoothing: antialiased; letter-spacing: -0.006em;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    height: 56px; background: var(--card);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 24px; gap: 18px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--primary); font-size: 16px; letter-spacing: -0.01em; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+  .admin-badge {
+    font-size: 10.5px; font-weight: 650;
+    color: var(--primary); background: var(--accent);
+    padding: 2px 7px; border-radius: 4px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .topbar nav { display: flex; gap: 4px; margin-left: 8px; }
+  .topbar nav a {
+    text-decoration: none; color: var(--muted-foreground);
+    padding: 6px 12px; border-radius: 8px;
+    font-size: 13.5px; font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+  }
+  .topbar nav a:hover { background: var(--muted); color: var(--foreground); }
+  .topbar nav a.active { color: var(--primary); background: var(--accent); }
+  .topbar .spacer { flex: 1; }
+
+  /* Version (V1/V2) toggle */
+  .ver-toggle {
+    display: inline-flex; background: var(--muted);
+    border-radius: 8px; padding: 3px;
+    font-size: 12.5px; border: 1px solid var(--border);
+  }
+  .ver-toggle button {
+    border: none; background: transparent;
+    padding: 4px 10px; border-radius: 6px;
+    color: var(--muted-foreground); cursor: pointer; font: inherit;
+    transition: background 0.15s, color 0.15s;
+  }
+  .ver-toggle button.active {
+    background: var(--card); color: var(--primary);
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.06); font-weight: 600;
+  }
+
+  .user-chip { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-foreground); margin-left: 12px; }
+  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+
+  /* ── Company switcher row ── */
+  .company-row {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 18px;
+    max-width: 1340px; margin: 0 auto; width: 100%;
+  }
+  .company-switcher { position: relative; }
+  .switcher-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--muted);
+    border: 1px solid var(--border);
+    padding: 8px 12px 8px 10px;
+    border-radius: 9px;
+    font: inherit; font-size: 13.5px; font-weight: 600;
+    color: var(--foreground); cursor: pointer;
+    min-width: 260px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .switcher-btn:hover { border-color: var(--brand-accent); background: var(--card); }
+  .switcher-btn .co-avatar {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: var(--accent); color: var(--primary);
+    display: grid; place-items: center;
+    font-size: 11.5px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .switcher-btn .co-info { flex: 1; text-align: left; line-height: 1.2; }
+  .switcher-btn .co-sub { font-size: 11px; font-weight: 500; color: var(--muted-foreground); display: block; }
+  .switcher-btn .caret { color: var(--muted-foreground); }
+
+  .switcher-menu {
+    position: absolute; top: calc(100% + 6px); left: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-width: 320px;
+    box-shadow: 0 12px 32px oklch(0 0 0 / 0.10);
+    padding: 4px;
+    display: none;
+    z-index: 20;
+    max-height: 360px; overflow-y: auto;
+  }
+  .switcher-menu.open { display: block; }
+  .switcher-menu .menu-search {
+    padding: 8px 8px 6px;
+    position: sticky; top: 0; background: var(--card);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .switcher-menu .menu-search input {
+    width: 100%; padding: 6px 10px;
+    border: 1px solid var(--border); border-radius: 7px;
+    font: inherit; font-size: 12.5px; outline: none;
+    background: var(--muted);
+  }
+  .switcher-menu .menu-search input:focus {
+    background: var(--card); border-color: var(--brand-accent);
+  }
+  .menu-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 7px;
+    cursor: pointer; transition: background 0.1s;
+  }
+  .menu-item:hover { background: var(--muted); }
+  .menu-item.active { background: var(--accent); }
+  .menu-item .co-avatar {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--accent); color: var(--primary);
+    display: grid; place-items: center;
+    font-size: 11.5px; font-weight: 700;
+  }
+  .menu-item.active .co-avatar { background: var(--card); }
+  .menu-item .co-name { font-size: 13px; font-weight: 600; }
+  .menu-item .co-meta { font-size: 11px; color: var(--muted-foreground); }
+  .menu-item .check {
+    margin-left: auto; color: var(--primary); display: none;
+  }
+  .menu-item.active .check { display: block; }
+
+  /* Stat strip */
+  .stat-strip { display: flex; gap: 22px; margin-left: auto; }
+  .stat { display: flex; flex-direction: column; gap: 1px; }
+  .stat .label {
+    font-size: 10.5px; font-weight: 650;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted-foreground);
+  }
+  .stat .value { font-size: 15px; font-weight: 700; color: var(--foreground); }
+  .stat .value.warn { color: var(--warn); }
+  .stat .value.ok { color: var(--ok); }
+
+  /* ── Shell ── */
+  .shell {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 28px;
+    max-width: 1340px;
+    margin: 0 auto;
+    padding: 24px 24px 64px;
+  }
+
+  /* Sidebar */
+  .sidebar h2 {
+    margin: 0 0 10px;
+    font-size: 11px; font-weight: 650;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted-foreground);
+  }
+  .sidebar-section { margin-bottom: 22px; }
+
+  .req-item {
+    display: block;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 9px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .req-item:hover { border-color: var(--brand-accent); }
+  .req-item.active { border-color: var(--brand-accent); background: var(--accent); }
+  .req-item .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .req-item .title { font-size: 13.5px; font-weight: 600; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .req-item .sub { font-size: 12px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+  .req-item .sub .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--divider); }
+
+  /* Pills */
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px;
+    letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  .pill.open { background: var(--warn-bg); color: var(--warn); }
+  .pill.partial { background: var(--accent); color: var(--accent-foreground); }
+  .pill.complete { background: var(--ok-bg); color: var(--ok); }
+  .pill.general { background: var(--secondary); color: var(--muted-foreground); }
+  .pill.pending { background: var(--secondary); color: var(--muted-foreground); }
+  .pill.review { background: var(--info-bg); color: var(--info); }
+  .pill.approved { background: var(--ok-bg); color: var(--ok); }
+  .pill.revision { background: var(--warn-bg); color: var(--warn); }
+  .pill.rejected { background: oklch(0.55 0.22 25 / 0.12); color: var(--destructive); }
+
+  /* Detail header */
+  .detail-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 24px; margin-bottom: 6px;
+  }
+  .detail-header h1 { margin: 0; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.01em; }
+  .detail-header h1 .pill { vertical-align: middle; margin-left: 10px; font-size: 11px; padding: 3px 8px; }
+
+  .req-meta {
+    display: flex; flex-wrap: wrap; gap: 14px;
+    font-size: 12.5px; color: var(--muted-foreground);
+    margin-bottom: 16px;
+  }
+  .req-meta strong { color: var(--foreground); }
+
+  .req-description {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--brand-accent);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13.5px; line-height: 1.55;
+    color: var(--foreground); margin-bottom: 20px;
+  }
+  .req-description .label {
+    display: block; font-size: 10.5px; font-weight: 650;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted-foreground); margin-bottom: 5px;
+  }
+  .req-description .from { margin-top: 8px; font-size: 12px; color: var(--muted-foreground); }
+
+  /* V2 checklist */
+  .checklist {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px 12px;
+    margin-bottom: 20px;
+  }
+  .checklist-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .checklist-head .label {
+    font-size: 10.5px; font-weight: 650;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted-foreground);
+  }
+  .checklist-head .progress {
+    font-size: 12px; color: var(--muted-foreground);
+  }
+  .progress-bar {
+    height: 4px; background: var(--secondary);
+    border-radius: 4px; overflow: hidden; margin-bottom: 12px;
+  }
+  .progress-bar > div {
+    height: 100%; background: var(--ok);
+    transition: width 0.25s;
+  }
+  .check-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 13px;
+  }
+  .check-row:first-of-type { border-top: none; }
+  .check-row .box {
+    width: 18px; height: 18px;
+    border: 1.5px solid var(--divider);
+    border-radius: 5px;
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+    flex-shrink: 0;
+  }
+  .check-row .box.checked { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .check-row .box:hover { border-color: var(--primary); }
+  .check-row .label-text { flex: 1; }
+  .check-row .label-text.done { color: var(--muted-foreground); text-decoration: line-through; }
+  .check-row .linked-file {
+    font-size: 11.5px; color: var(--muted-foreground);
+    background: var(--muted); border-radius: 4px;
+    padding: 2px 7px;
+  }
+  .check-row .linked-file.linked { color: var(--primary); background: var(--accent); }
+  .check-add {
+    display: flex; gap: 8px; padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+    margin-top: 8px;
+  }
+  .check-add input {
+    flex: 1; padding: 6px 9px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font: inherit; font-size: 12.5px;
+    background: var(--card); outline: none;
+  }
+  .check-add input:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px oklch(0.6 0.2 260 / 0.10); }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px;
+    background: var(--primary); color: #fff;
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    font-size: 13.5px; font-weight: 550;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.05s;
+    text-decoration: none;
+  }
+  .btn:hover { opacity: 0.92; }
+  .btn:active { transform: translateY(1px); }
+  .btn.ghost { background: transparent; color: var(--primary); border-color: var(--border); }
+  .btn.ghost:hover { background: var(--muted); opacity: 1; }
+  .btn.sm { padding: 6px 10px; font-size: 12.5px; border-radius: 6px; }
+
+  /* File list */
+  .list-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.02);
+  }
+  .list-toolbar {
+    display: flex; align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: #FCFCFE; gap: 12px;
+  }
+  .list-toolbar .count { font-size: 12.5px; color: var(--muted-foreground); }
+  .list-toolbar .filter {
+    margin-left: auto; display: flex; gap: 4px;
+  }
+  .list-toolbar .filter button {
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font: inherit; font-size: 12px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .list-toolbar .filter button:hover { color: var(--foreground); }
+  .list-toolbar .filter button.active { color: var(--primary); background: var(--accent); border-color: var(--brand-accent); font-weight: 600; }
+  .search { position: relative; max-width: 220px; }
+  .search input {
+    width: 100%; padding: 7px 10px 7px 32px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--card); font: inherit; font-size: 13px;
+    color: var(--foreground); outline: none;
+  }
+  .search input:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px oklch(0.6 0.2 260 / 0.10); }
+  .search svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted-foreground); }
+
+  /* File rows — V1 (no review col) and V2 (with review col) handled by body class */
+  .file-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 90px 130px 120px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background 0.1s;
+  }
+  body.v2 .file-row {
+    grid-template-columns: 28px 1fr 90px 130px 110px 130px;
+  }
+  .file-row:last-child { border-bottom: none; }
+  .file-row:hover { background: var(--muted); }
+  .file-row .icon {
+    width: 28px; height: 28px; background: var(--accent); color: var(--primary);
+    border-radius: 6px; display: grid; place-items: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .file-row .name { font-size: 13.5px; font-weight: 500; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-row .name .uploader { display: block; font-size: 11.5px; font-weight: 400; color: var(--muted-foreground); margin-top: 1px; }
+  .file-row .meta { font-size: 12.5px; color: var(--muted-foreground); }
+  .file-row .review { display: none; }
+  body.v2 .file-row .review { display: block; }
+  .file-row .actions { display: flex; justify-content: flex-end; gap: 4px; }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: transparent; border: none; color: var(--muted-foreground);
+    display: grid; place-items: center; cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+  .icon-btn:hover { background: var(--secondary); color: var(--foreground); }
+
+  /* Review menu */
+  .review-menu {
+    position: relative; display: inline-block;
+  }
+  .review-trigger {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: transparent; border: 1px solid var(--border);
+    padding: 3px 8px 3px 6px; border-radius: 999px;
+    font: inherit; font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: border-color 0.1s;
+  }
+  .review-trigger:hover { border-color: var(--primary); }
+  .review-trigger .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor; opacity: 0.7;
+  }
+  .review-menu-list {
+    position: absolute; top: calc(100% + 4px); right: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 24px oklch(0 0 0 / 0.10);
+    z-index: 5;
+    min-width: 170px;
+    display: none;
+  }
+  .review-menu.open .review-menu-list { display: block; }
+  .review-menu-list button {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; text-align: left;
+    background: transparent; border: none;
+    padding: 6px 10px; border-radius: 6px;
+    font: inherit; font-size: 12.5px;
+    color: var(--foreground); cursor: pointer;
+  }
+  .review-menu-list button:hover { background: var(--muted); }
+  .review-menu-list button .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+  }
+
+  /* Empty */
+  .empty { padding: 48px 24px; text-align: center; color: var(--muted-foreground); }
+  .empty svg { color: var(--divider); margin-bottom: 8px; }
+  .empty h3 { margin: 4px 0 6px; font-size: 14.5px; font-weight: 600; color: var(--foreground); }
+  .empty p { margin: 0; font-size: 13px; }
+
+  /* Notes drawer (V2) */
+  .notes-drawer {
+    border-top: 1px solid var(--border-subtle);
+    background: #FBFCFE;
+    padding: 10px 16px 14px;
+    display: none;
+  }
+  .notes-drawer.open { display: block; }
+  .notes-drawer textarea {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 7px;
+    font: inherit; font-size: 12.5px;
+    background: var(--card); color: var(--foreground);
+    outline: none; resize: vertical; min-height: 60px;
+    font-family: inherit;
+  }
+  .notes-drawer textarea:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px oklch(0.6 0.2 260 / 0.10); }
+  .notes-drawer .nd-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 6px;
+  }
+  .notes-drawer .nd-foot small { font-size: 11.5px; color: var(--muted-foreground); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #1f2937; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px;
+    box-shadow: 0 8px 24px oklch(0 0 0 / 0.18);
+    opacity: 0; transition: transform 0.25s, opacity 0.25s;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* Ribbon */
+  .ribbon {
+    background: linear-gradient(135deg, #FFF8DC, #FFE9B0);
+    color: #6B4F00; border-bottom: 1px solid #F3D27A;
+    text-align: center; padding: 6px 10px;
+    font-size: 12px; font-weight: 500;
+  }
+  .ribbon a { color: #6B4F00; text-decoration: underline; }
+
+  body:not(.v2) .v2-only { display: none !important; }
+
+  @media (max-width: 880px) {
+    .shell { grid-template-columns: 1fr; }
+    .stat-strip { display: none; }
+  }
+</style>
+</head>
+<body class="v1">
+
+<div class="ribbon">
+  Prototype · <strong>Stage 3 — CiteMed Admin view</strong> ·
+  <a href="stage1-mvp.html">Stage 1</a> ·
+  <a href="stage2-requests.html">Stage 2</a> ·
+  Toggle V1 / V2 in the top-right to preview the validation/checklist layer.
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">C</div>
+    CiteMed Portal
+    <span class="admin-badge">Admin</span>
+  </div>
+  <nav>
+    <a href="#">Companies</a>
+    <a href="#">Tickets</a>
+    <a href="#" class="active">Files</a>
+    <a href="#">Settings</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="ver-toggle" role="tablist" aria-label="Version">
+    <button id="v-v1" class="active" onclick="setVersion('v1')">V1</button>
+    <button id="v-v2" onclick="setVersion('v2')">V2 · Validation</button>
+  </div>
+  <div class="user-chip">
+    <span>Maria Chen</span>
+    <div class="user-avatar">MC</div>
+  </div>
+</header>
+
+<!-- Company switcher row -->
+<div class="company-row">
+  <div class="company-switcher">
+    <button class="switcher-btn" id="co-trigger" onclick="toggleCompanyMenu()">
+      <span class="co-avatar" id="co-avatar">AC</span>
+      <span class="co-info">
+        <span id="co-name">Acme Medical</span>
+        <span class="co-sub" id="co-sub">12 files · 3 active requests</span>
+      </span>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="switcher-menu" id="co-menu">
+      <div class="menu-search">
+        <input id="co-search" placeholder="Search companies…" />
+      </div>
+      <div id="co-options"></div>
+    </div>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat">
+      <span class="label">Total files</span>
+      <span class="value" id="stat-files">0</span>
+    </div>
+    <div class="stat">
+      <span class="label">Open requests</span>
+      <span class="value warn" id="stat-open">0</span>
+    </div>
+    <div class="stat v2-only">
+      <span class="label">Awaiting review</span>
+      <span class="value warn" id="stat-review">0</span>
+    </div>
+    <div class="stat v2-only">
+      <span class="label">Approved</span>
+      <span class="value ok" id="stat-approved">0</span>
+    </div>
+  </div>
+</div>
+
+<main class="shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h2>Requests sent to <span id="sb-co">Acme</span></h2>
+      <div id="req-list"></div>
+    </div>
+    <div class="sidebar-section">
+      <h2>Customer uploads</h2>
+      <div id="general-list"></div>
+    </div>
+  </aside>
+
+  <!-- Detail -->
+  <section class="detail">
+    <div class="detail-header">
+      <div>
+        <h1 id="detail-title">Request title</h1>
+        <div class="req-meta" id="detail-meta"></div>
+      </div>
+      <button class="btn ghost" onclick="downloadAll()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download all
+      </button>
+    </div>
+
+    <div class="req-description" id="detail-description"></div>
+
+    <!-- V2 only: checklist for the active request -->
+    <div class="checklist v2-only" id="checklist">
+      <div class="checklist-head">
+        <span class="label">Required documents</span>
+        <span class="progress" id="checklist-progress">0 / 0 received</span>
+      </div>
+      <div class="progress-bar"><div id="checklist-bar" style="width:0%"></div></div>
+      <div id="checklist-rows"></div>
+      <div class="check-add">
+        <input id="checklist-new" placeholder="Add a required document…" />
+        <button class="btn sm ghost" onclick="addChecklistItem()">Add</button>
+      </div>
+    </div>
+
+    <div class="list-card">
+      <div class="list-toolbar">
+        <span class="count" id="count">0 files</span>
+        <div class="filter v2-only">
+          <button data-filter="all" class="active" onclick="setFilter('all')">All</button>
+          <button data-filter="pending" onclick="setFilter('pending')">Pending</button>
+          <button data-filter="review" onclick="setFilter('review')">In review</button>
+          <button data-filter="approved" onclick="setFilter('approved')">Approved</button>
+          <button data-filter="revision" onclick="setFilter('revision')">Needs revision</button>
+        </div>
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="search" placeholder="Search files…" />
+        </div>
+      </div>
+
+      <div id="file-list"></div>
+
+      <div id="empty" class="empty" hidden>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <h3>No files yet</h3>
+        <p>The customer hasn't uploaded anything to this bucket.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast">Saved</div>
+
+<script>
+  /* ─── Data ─── */
+  function id() { return Math.random().toString(36).slice(2, 10); }
+  function daysAgo(d) { const t = new Date(); t.setDate(t.getDate() - d); return t.toISOString(); }
+  function daysFromNow(d) { const t = new Date(); t.setDate(t.getDate() + d); return t.toISOString(); }
+
+  const companies = [
+    { id: 'acme', name: 'Acme Medical', initials: 'AC', tier: 'Enterprise' },
+    { id: 'nordic', name: 'Nordic Devices AB', initials: 'ND', tier: 'Pro' },
+    { id: 'helix', name: 'Helix Biotech', initials: 'HB', tier: 'Enterprise' },
+    { id: 'mesa', name: 'Mesa Surgical', initials: 'MS', tier: 'Pro' },
+    { id: 'orbital', name: 'Orbital Imaging Co.', initials: 'OI', tier: 'Starter' },
+  ];
+
+  /* Buckets are per company. kind = 'request' | 'general' */
+  const buckets = [
+    // Acme
+    { id: 'r1', companyId: 'acme', kind: 'request', title: 'Q3 PMS Report Submission',
+      description: 'Please upload your Q3 post-market surveillance report and any supporting clinical-data summaries.',
+      requestedBy: 'Maria Chen (CiteMed)', requestedAt: daysAgo(3),
+      due: daysFromNow(4), status: 'open',
+      checklist: [
+        { id: 'c1', text: 'Signed PMS report (PDF)', linkedFileId: null },
+        { id: 'c2', text: 'Adverse event log (XLSX)', linkedFileId: null },
+        { id: 'c3', text: 'CAPA summary', linkedFileId: null },
+      ] },
+    { id: 'r2', companyId: 'acme', kind: 'request', title: 'CE-mark renewal evidence pack',
+      description: 'Upload your latest risk-management file (ISO 14971) and updated DoC.',
+      requestedBy: 'Maria Chen (CiteMed)', requestedAt: daysAgo(10),
+      due: daysFromNow(-2), status: 'partial',
+      checklist: [
+        { id: 'c4', text: 'Risk management file (ISO 14971)', linkedFileId: null },
+        { id: 'c5', text: 'Declaration of Conformity', linkedFileId: null },
+      ] },
+    { id: 'r3', companyId: 'acme', kind: 'request', title: 'Annual literature search inputs',
+      description: 'Reference list and inclusion/exclusion criteria for the FY25 literature search.',
+      requestedBy: 'David Park (CiteMed)', requestedAt: daysAgo(18),
+      due: null, status: 'complete',
+      checklist: [
+        { id: 'c6', text: 'Reference list', linkedFileId: null },
+        { id: 'c7', text: 'Inclusion / exclusion criteria', linkedFileId: null },
+      ] },
+    { id: 'g1', companyId: 'acme', kind: 'general', title: 'Customer uploads',
+      description: 'Files Acme uploaded outside of any specific request.', status: 'general' },
+
+    // Nordic
+    { id: 'r4', companyId: 'nordic', kind: 'request', title: 'Initial CER scoping documents',
+      description: 'Device description, intended purpose, and equivalent-device rationale.',
+      requestedBy: 'Maria Chen (CiteMed)', requestedAt: daysAgo(6),
+      due: daysFromNow(8), status: 'open',
+      checklist: [
+        { id: 'c8', text: 'Device description', linkedFileId: null },
+        { id: 'c9', text: 'Intended purpose statement', linkedFileId: null },
+      ] },
+    { id: 'g2', companyId: 'nordic', kind: 'general', title: 'Customer uploads',
+      description: 'Files Nordic uploaded outside of any specific request.', status: 'general' },
+
+    // Helix
+    { id: 'r5', companyId: 'helix', kind: 'request', title: 'PMCF protocol review',
+      description: 'Latest draft of the post-market clinical follow-up protocol.',
+      requestedBy: 'David Park (CiteMed)', requestedAt: daysAgo(1),
+      due: daysFromNow(7), status: 'open',
+      checklist: [{ id: 'c10', text: 'PMCF protocol draft', linkedFileId: null }] },
+    { id: 'g3', companyId: 'helix', kind: 'general', title: 'Customer uploads',
+      description: 'Files Helix uploaded outside of any specific request.', status: 'general' },
+
+    { id: 'g4', companyId: 'mesa', kind: 'general', title: 'Customer uploads', description: '', status: 'general' },
+    { id: 'g5', companyId: 'orbital', kind: 'general', title: 'Customer uploads', description: '', status: 'general' },
+  ];
+
+  /* File review status: 'pending' | 'review' | 'approved' | 'revision' */
+  let files = [
+    // Acme r1
+    { id: 'f1', bucketId: 'r1', name: 'PMS-Q3-2025-draft.docx', size: 184_000, uploaded: daysAgo(1), uploader: 'jane@acmemed.com', review: 'review', notes: '' },
+    // Acme r2
+    { id: 'f2', bucketId: 'r2', name: 'Risk-Management-File-v4.pdf', size: 1_840_000, uploaded: daysAgo(2), uploader: 'tom@acmemed.com', review: 'approved', notes: 'Matches Annex I requirements.' },
+    { id: 'f3', bucketId: 'r2', name: 'DoC-EU-2024.pdf', size: 320_000, uploaded: daysAgo(2), uploader: 'tom@acmemed.com', review: 'revision', notes: 'Needs an updated date on page 2.' },
+    // Acme r3
+    { id: 'f4', bucketId: 'r3', name: 'Literature-References.xlsx', size: 78_000, uploaded: daysAgo(15), uploader: 'jane@acmemed.com', review: 'approved', notes: '' },
+    { id: 'f5', bucketId: 'r3', name: 'Inclusion-Criteria-FY25.docx', size: 42_000, uploaded: daysAgo(15), uploader: 'jane@acmemed.com', review: 'approved', notes: '' },
+    // Acme general
+    { id: 'f6', bucketId: 'g1', name: 'Acme-Org-Chart.pdf', size: 220_000, uploaded: daysAgo(20), uploader: 'jane@acmemed.com', review: 'pending', notes: '' },
+
+    // Nordic
+    { id: 'f7', bucketId: 'r4', name: 'Device-Spec-Sheet.pdf', size: 540_000, uploaded: daysAgo(2), uploader: 'lars@nordic.se', review: 'review', notes: '' },
+    { id: 'f8', bucketId: 'g2', name: 'Company-Overview.pdf', size: 410_000, uploaded: daysAgo(30), uploader: 'lars@nordic.se', review: 'pending', notes: '' },
+
+    // Helix
+    { id: 'f9', bucketId: 'r5', name: 'PMCF-Protocol-v1.docx', size: 290_000, uploaded: daysAgo(0), uploader: 'sara@helix.bio', review: 'review', notes: '' },
+  ];
+
+  // Pre-link some checklist rows so V2 shows realistic state
+  buckets.find(b => b.id === 'r2').checklist[0].linkedFileId = 'f2';
+  buckets.find(b => b.id === 'r2').checklist[1].linkedFileId = 'f3';
+  buckets.find(b => b.id === 'r3').checklist[0].linkedFileId = 'f4';
+  buckets.find(b => b.id === 'r3').checklist[1].linkedFileId = 'f5';
+
+  let activeCompanyId = 'acme';
+  let activeBucketId = 'r1';
+  let version = 'v1';
+  let reviewFilter = 'all';
+
+  /* ─── Helpers ─── */
+  function fmtSize(b) {
+    if (b < 1024) return `${b} B`;
+    if (b < 1_048_576) return `${(b/1024).toFixed(1)} KB`;
+    if (b < 1_073_741_824) return `${(b/1_048_576).toFixed(1)} MB`;
+    return `${(b/1_073_741_824).toFixed(2)} GB`;
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function fmtDueLabel(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    const days = Math.ceil((d.getTime() - Date.now()) / 86_400_000);
+    if (days < 0) return { text: `${-days}d overdue`, overdue: true };
+    if (days === 0) return { text: 'Due today', soon: true };
+    if (days <= 3) return { text: `Due in ${days}d`, soon: true };
+    return { text: `Due ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` };
+  }
+  function ext(name) { const i = name.lastIndexOf('.'); return i === -1 ? 'FILE' : name.slice(i+1).toUpperCase().slice(0,4); }
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+  function reviewMeta(r) {
+    return ({
+      pending: { label: 'Pending', color: 'var(--muted-foreground)' },
+      review:  { label: 'In review', color: 'var(--info)' },
+      approved:{ label: 'Approved', color: 'var(--ok)' },
+      revision:{ label: 'Needs revision', color: 'var(--warn)' },
+    })[r] || { label: 'Pending', color: 'var(--muted-foreground)' };
+  }
+
+  /* ─── Company switcher ─── */
+  function renderCompanyChip() {
+    const c = companies.find(x => x.id === activeCompanyId);
+    document.getElementById('co-avatar').textContent = c.initials;
+    document.getElementById('co-name').textContent = c.name;
+    const fileCount = files.filter(f => buckets.find(b => b.id === f.bucketId)?.companyId === c.id).length;
+    const openCount = buckets.filter(b => b.companyId === c.id && b.kind === 'request' && b.status !== 'complete').length;
+    document.getElementById('co-sub').textContent = `${fileCount} files · ${openCount} active request${openCount === 1 ? '' : 's'}`;
+    document.getElementById('sb-co').textContent = c.name.split(' ')[0];
+  }
+  function renderCompanyMenu() {
+    const q = document.getElementById('co-search').value.trim().toLowerCase();
+    const list = document.getElementById('co-options');
+    list.innerHTML = '';
+    const filtered = q ? companies.filter(c => c.name.toLowerCase().includes(q)) : companies;
+    for (const c of filtered) {
+      const fileCount = files.filter(f => buckets.find(b => b.id === f.bucketId)?.companyId === c.id).length;
+      const openCount = buckets.filter(b => b.companyId === c.id && b.kind === 'request' && b.status !== 'complete').length;
+      const el = document.createElement('div');
+      el.className = 'menu-item' + (c.id === activeCompanyId ? ' active' : '');
+      el.onclick = () => { switchCompany(c.id); toggleCompanyMenu(false); };
+      el.innerHTML = `
+        <span class="co-avatar">${c.initials}</span>
+        <span>
+          <div class="co-name">${c.name}</div>
+          <div class="co-meta">${c.tier} · ${fileCount} files · ${openCount} open</div>
+        </span>
+        <svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      `;
+      list.appendChild(el);
+    }
+  }
+  function toggleCompanyMenu(force) {
+    const m = document.getElementById('co-menu');
+    const open = force === undefined ? !m.classList.contains('open') : force;
+    m.classList.toggle('open', open);
+    if (open) { renderCompanyMenu(); setTimeout(() => document.getElementById('co-search').focus(), 30); }
+  }
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.company-switcher')) toggleCompanyMenu(false);
+  });
+  document.getElementById('co-search').addEventListener('input', renderCompanyMenu);
+
+  function switchCompany(cid) {
+    activeCompanyId = cid;
+    const firstBucket = buckets.find(b => b.companyId === cid);
+    activeBucketId = firstBucket ? firstBucket.id : null;
+    render();
+  }
+
+  /* ─── Stats ─── */
+  function renderStats() {
+    const companyBuckets = buckets.filter(b => b.companyId === activeCompanyId);
+    const companyFiles = files.filter(f => companyBuckets.some(b => b.id === f.bucketId));
+    document.getElementById('stat-files').textContent = companyFiles.length;
+    document.getElementById('stat-open').textContent =
+      companyBuckets.filter(b => b.kind === 'request' && b.status !== 'complete').length;
+    document.getElementById('stat-review').textContent =
+      companyFiles.filter(f => f.review === 'review' || f.review === 'pending').length;
+    document.getElementById('stat-approved').textContent =
+      companyFiles.filter(f => f.review === 'approved').length;
+  }
+
+  /* ─── Sidebar ─── */
+  function renderSidebar() {
+    const reqList = document.getElementById('req-list');
+    const genList = document.getElementById('general-list');
+    reqList.innerHTML = ''; genList.innerHTML = '';
+
+    const companyBuckets = buckets.filter(b => b.companyId === activeCompanyId);
+    companyBuckets.forEach(b => {
+      const count = files.filter(f => f.bucketId === b.id).length;
+      const node = document.createElement('div');
+      node.className = 'req-item' + (b.id === activeBucketId ? ' active' : '');
+      node.onclick = () => { activeBucketId = b.id; render(); };
+      const due = b.kind === 'request' ? fmtDueLabel(b.due) : null;
+      const dueHtml = due ? `<span class="dot"></span><span style="${due.overdue ? 'color:var(--destructive);font-weight:600;' : due.soon ? 'color:var(--warn);font-weight:600;' : ''}">${due.text}</span>` : '';
+      node.innerHTML = `
+        <div class="top">
+          <span class="title">${b.title}</span>
+          <span class="pill ${b.status}">${b.status === 'general' ? 'Uploads' : b.status}</span>
+        </div>
+        <div class="sub">
+          <span>${count} file${count === 1 ? '' : 's'}</span>
+          ${dueHtml}
+        </div>
+      `;
+      (b.kind === 'request' ? reqList : genList).appendChild(node);
+    });
+  }
+
+  /* ─── Checklist (V2) ─── */
+  function renderChecklist() {
+    const b = buckets.find(x => x.id === activeBucketId);
+    const el = document.getElementById('checklist');
+    if (!b || b.kind !== 'request' || !b.checklist) {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = version === 'v2' ? 'block' : 'none';
+    const total = b.checklist.length;
+    const done = b.checklist.filter(c => c.linkedFileId).length;
+    document.getElementById('checklist-progress').textContent = `${done} / ${total} received`;
+    document.getElementById('checklist-bar').style.width = total === 0 ? '0%' : `${Math.round(done/total*100)}%`;
+
+    const rows = document.getElementById('checklist-rows');
+    rows.innerHTML = '';
+    const bucketFiles = files.filter(f => f.bucketId === b.id);
+    for (const item of b.checklist) {
+      const linked = item.linkedFileId ? files.find(f => f.id === item.linkedFileId) : null;
+      const row = document.createElement('div');
+      row.className = 'check-row';
+      row.innerHTML = `
+        <div class="box ${linked ? 'checked' : ''}" data-cid="${item.id}">
+          ${linked ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+        </div>
+        <span class="label-text ${linked ? 'done' : ''}">${item.text}</span>
+        ${linked
+          ? `<span class="linked-file linked" title="${linked.name}">${linked.name}</span>`
+          : `<select class="linked-file" data-cid="${item.id}" style="border:1px solid var(--border); padding:3px 6px; border-radius:4px; font: inherit; font-size:11.5px; background:var(--card); color:var(--muted-foreground);">
+              <option value="">Link a file…</option>
+              ${bucketFiles.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+            </select>`}
+      `;
+      rows.appendChild(row);
+    }
+
+    rows.querySelectorAll('.box').forEach(box => {
+      box.onclick = () => {
+        const cid = box.dataset.cid;
+        const item = b.checklist.find(c => c.id === cid);
+        if (item.linkedFileId) {
+          item.linkedFileId = null;
+          toast('Unchecked');
+          render();
+        }
+      };
+    });
+    rows.querySelectorAll('select.linked-file').forEach(sel => {
+      sel.onchange = () => {
+        const cid = sel.dataset.cid;
+        const item = b.checklist.find(c => c.id === cid);
+        if (sel.value) {
+          item.linkedFileId = sel.value;
+          toast('Linked to checklist');
+          render();
+        }
+      };
+    });
+  }
+  function addChecklistItem() {
+    const input = document.getElementById('checklist-new');
+    const text = input.value.trim();
+    if (!text) return;
+    const b = buckets.find(x => x.id === activeBucketId);
+    if (!b || b.kind !== 'request') return;
+    if (!b.checklist) b.checklist = [];
+    b.checklist.push({ id: id(), text, linkedFileId: null });
+    input.value = '';
+    toast('Item added');
+    render();
+  }
+
+  /* ─── Detail ─── */
+  function renderDetail() {
+    const b = buckets.find(x => x.id === activeBucketId);
+    if (!b) return;
+    document.getElementById('detail-title').innerHTML =
+      `${b.title} <span class="pill ${b.status}">${b.status === 'general' ? 'Uploads' : b.status}</span>`;
+    const meta = document.getElementById('detail-meta');
+    const c = companies.find(x => x.id === b.companyId);
+    if (b.kind === 'request') {
+      const due = fmtDueLabel(b.due);
+      meta.innerHTML = `
+        <span><strong>${c.name}</strong></span>
+        <span>·</span>
+        <span>Requested by <strong>${b.requestedBy}</strong></span>
+        <span>·</span>
+        <span>${fmtDate(b.requestedAt)}</span>
+        ${due ? `<span>·</span><span style="${due.overdue ? 'color:var(--destructive);font-weight:600;' : due.soon ? 'color:var(--warn);font-weight:600;' : ''}">${due.text}</span>` : ''}
+      `;
+    } else {
+      meta.innerHTML = `<span><strong>${c.name}</strong> — files uploaded outside of any specific request.</span>`;
+    }
+    const desc = document.getElementById('detail-description');
+    if (b.kind === 'request') {
+      desc.style.display = '';
+      desc.innerHTML = `<span class="label">What we asked for</span>${b.description}<div class="from">— ${b.requestedBy}</div>`;
+    } else {
+      desc.style.display = 'none';
+    }
+    renderChecklist();
+    renderFiles();
+  }
+
+  /* ─── Files ─── */
+  function renderFiles() {
+    const q = document.getElementById('search').value.trim().toLowerCase();
+    const all = files.filter(f => f.bucketId === activeBucketId);
+    let filtered = q ? all.filter(f => f.name.toLowerCase().includes(q)) : all;
+    if (version === 'v2' && reviewFilter !== 'all') {
+      filtered = filtered.filter(f => f.review === reviewFilter);
+    }
+    document.getElementById('count').textContent = `${all.length} file${all.length === 1 ? '' : 's'}${version === 'v2' && reviewFilter !== 'all' ? ` · ${filtered.length} shown` : ''}`;
+
+    const listEl = document.getElementById('file-list');
+    const emptyEl = document.getElementById('empty');
+    listEl.innerHTML = '';
+
+    if (filtered.length === 0) {
+      emptyEl.hidden = false;
+      if (q) {
+        emptyEl.querySelector('h3').textContent = 'No matches';
+        emptyEl.querySelector('p').textContent = `Nothing matched "${q}".`;
+      } else if (version === 'v2' && reviewFilter !== 'all') {
+        emptyEl.querySelector('h3').textContent = 'Nothing in this state';
+        emptyEl.querySelector('p').textContent = `No files are currently "${reviewFilter}".`;
+      } else {
+        emptyEl.querySelector('h3').textContent = 'No files yet';
+        emptyEl.querySelector('p').textContent = "The customer hasn't uploaded anything to this bucket.";
+      }
+      return;
+    }
+    emptyEl.hidden = true;
+
+    for (const f of filtered) {
+      const r = reviewMeta(f.review);
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      row.dataset.id = f.id;
+      row.innerHTML = `
+        <div class="icon">${ext(f.name)}</div>
+        <div class="name" title="${f.name}">
+          ${f.name}
+          <span class="uploader">${f.uploader}</span>
+        </div>
+        <div class="meta">${fmtSize(f.size)}</div>
+        <div class="meta">${fmtDate(f.uploaded)}</div>
+        <div class="review">
+          <div class="review-menu" data-id="${f.id}">
+            <button class="review-trigger" style="color:${r.color}; border-color:${r.color};">
+              <span class="dot"></span>
+              ${r.label}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="review-menu-list">
+              <button data-r="pending"><span class="dot" style="background:var(--muted-foreground)"></span>Pending</button>
+              <button data-r="review"><span class="dot" style="background:var(--info)"></span>In review</button>
+              <button data-r="approved"><span class="dot" style="background:var(--ok)"></span>Approved</button>
+              <button data-r="revision"><span class="dot" style="background:var(--warn)"></span>Needs revision</button>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="icon-btn v2-only" title="Notes" data-act="notes">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          </button>
+          <button class="icon-btn" title="Download" data-act="download">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        </div>
+      `;
+      listEl.appendChild(row);
+
+      if (version === 'v2') {
+        const notes = document.createElement('div');
+        notes.className = 'notes-drawer';
+        notes.dataset.id = f.id;
+        notes.innerHTML = `
+          <textarea placeholder="Note for the customer (visible to them when this file is in review or needs revision)…">${f.notes || ''}</textarea>
+          <div class="nd-foot">
+            <small>Saved automatically. Visible to ${companies.find(c => c.id === buckets.find(b => b.id === f.bucketId).companyId).name}.</small>
+            <button class="btn sm ghost" data-act="close-notes">Done</button>
+          </div>
+        `;
+        listEl.appendChild(notes);
+      }
+    }
+  }
+
+  /* ─── File row handlers ─── */
+  document.getElementById('file-list').addEventListener('click', e => {
+    // Review menu trigger
+    const trigger = e.target.closest('.review-trigger');
+    if (trigger) {
+      const menu = trigger.closest('.review-menu');
+      document.querySelectorAll('.review-menu.open').forEach(m => { if (m !== menu) m.classList.remove('open'); });
+      menu.classList.toggle('open');
+      return;
+    }
+    // Review menu option
+    const opt = e.target.closest('.review-menu-list button');
+    if (opt) {
+      const menu = opt.closest('.review-menu');
+      const f = files.find(x => x.id === menu.dataset.id);
+      f.review = opt.dataset.r;
+      menu.classList.remove('open');
+      toast(`Marked "${reviewMeta(f.review).label.toLowerCase()}"`);
+      render();
+      return;
+    }
+    const btn = e.target.closest('button.icon-btn, button[data-act="close-notes"]');
+    if (!btn) return;
+    const row = btn.closest('.file-row');
+    const drawer = btn.closest('.notes-drawer');
+    if (btn.dataset.act === 'download') {
+      const f = files.find(x => x.id === row.dataset.id);
+      toast(`Downloading ${f.name}…`);
+    } else if (btn.dataset.act === 'notes') {
+      const fid = row.dataset.id;
+      const d = document.querySelector(`.notes-drawer[data-id="${fid}"]`);
+      d.classList.toggle('open');
+      if (d.classList.contains('open')) d.querySelector('textarea').focus();
+    } else if (btn.dataset.act === 'close-notes') {
+      drawer.classList.remove('open');
+    }
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.review-menu')) {
+      document.querySelectorAll('.review-menu.open').forEach(m => m.classList.remove('open'));
+    }
+  });
+  document.getElementById('file-list').addEventListener('input', e => {
+    const ta = e.target.closest('.notes-drawer textarea');
+    if (!ta) return;
+    const fid = ta.closest('.notes-drawer').dataset.id;
+    const f = files.find(x => x.id === fid);
+    f.notes = ta.value;
+  });
+
+  /* ─── Filters ─── */
+  function setFilter(f) {
+    reviewFilter = f;
+    document.querySelectorAll('.list-toolbar .filter button').forEach(b => {
+      b.classList.toggle('active', b.dataset.filter === f);
+    });
+    renderFiles();
+  }
+
+  function downloadAll() {
+    const all = files.filter(f => f.bucketId === activeBucketId);
+    if (all.length === 0) { toast('Nothing to download'); return; }
+    toast(`Preparing zip of ${all.length} file${all.length === 1 ? '' : 's'}…`);
+  }
+
+  document.getElementById('search').addEventListener('input', renderFiles);
+
+  /* ─── Version toggle ─── */
+  function setVersion(v) {
+    version = v;
+    document.body.classList.toggle('v1', v === 'v1');
+    document.body.classList.toggle('v2', v === 'v2');
+    document.getElementById('v-v1').classList.toggle('active', v === 'v1');
+    document.getElementById('v-v2').classList.toggle('active', v === 'v2');
+    if (v === 'v1') reviewFilter = 'all';
+    render();
+  }
+
+  function render() {
+    renderCompanyChip();
+    renderStats();
+    renderSidebar();
+    renderDetail();
+  }
+
+  render();
+</script>
+</body>
+</html>
