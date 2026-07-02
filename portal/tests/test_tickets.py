@@ -39,3 +39,50 @@ class TicketModelTests(TestCase):
     def test_default_status_is_waiting_on_support(self):
         t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')
         self.assertEqual(t.status, Ticket.STATUS_WAITING_ON_SUPPORT)
+
+
+class TicketNotifyTests(TestCase):
+    def setUp(self):
+        self.acme, self.cust = make_co_user()
+        self.staff = PortalUser.objects.create(email='s@citemed.com', role='admin')
+        self.t = Ticket.objects.create(
+            company=self.acme, created_by=self.cust,
+            subject='Sync broken', cc_emails=['cc@ext.com'])
+
+    def test_staff_reply_emails_customer_and_ccs_with_threading(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='We fixed it', origin='staff')
+        from portal import ticket_notify
+        ticket_notify.notify_staff_reply(self.t, m)
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertIn('cc@ext.com', sent.to)
+        self.assertIn(self.cust.email, sent.to)
+        self.assertIn(f'[{self.t.display_number}]', sent.subject)
+        m.refresh_from_db()
+        self.assertTrue(m.email_message_id)
+        self.assertTrue(m.reply_token)
+        self.assertIn(m.email_message_id, sent.extra_headers.get('Message-ID', ''))
+        self.assertIn(f'ticket-{self.t.number}+{m.reply_token}@',
+                      sent.extra_headers.get('Reply-To', ''))
+
+    def test_internal_note_is_never_emailed(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='secret', origin='staff',
+            is_internal=True)
+        from portal import ticket_notify
+        ticket_notify.notify_staff_reply(self.t, m)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_references_chain_to_previous_message(self):
+        from portal import ticket_notify
+        m1 = TicketMessage.objects.create(ticket=self.t, author=self.staff,
+                                          body='r1', origin='staff')
+        ticket_notify.notify_staff_reply(self.t, m1)
+        m2 = TicketMessage.objects.create(ticket=self.t, author=self.staff,
+                                          body='r2', origin='staff')
+        ticket_notify.notify_staff_reply(self.t, m2)
+        m1.refresh_from_db()
+        refs = mail.outbox[1].extra_headers.get('References', '')
+        self.assertIn(m1.email_message_id, refs)
