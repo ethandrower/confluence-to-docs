@@ -310,3 +310,106 @@ class FileActivity(models.Model):
         indexes = [
             models.Index(fields=['company', '-created_at']),
         ]
+
+
+class Ticket(models.Model):
+    """A customer support conversation. Replaces Jira for customer comms —
+    Jira remains internal-only via the (never customer-visible) jira_key."""
+    STATUS_OPEN = 'open'
+    STATUS_WAITING_ON_CUSTOMER = 'waiting_on_customer'
+    STATUS_WAITING_ON_SUPPORT = 'waiting_on_support'
+    STATUS_RESOLVED = 'resolved'
+    STATUS_CLOSED = 'closed'
+    STATUS_CHOICES = [
+        (STATUS_OPEN, 'Open'),
+        (STATUS_WAITING_ON_CUSTOMER, 'Waiting on customer'),
+        (STATUS_WAITING_ON_SUPPORT, 'Waiting on support'),
+        (STATUS_RESOLVED, 'Resolved'),
+        (STATUS_CLOSED, 'Closed'),
+    ]
+    CATEGORY_CHOICES = [
+        ('question', 'Question'), ('bug', 'Bug Report'),
+        ('feature', 'Feature Request'), ('docs', 'Documentation Issue'),
+        ('other', 'Other'),
+    ]
+
+    # null=True so save() can assign it pre-INSERT; unique=True guards races.
+    number = models.PositiveIntegerField(unique=True, editable=False, null=True, blank=True)
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tickets')
+    created_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='tickets_created',
+    )
+    subject = models.CharField(max_length=512)
+    category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, default='question')
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES,
+                              default=STATUS_WAITING_ON_SUPPORT)
+    cc_emails = models.JSONField(default=list, blank=True)
+    # Internal-only Jira reference. NEVER serialized to customers.
+    jira_key = models.CharField(max_length=32, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['company', '-updated_at']),
+            models.Index(fields=['status', 'updated_at']),  # admin inbox
+        ]
+
+    def __str__(self):
+        return f'{self.display_number} {self.subject}'
+
+    @property
+    def display_number(self):
+        return f'CS-{self.number}'
+
+    def save(self, *args, **kwargs):
+        if self.number is None:
+            # Max+1 is fine at our write volume; unique=True catches races
+            # (caller retries). Avoids a sequence table.
+            last = Ticket.objects.aggregate(models.Max('number'))['number__max']
+            self.number = (last or 0) + 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def for_user(cls, user):
+        """Tenant-isolation chokepoint — customer endpoints must query through
+        here, never `objects` directly (same rule as SharedFile.for_user)."""
+        company_id = getattr(user, 'company_id', None)
+        if not company_id:
+            return cls.objects.none()
+        return cls.objects.filter(company_id=company_id)
+
+
+class TicketMessage(models.Model):
+    ORIGIN_PORTAL = 'portal'
+    ORIGIN_STAFF = 'staff'
+    ORIGIN_EMAIL = 'email'  # Phase 2 inbound
+
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='messages')
+    author = models.ForeignKey('PortalUser', null=True, blank=True, on_delete=models.SET_NULL)
+    author_email = models.EmailField(blank=True)
+    body = models.TextField()
+    origin = models.CharField(max_length=16, default=ORIGIN_PORTAL)
+    # Staff-only note: never customer-visible, never emailed to the customer.
+    is_internal = models.BooleanField(default=False)
+    # Phase-2 email-threading plumbing, populated on outbound sends now.
+    email_message_id = models.CharField(max_length=256, blank=True)
+    reply_token = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class TicketActivity(models.Model):
+    """Append-only audit trail for ticket actions. Never deleted."""
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='activity')
+    actor = models.ForeignKey('PortalUser', null=True, blank=True, on_delete=models.SET_NULL)
+    action = models.CharField(max_length=32)
+    detail = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
