@@ -10,6 +10,7 @@ Reply-To token address that is dormant until Phase 2 (inbound email).
 import logging
 import secrets
 import uuid
+from email.utils import parseaddr
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -29,8 +30,12 @@ def _site():
 
 
 def _mail_domain():
-    # Domain part of DEFAULT_FROM_EMAIL, e.g. notification.citemed.com
-    return _from().rsplit('@', 1)[-1]
+    # Domain part of DEFAULT_FROM_EMAIL. DEFAULT_FROM_EMAIL may be either a
+    # bare address ("noreply@x.com") or "Display Name <noreply@x.com>", so
+    # parse out the bare address first — otherwise the domain picks up a
+    # trailing ">" and produces an invalid Message-ID / unroutable Reply-To.
+    bare_addr = parseaddr(_from())[1] or _from()
+    return bare_addr.rsplit('@', 1)[-1]
 
 
 def _customer_recipients(ticket):
@@ -38,7 +43,14 @@ def _customer_recipients(ticket):
     if ticket.created_by and ticket.created_by.email:
         emails.append(ticket.created_by.email)
     emails.extend(e for e in (ticket.cc_emails or []) if e)
-    return list(dict.fromkeys(emails))  # dedupe, keep order
+    seen = set()
+    deduped = []
+    for e in emails:
+        key = e.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(e)
+    return deduped  # dedupe case-insensitively, keep first-seen casing + order
 
 
 def _thread_headers(ticket, message):
@@ -48,6 +60,14 @@ def _thread_headers(ticket, message):
         message.email_message_id = f'<ticket-{ticket.number}-{uuid.uuid4().hex}@{domain}>'
     if not message.reply_token:
         message.reply_token = secrets.token_urlsafe(24)
+    # Persisted before send() runs, on purpose: this is a best-effort-send
+    # contract (see module docstring), and regenerating on retry is
+    # idempotent. If the send below fails, the id/token are already saved
+    # but were never actually emailed — a harmless "phantom" id (RFC 5322
+    # allows References/In-Reply-To to point at ids the recipient never
+    # saw). The tradeoff we want is the opposite failure mode: the id
+    # stored in the DB must always match what was (attempted to be) sent,
+    # so any future thread lookup or notify_status anchor is never stale.
     message.save(update_fields=['email_message_id', 'reply_token'])
 
     prior_ids = list(

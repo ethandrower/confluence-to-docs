@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.core import mail
 
 from portal.models import Company, PortalUser, Ticket, TicketMessage
@@ -41,6 +41,7 @@ class TicketModelTests(TestCase):
         self.assertEqual(t.status, Ticket.STATUS_WAITING_ON_SUPPORT)
 
 
+@override_settings(DEFAULT_FROM_EMAIL='CiteMed Support <noreply@notification.citemed.com>')
 class TicketNotifyTests(TestCase):
     def setUp(self):
         self.acme, self.cust = make_co_user()
@@ -86,3 +87,36 @@ class TicketNotifyTests(TestCase):
         m1.refresh_from_db()
         refs = mail.outbox[1].extra_headers.get('References', '')
         self.assertIn(m1.email_message_id, refs)
+
+    def test_reply_to_and_message_id_are_valid_with_display_name_from(self):
+        # Regression test for the display-name DEFAULT_FROM_EMAIL bug: the
+        # domain must be parsed from the bare address, not from the raw
+        # "Display Name <addr>" string, or Reply-To/Message-ID pick up a
+        # stray trailing '>'.
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='We fixed it', origin='staff')
+        from portal import ticket_notify
+        ticket_notify.notify_staff_reply(self.t, m)
+        sent = mail.outbox[0]
+        m.refresh_from_db()
+
+        reply_to = sent.extra_headers.get('Reply-To', '')
+        self.assertEqual(
+            reply_to,
+            f'ticket-{self.t.number}+{m.reply_token}@notification.citemed.com')
+
+        message_id = sent.extra_headers.get('Message-ID', '')
+        self.assertRegex(message_id, r'^<[^<>]+@notification\.citemed\.com>$')
+
+    def test_customer_recipients_dedupe_case_insensitively(self):
+        self.t.cc_emails = ['DUP@ext.com', 'dup@ext.com', 'other@ext.com']
+        self.t.save(update_fields=['cc_emails'])
+        from portal import ticket_notify
+        recipients = ticket_notify._customer_recipients(self.t)
+        lowered = [r.lower() for r in recipients]
+        self.assertEqual(len(lowered), len(set(lowered)))
+        # first-seen casing is preserved
+        self.assertIn('DUP@ext.com', recipients)
+        self.assertNotIn('dup@ext.com', recipients)
+        self.assertIn('other@ext.com', recipients)
