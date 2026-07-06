@@ -41,14 +41,15 @@
             :aria-current="selectedNumber === t.number ? 'true' : undefined"
             @click="$emit('select', t.number)"
           >
-            <span class="atl-row-top">
-              <span class="atl-number">{{ t.display_number }}</span>
-              <span class="atl-updated">{{ relDate(t.updated_at) }}</span>
+            <span class="atl-row-line">
+              <span class="atl-ref">{{ t.display_number }} · {{ t.company.name }}</span>
+              <span class="atl-status" :class="`status--${statusTone(t.status)}`">
+                <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status) }}
+              </span>
             </span>
-            <span class="atl-company">{{ t.company.name }}</span>
-            <span class="atl-subject">{{ t.subject }}</span>
-            <span class="atl-status" :class="`status--${statusTone(t.status)}`">
-              <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status) }}
+            <span class="atl-row-line">
+              <span class="atl-subject">{{ t.subject }}</span>
+              <span class="atl-updated">{{ relDate(t.updated_at) }}</span>
             </span>
           </button>
         </li>
@@ -125,24 +126,22 @@ function relDate(d) {
 .atl-select { flex: 1 1 auto; min-width: 0; height: 34px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; }
 .atl-select:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
 
-.atl-rows { list-style: none; margin: 0 -4px 0 -4px; padding: 0; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 4px; }
-.atl-rows > li { padding: 0 4px; }
+.atl-rows { list-style: none; margin: 0 -16px; padding: 0; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.atl-rows > li { display: block; }
 
 .atl-row {
-  display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left;
-  padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid transparent;
-  background: transparent; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left;
+  padding: 11px 16px; border: none; border-bottom: 1px solid var(--border);
+  background: transparent; cursor: pointer; transition: background 0.12s;
 }
 .atl-row:hover { background: var(--accent); }
-.atl-row--active { background: color-mix(in srgb, var(--primary) 9%, var(--card)); border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
-.atl-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.atl-number { font-family: var(--font-ui); font-weight: 700; font-size: 12px; color: var(--muted-foreground); }
+.atl-row--active { background: color-mix(in srgb, var(--primary) 10%, var(--card)); box-shadow: inset 3px 0 0 var(--primary); }
+.atl-row-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.atl-ref { font-family: var(--font-ui); font-weight: 650; font-size: 13px; color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .atl-updated { font-size: 11.5px; color: var(--muted-foreground); flex-shrink: 0; white-space: nowrap; }
-.atl-company { font-size: 12.5px; font-weight: 600; color: var(--foreground); }
-.atl-subject { font-size: 13px; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.atl-row--active .atl-subject { color: var(--foreground); }
+.atl-subject { font-size: 12.5px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-.atl-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; margin-top: 2px; }
+.atl-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; flex-shrink: 0; white-space: nowrap; }
 .atl-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .status--success { color: var(--success); }
 .status--warning { color: var(--warning); }

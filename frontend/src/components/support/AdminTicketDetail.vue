@@ -12,13 +12,13 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
           <span>All tickets</span>
         </button>
-        <div class="atd-head-main">
+        <div class="atd-head-top">
           <p class="atd-number">{{ ticket.display_number }} · {{ ticket.company.name }}</p>
-          <h1>{{ ticket.subject }}</h1>
+          <span class="atd-status" :class="`status--${statusTone(ticket.status)}`">
+            <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status) }}
+          </span>
         </div>
-        <span class="atd-status" :class="`status--${statusTone(ticket.status)}`">
-          <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status) }}
-        </span>
+        <h1 class="atd-subject-h">{{ ticket.subject }}</h1>
       </header>
 
       <!-- Controls strip (collapsed by default) -->
@@ -234,10 +234,10 @@ async function onSendReply() {
 .atd-back { display: none; align-items: center; gap: 6px; align-self: flex-start; color: var(--muted-foreground); font-size: 13px; font-weight: 550; padding: 4px 8px 4px 4px; border-radius: var(--radius-sm); cursor: pointer; }
 .atd-back svg { width: 15px; height: 15px; }
 .atd-back:hover { color: var(--foreground); background: var(--muted); }
-.atd-head-main { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
-.atd-head-main h1 { font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
-.atd-status { align-self: flex-start; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 650; white-space: nowrap; padding: 4px 11px; border-radius: 999px; margin-top: 2px; }
+.atd-subject-h { font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 4px 0 0; }
+.atd-status { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 650; white-space: nowrap; padding: 4px 11px; border-radius: 999px; }
 .atd-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .status--success { color: var(--success); background: color-mix(in srgb, var(--success) 13%, transparent); }
 .status--warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); }
