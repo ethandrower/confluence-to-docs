@@ -188,6 +188,14 @@ class CustomerTicketApiTests(TestCase):
         nums = [t['number'] for t in r.json()['tickets']]
         self.assertEqual(nums, [mine.number])
 
+    def test_create_tolerates_malformed_cc_emails(self):
+        self._login()
+        for bad in [123, {'x': 1}, 'a@b.com', None]:
+            r = self.client.post('/api/tickets/', data=json.dumps({
+                'subject': 'S', 'category': 'question', 'body': 'B', 'cc_emails': bad,
+            }), content_type='application/json')
+            self.assertEqual(r.status_code, 200, f'cc_emails={bad!r} should not 500')
+
     def test_message_author_never_blank(self):
         from portal.views.tickets import _message_dict
         t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')

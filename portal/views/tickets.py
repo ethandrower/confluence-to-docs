@@ -189,9 +189,15 @@ def _ticket_dict(t, message_count=None):
 def _clean_ccs(raw):
     from django.core.validators import validate_email
     from django.core.exceptions import ValidationError
+    # Only accept a JSON list; anything else (string, number, object, null)
+    # is treated as "no CCs" rather than crashing on slice/iterate (→ 500).
+    if not isinstance(raw, list):
+        return []
     ccs = []
-    for e in (raw or [])[:10]:
-        e = (e or '').strip()
+    for e in raw[:10]:
+        if not isinstance(e, str):
+            continue
+        e = e.strip()
         if not e:
             continue
         try:
