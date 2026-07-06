@@ -151,13 +151,23 @@ def log_ticket_activity(ticket, action, actor=None, **detail):
 
 
 def _message_dict(m):
+    is_staff = m.origin == TicketMessage.ORIGIN_STAFF
+    # Never render a blank sender: fall back to author name → author email →
+    # a role-appropriate label. Covers seeded/legacy rows and future inbound
+    # email messages that may have no linked PortalUser.
+    if m.author:
+        author_name = m.author.name or m.author.email
+    elif m.author_email:
+        author_name = m.author_email
+    else:
+        author_name = 'CiteMed Support' if is_staff else 'Customer'
     return {
         'id': m.id,
         'body': m.body,
         'origin': m.origin,
-        'author_name': (m.author.name or m.author.email) if m.author else m.author_email,
-        'author_email': m.author.email if m.author else m.author_email,
-        'is_staff': m.origin == TicketMessage.ORIGIN_STAFF,
+        'author_name': author_name,
+        'author_email': (m.author.email if m.author else m.author_email),
+        'is_staff': is_staff,
         'created_at': m.created_at.isoformat(),
     }
 

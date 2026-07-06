@@ -188,6 +188,17 @@ class CustomerTicketApiTests(TestCase):
         nums = [t['number'] for t in r.json()['tickets']]
         self.assertEqual(nums, [mine.number])
 
+    def test_message_author_never_blank(self):
+        from portal.views.tickets import _message_dict
+        t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')
+        cust_msg = TicketMessage.objects.create(ticket=t, body='hi', origin='portal')
+        staff_msg = TicketMessage.objects.create(ticket=t, body='yo', origin='staff')
+        self.assertEqual(_message_dict(cust_msg)['author_name'], 'Customer')
+        self.assertEqual(_message_dict(staff_msg)['author_name'], 'CiteMed Support')
+        email_msg = TicketMessage.objects.create(
+            ticket=t, body='x', origin='email', author_email='ext@client.com')
+        self.assertEqual(_message_dict(email_msg)['author_name'], 'ext@client.com')
+
     def test_detail_hides_internal_messages_and_jira_key(self):
         t = Ticket.objects.create(company=self.acme, created_by=self.cust,
                                   subject='A', jira_key='ENG-99')
