@@ -220,6 +220,27 @@ class CustomerTicketApiTests(TestCase):
         self.assertNotIn('ENG-99', payload)
         self.assertNotIn('jira', payload)
 
+    def test_staff_identity_is_hidden_from_customer(self):
+        # A customer must never see an individual staffer's name or email —
+        # only the "CiteMed Support" facade. jira_key/internal notes are
+        # already covered; this closes the staff-identity leak.
+        staff = PortalUser.objects.create(
+            email='priscilla@citemed.com', name='Priscilla Murphy', role='admin')
+        t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')
+        TicketMessage.objects.create(
+            ticket=t, author=staff, author_email=staff.email,
+            body='we are on it', origin='staff')
+        self._login()
+        r = self.client.get(f'/api/tickets/{t.number}/')
+        payload = r.json()
+        staff_msgs = [m for m in payload['messages'] if m['is_staff']]
+        self.assertEqual(len(staff_msgs), 1)
+        self.assertEqual(staff_msgs[0]['author_name'], 'CiteMed Support')
+        self.assertFalse(staff_msgs[0].get('author_email'))
+        raw = json.dumps(payload)
+        self.assertNotIn('priscilla@citemed.com', raw)
+        self.assertNotIn('Priscilla Murphy', raw)
+
     def test_cross_tenant_detail_404s(self):
         t = Ticket.objects.create(company=self.globex, created_by=self.other, subject='X')
         self._login()
@@ -315,6 +336,18 @@ class AdminTicketApiTests(TestCase):
         self.t.refresh_from_db()
         self.assertEqual(self.t.status, Ticket.STATUS_RESOLVED)
         self.assertTrue(mail.outbox)
+
+    def test_admin_sees_real_staff_identity(self):
+        # The facade is customer-only; Priscilla must still see who replied.
+        staff2 = PortalUser.objects.create(
+            email='priscilla@citemed.com', name='Priscilla Murphy', role='admin')
+        TicketMessage.objects.create(
+            ticket=self.t, author=staff2, author_email=staff2.email,
+            body='handled', origin='staff')
+        self._login()
+        r = self.client.get(f'/api/admin/tickets/{self.t.number}/')
+        raw = json.dumps(r.json())
+        self.assertIn('Priscilla Murphy', raw)
 
     def test_jira_key_set_and_visible_to_admin_only(self):
         self._login()

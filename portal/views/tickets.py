@@ -150,8 +150,24 @@ def log_ticket_activity(ticket, action, actor=None, **detail):
                                   action=action, detail=detail)
 
 
-def _message_dict(m):
+STAFF_PUBLIC_NAME = 'CiteMed Support'
+
+
+def _message_dict(m, for_customer=False):
     is_staff = m.origin == TicketMessage.ORIGIN_STAFF
+    # Customer-facing payloads show one consistent support identity — never an
+    # individual staffer's name or email (privacy for regulated customers).
+    # Admin payloads pass for_customer=False and keep the real author.
+    if is_staff and for_customer:
+        return {
+            'id': m.id,
+            'body': m.body,
+            'origin': m.origin,
+            'author_name': STAFF_PUBLIC_NAME,
+            'author_email': '',
+            'is_staff': True,
+            'created_at': m.created_at.isoformat(),
+        }
     # Never render a blank sender: fall back to author name → author email →
     # a role-appropriate label. Covers seeded/legacy rows and future inbound
     # email messages that may have no linked PortalUser.
@@ -160,7 +176,7 @@ def _message_dict(m):
     elif m.author_email:
         author_name = m.author_email
     else:
-        author_name = 'CiteMed Support' if is_staff else 'Customer'
+        author_name = STAFF_PUBLIC_NAME if is_staff else 'Customer'
     return {
         'id': m.id,
         'body': m.body,
@@ -260,7 +276,7 @@ def ticket_detail(request, number):
     msgs = t.messages.filter(is_internal=False)
     data = _ticket_dict(t, message_count=msgs.count())
     data['cc_emails'] = t.cc_emails
-    data['messages'] = [_message_dict(m) for m in msgs]
+    data['messages'] = [_message_dict(m, for_customer=True) for m in msgs]
     return JsonResponse(data)
 
 
@@ -287,5 +303,5 @@ def ticket_reply(request, number):
     t.save(update_fields=['status', 'updated_at'])
     log_ticket_activity(t, 'message_sent', actor=user)
     ticket_notify.notify_customer_reply(t, m)
-    return JsonResponse({'ok': True, 'message': _message_dict(m),
+    return JsonResponse({'ok': True, 'message': _message_dict(m, for_customer=True),
                          'status': t.status})
