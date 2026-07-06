@@ -70,6 +70,12 @@ const router = createRouter({
       component: () => import('@/views/AdminView.vue'),
       name: 'admin',
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/manage/tickets',
+      component: () => import('@/views/ManageTicketsView.vue'),
+      name: 'manage-tickets',
+      meta: { requiresAuth: true, requiresAdmin: true },
     }
   ]
 })

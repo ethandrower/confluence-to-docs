@@ -39,9 +39,10 @@
           <button role="tab" :aria-selected="tab==='files'" class="tab" :class="tab==='files' && 'tab--active'" @click="tab='files'">
             Files
           </button>
-          <button role="tab" :aria-selected="tab==='tickets'" class="tab" :class="tab==='tickets' && 'tab--active'" @click="tab='tickets'">
+          <RouterLink to="/manage/tickets" role="tab" :aria-selected="false" class="tab tab--link">
             Tickets <span v-if="ticketsInboxCount" class="tab-count">{{ ticketsInboxCount }}</span>
-          </button>
+            <svg class="tab-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 15.25V6.75H8.75M17 7 6.75 17.25" /></svg>
+          </RouterLink>
         </div>
 
         <p v-if="store.error" class="admin-error">{{ store.error }}</p>
@@ -123,9 +124,6 @@
 
         <!-- FILES (extracted to its own component) -->
         <FilesAdmin v-if="tab==='files'" />
-
-        <!-- TICKETS (extracted to its own component) -->
-        <TicketsAdmin v-if="tab==='tickets'" />
       </div>
 
       <!-- Modal -->
@@ -190,7 +188,6 @@
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FilesAdmin from '@/components/files/FilesAdmin.vue'
-import TicketsAdmin from '@/components/support/TicketsAdmin.vue'
 import { useAdminStore } from '@/stores/admin.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useTicketsStore } from '@/stores/tickets.js'
@@ -349,6 +346,8 @@ onMounted(() => {
 .tab--active { color: var(--primary); border-bottom-color: var(--primary); }
 .dark .tab--active { color: var(--foreground); border-bottom-color: var(--brand-accent); }
 .tab-count { font-size: 11px; font-weight: 600; color: var(--muted-foreground); background: var(--muted); padding: 1px 7px; border-radius: 10px; }
+.tab--link { margin-left: auto; }
+.tab-link-icon { width: 13px; height: 13px; }
 
 .admin-error { color: var(--destructive); font-size: 0.9rem; margin: 8px 0; }
 
