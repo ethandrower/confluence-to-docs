@@ -48,4 +48,9 @@ urlpatterns = [
 
     # Tickets
     path('tickets/submit/', tickets.submit_ticket, name='submit-ticket'),
+
+    # Support tickets — customer side (keyed on customer-facing number)
+    path('tickets/', tickets.tickets_collection, name='tickets'),
+    path('tickets/<int:number>/', tickets.ticket_detail, name='ticket-detail'),
+    path('tickets/<int:number>/messages/', tickets.ticket_reply, name='ticket-reply'),
 ]

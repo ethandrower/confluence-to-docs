@@ -120,3 +120,104 @@ class TicketNotifyTests(TestCase):
         self.assertIn('DUP@ext.com', recipients)
         self.assertNotIn('dup@ext.com', recipients)
         self.assertIn('other@ext.com', recipients)
+
+
+class TicketNumberRaceTests(TestCase):
+    """Concurrent creates can race on Max(number)+1 between the aggregate read
+    and the INSERT. Ticket.save() must retry on the resulting IntegrityError
+    instead of propagating it to the caller."""
+
+    def setUp(self):
+        self.acme, self.cust = make_co_user()
+
+    def test_retries_on_duplicate_number_and_ends_with_distinct_numbers(self):
+        from django.db.models import Max
+
+        real_aggregate = Ticket.objects.aggregate
+        state = {'calls': 0}
+
+        def stale_aggregate(*args, **kwargs):
+            # First call (for the second ticket) returns a stale Max so the
+            # first INSERT attempt collides with the already-created ticket.
+            state['calls'] += 1
+            if state['calls'] == 1:
+                return {'number__max': None}
+            return real_aggregate(*args, **kwargs)
+
+        t1 = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')
+
+        with patch.object(Ticket.objects, 'aggregate', side_effect=stale_aggregate):
+            t2 = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='B')
+
+        self.assertNotEqual(t1.number, t2.number)
+        self.assertEqual(
+            sorted(Ticket.objects.values_list('number', flat=True)),
+            [t1.number, t2.number],
+        )
+
+
+class CustomerTicketApiTests(TestCase):
+    def setUp(self):
+        self.acme, self.cust = make_co_user()
+        self.globex, self.other = make_co_user('Globex', 'g@globex.com')
+
+    def _login(self, user=None):
+        s = self.client.session
+        s['portal_user_id'] = (user or self.cust).id
+        s.save()
+
+    def test_create_ticket_returns_number_and_emails_confirmation(self):
+        self._login()
+        r = self.client.post('/api/tickets/', data=json.dumps({
+            'subject': 'Sync broken', 'category': 'bug',
+            'body': 'The nightly sync failed', 'cc_emails': ['boss@acme.com'],
+        }), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertTrue(body['display_number'].startswith('CS-'))
+        t = Ticket.objects.get(number=body['number'])
+        self.assertEqual(t.status, Ticket.STATUS_WAITING_ON_SUPPORT)
+        self.assertEqual(t.messages.count(), 1)
+        self.assertTrue(any('boss@acme.com' in m.to for m in mail.outbox))
+
+    def test_list_excludes_other_companies(self):
+        Ticket.objects.create(company=self.globex, created_by=self.other, subject='X')
+        mine = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='Mine')
+        self._login()
+        r = self.client.get('/api/tickets/')
+        nums = [t['number'] for t in r.json()['tickets']]
+        self.assertEqual(nums, [mine.number])
+
+    def test_detail_hides_internal_messages_and_jira_key(self):
+        t = Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                  subject='A', jira_key='ENG-99')
+        TicketMessage.objects.create(ticket=t, body='public', origin='staff')
+        TicketMessage.objects.create(ticket=t, body='secret', origin='staff',
+                                     is_internal=True)
+        self._login()
+        r = self.client.get(f'/api/tickets/{t.number}/')
+        payload = json.dumps(r.json())
+        self.assertNotIn('secret', payload)
+        self.assertNotIn('ENG-99', payload)
+        self.assertNotIn('jira', payload)
+
+    def test_cross_tenant_detail_404s(self):
+        t = Ticket.objects.create(company=self.globex, created_by=self.other, subject='X')
+        self._login()
+        r = self.client.get(f'/api/tickets/{t.number}/')
+        self.assertEqual(r.status_code, 404)
+
+    def test_customer_reply_flips_status_and_reopens_resolved(self):
+        t = Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                  subject='A', status=Ticket.STATUS_RESOLVED)
+        self._login()
+        r = self.client.post(f'/api/tickets/{t.number}/messages/',
+                             data=json.dumps({'body': 'still broken'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        t.refresh_from_db()
+        self.assertEqual(t.status, Ticket.STATUS_WAITING_ON_SUPPORT)
+
+    def test_requires_auth(self):
+        r = self.client.get('/api/tickets/')
+        self.assertEqual(r.status_code, 401)

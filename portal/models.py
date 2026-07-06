@@ -365,12 +365,29 @@ class Ticket(models.Model):
         return f'CS-{self.number}'
 
     def save(self, *args, **kwargs):
-        if self.number is None:
-            # Max+1 is fine at our write volume; unique=True catches races
-            # (caller retries). Avoids a sequence table.
+        if self.number is not None:
+            super().save(*args, **kwargs)
+            return
+
+        # Max+1 is fine at our write volume; unique=True catches races. On a
+        # collision (concurrent create landed between our aggregate read and
+        # our INSERT) we re-aggregate and retry a bounded number of times
+        # instead of letting IntegrityError escape to the caller. Avoids a
+        # sequence table.
+        from django.db import IntegrityError, transaction
+
+        max_attempts = 5
+        for attempt in range(max_attempts):
             last = Ticket.objects.aggregate(models.Max('number'))['number__max']
             self.number = (last or 0) + 1
-        super().save(*args, **kwargs)
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError:
+                self.number = None
+                if attempt == max_attempts - 1:
+                    raise
 
     @classmethod
     def for_user(cls, user):
