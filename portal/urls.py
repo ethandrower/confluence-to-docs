@@ -1,5 +1,5 @@
 from django.urls import path
-from portal.views import docs, auth, tickets, admin_api, files, files_admin
+from portal.views import docs, auth, tickets, admin_api, files, files_admin, tickets_admin
 
 urlpatterns = [
     # Admin (manage users + companies) — gated to portal admins
@@ -53,4 +53,13 @@ urlpatterns = [
     path('tickets/', tickets.tickets_collection, name='tickets'),
     path('tickets/<int:number>/', tickets.ticket_detail, name='ticket-detail'),
     path('tickets/<int:number>/messages/', tickets.ticket_reply, name='ticket-reply'),
+
+    # Support tickets — admin side
+    path('admin/tickets/inbox/', tickets_admin.inbox, name='admin-tickets-inbox'),
+    path('admin/tickets/', tickets_admin.collection, name='admin-tickets'),
+    path('admin/tickets/<int:number>/', tickets_admin.detail, name='admin-ticket'),
+    path('admin/tickets/<int:number>/messages/', tickets_admin.reply, name='admin-ticket-reply'),
+    path('admin/tickets/<int:number>/status/', tickets_admin.set_status, name='admin-ticket-status'),
+    path('admin/tickets/<int:number>/jira/', tickets_admin.set_jira, name='admin-ticket-jira'),
+    path('admin/tickets/<int:number>/cc/', tickets_admin.set_cc, name='admin-ticket-cc'),
 ]

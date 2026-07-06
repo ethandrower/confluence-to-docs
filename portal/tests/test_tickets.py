@@ -221,3 +221,86 @@ class CustomerTicketApiTests(TestCase):
     def test_requires_auth(self):
         r = self.client.get('/api/tickets/')
         self.assertEqual(r.status_code, 401)
+
+
+class AdminTicketApiTests(TestCase):
+    def setUp(self):
+        self.acme, self.cust = make_co_user()
+        self.staff = PortalUser.objects.create(email='s@citemed.com', role='admin')
+        self.t = Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                       subject='Help')
+
+    def _login(self, user=None):
+        s = self.client.session
+        s['portal_user_id'] = (user or self.staff).id
+        s.save()
+
+    def test_customer_cannot_hit_admin_endpoints(self):
+        self._login(self.cust)
+        r = self.client.get('/api/admin/tickets/inbox/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_inbox_lists_waiting_on_support_oldest_first(self):
+        t2 = Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                   subject='Newer')
+        done = Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                     subject='Done',
+                                     status=Ticket.STATUS_RESOLVED)
+        self._login()
+        r = self.client.get('/api/admin/tickets/inbox/')
+        nums = [x['number'] for x in r.json()['tickets']]
+        self.assertEqual(nums, [self.t.number, t2.number])
+        self.assertEqual(r.json()['awaiting_total'], 2)
+
+    def test_staff_reply_flips_status_and_emails_customer(self):
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/messages/',
+                             data=json.dumps({'body': 'On it'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.t.refresh_from_db()
+        self.assertEqual(self.t.status, Ticket.STATUS_WAITING_ON_CUSTOMER)
+        self.assertTrue(any(self.cust.email in m.to for m in mail.outbox))
+
+    def test_internal_note_no_email_no_status_change(self):
+        self._login()
+        before = self.t.status
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/messages/',
+                             data=json.dumps({'body': 'note', 'is_internal': True}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.t.refresh_from_db()
+        self.assertEqual(self.t.status, before)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_on_behalf_create_adds_customer_email_to_ccs(self):
+        self._login()
+        r = self.client.post('/api/admin/tickets/', data=json.dumps({
+            'company_id': self.acme.id, 'subject': 'For you',
+            'body': 'Opened on your behalf',
+            'customer_email': 'client@acme.com',
+        }), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        t = Ticket.objects.get(number=r.json()['number'])
+        self.assertIn('client@acme.com', t.cc_emails)
+        self.assertTrue(any('client@acme.com' in m.to for m in mail.outbox))
+
+    def test_status_resolved_emails_customer(self):
+        TicketMessage.objects.create(ticket=self.t, author=self.staff,
+                                     body='hi', origin='staff')
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/status/',
+                             data=json.dumps({'status': 'resolved'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.t.refresh_from_db()
+        self.assertEqual(self.t.status, Ticket.STATUS_RESOLVED)
+        self.assertTrue(mail.outbox)
+
+    def test_jira_key_set_and_visible_to_admin_only(self):
+        self._login()
+        self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                         data=json.dumps({'jira_key': 'ENG-42'}),
+                         content_type='application/json')
+        r = self.client.get(f'/api/admin/tickets/{self.t.number}/')
+        self.assertEqual(r.json()['jira_key'], 'ENG-42')
