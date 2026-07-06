@@ -53,6 +53,19 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/support',
+      component: () => import('@/views/SupportView.vue'),
+      name: 'support',
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/support/:number',
+      component: () => import('@/views/SupportView.vue'),
+      name: 'support-ticket',
+      props: true,
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/manage',
       component: () => import('@/views/AdminView.vue'),
       name: 'admin',
