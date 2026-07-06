@@ -56,6 +56,9 @@
         <li v-if="!tickets.length" class="atl-empty">
           {{ mode === 'inbox' ? 'Nothing waiting on support — all caught up.' : 'No tickets match.' }}
         </li>
+        <li v-else-if="mode === 'all' && truncated" class="atl-truncated">
+          Showing the first 200 — refine by client or status to narrow the list.
+        </li>
       </template>
     </ul>
   </div>
@@ -68,6 +71,7 @@ defineProps({
   loading: { type: Boolean, default: false },
   refreshing: { type: Boolean, default: false },
   inboxTotal: { type: Number, default: 0 },
+  truncated: { type: Boolean, default: false },
   selectedNumber: { type: [String, Number], default: null },
   companies: { type: Array, default: () => [] },
   filterCompany: { type: [String, Number], default: '' },
@@ -149,6 +153,7 @@ function relDate(d) {
 .status--muted { color: var(--muted-foreground); }
 
 .atl-empty { text-align: center; color: var(--muted-foreground); font-size: 13px; padding: 32px 12px; }
+.atl-truncated { text-align: center; color: var(--muted-foreground); font-size: 12px; padding: 14px 16px; border-top: 1px dashed var(--border); }
 
 .atl-row--skeleton { height: 62px; display: flex; align-items: center; padding: 10px 12px; }
 .sk-bar { display: block; width: 100%; height: 16px; border-radius: 6px; background: linear-gradient(90deg, var(--muted) 25%, var(--secondary) 37%, var(--muted) 63%); background-size: 400% 100%; animation: sk-shimmer 1.4s ease infinite; }

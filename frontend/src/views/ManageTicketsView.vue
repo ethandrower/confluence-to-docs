@@ -22,6 +22,7 @@
               :loading="listLoading"
               :refreshing="refreshing"
               :inbox-total="inboxTotal"
+              :truncated="truncated"
               :selected-number="selectedNumber"
               :companies="companies"
               v-model:filter-company="allCompany"
@@ -106,6 +107,7 @@ const inboxTotal = ref(0)
 const allCompany = ref('')
 const allStatus = ref('')
 const refreshing = ref(false)
+const truncated = ref(false)
 
 const selectedNumber = ref(null)
 const selected = ref(null)
@@ -124,6 +126,7 @@ async function loadInbox() {
     const data = await store.adminInbox()
     list.value = data.tickets
     inboxTotal.value = data.awaiting_total
+    truncated.value = false
   } finally {
     listLoading.value = false
   }
@@ -133,6 +136,7 @@ async function loadAll() {
   try {
     const data = await store.adminList({ company: allCompany.value, status: allStatus.value })
     list.value = data.tickets
+    truncated.value = !!data.truncated
   } finally {
     listLoading.value = false
   }

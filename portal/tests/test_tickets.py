@@ -262,6 +262,32 @@ class CustomerTicketApiTests(TestCase):
         r = self.client.get('/api/tickets/')
         self.assertEqual(r.status_code, 401)
 
+    def test_list_message_count_correct_and_no_n_plus_1(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self._login()
+
+        def build(n):
+            Ticket.objects.filter(company=self.acme).delete()
+            for i in range(n):
+                t = Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                          subject=f'T{i}')
+                TicketMessage.objects.create(ticket=t, body='pub', origin='portal')
+                TicketMessage.objects.create(ticket=t, body='note', origin='staff',
+                                             is_internal=True)
+
+        build(1)
+        with CaptureQueriesContext(connection) as one:
+            r = self.client.get('/api/tickets/')
+        # message_count excludes the internal note
+        self.assertEqual(r.json()['tickets'][0]['message_count'], 1)
+
+        build(5)
+        with CaptureQueriesContext(connection) as many:
+            self.client.get('/api/tickets/')
+        # Query count must not grow with the number of tickets.
+        self.assertEqual(len(one.captured_queries), len(many.captured_queries))
+
 
 class AdminTicketApiTests(TestCase):
     def setUp(self):
@@ -336,6 +362,30 @@ class AdminTicketApiTests(TestCase):
         self.t.refresh_from_db()
         self.assertEqual(self.t.status, Ticket.STATUS_RESOLVED)
         self.assertTrue(mail.outbox)
+
+    def test_on_behalf_create_rejects_invalid_category(self):
+        self._login()
+        r = self.client.post('/api/admin/tickets/', data=json.dumps({
+            'company_id': self.acme.id, 'subject': 'S', 'body': 'B',
+            'category': 'nonsense',
+        }), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        t = Ticket.objects.get(number=r.json()['number'])
+        self.assertEqual(t.category, 'other')
+
+    def test_collection_flags_truncation_at_200(self):
+        self._login()
+        # Small list is not truncated.
+        r = self.client.get('/api/admin/tickets/')
+        self.assertFalse(r.json()['truncated'])
+        # Over the cap: exactly 200 returned, truncated=True.
+        Ticket.objects.bulk_create([
+            Ticket(number=1000 + i, company=self.acme, created_by=self.cust,
+                   subject=f'B{i}') for i in range(201)
+        ])
+        r = self.client.get('/api/admin/tickets/')
+        self.assertEqual(len(r.json()['tickets']), 200)
+        self.assertTrue(r.json()['truncated'])
 
     def test_admin_sees_real_staff_identity(self):
         # The facade is customer-only; Priscilla must still see who replied.

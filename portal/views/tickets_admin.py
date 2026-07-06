@@ -11,8 +11,12 @@ from portal import ticket_notify
 from portal.decorators import require_portal_admin
 from portal.models import Company, Ticket, TicketMessage
 from portal.views.tickets import (
-    _clean_ccs, _message_dict, _ticket_dict, log_ticket_activity,
+    _clean_ccs, _message_dict, _ticket_dict, _with_message_count,
+    log_ticket_activity,
 )
+
+# Max rows the admin "All" list returns without pagination (spec §4e/§6).
+ADMIN_LIST_CAP = 200
 
 
 def _admin_dict(t, message_count=None):
@@ -34,10 +38,11 @@ def _get(number):
 @require_http_methods(['GET'])
 @require_portal_admin
 def inbox(request):
-    qs = Ticket.objects.select_related('company', 'created_by')\
-        .filter(status=Ticket.STATUS_WAITING_ON_SUPPORT)\
-        .order_by('updated_at')
-    items = [_admin_dict(t) for t in qs]
+    qs = _with_message_count(
+        Ticket.objects.select_related('company', 'created_by')
+        .filter(status=Ticket.STATUS_WAITING_ON_SUPPORT)
+    ).order_by('updated_at')
+    items = [_admin_dict(t, message_count=t._mc) for t in qs]
     return JsonResponse({'tickets': items, 'awaiting_total': len(items)})
 
 
@@ -46,15 +51,24 @@ def inbox(request):
 @require_portal_admin
 def collection(request):
     if request.method == 'GET':
-        qs = Ticket.objects.select_related('company', 'created_by')\
-                           .order_by('-updated_at')
+        qs = _with_message_count(
+            Ticket.objects.select_related('company', 'created_by')
+        ).order_by('-updated_at')
         company_id = request.GET.get('company')
         if company_id:
             qs = qs.filter(company_id=company_id)
         status = request.GET.get('status')
         if status:
             qs = qs.filter(status=status)
-        return JsonResponse({'tickets': [_admin_dict(t) for t in qs[:200]]})
+        # Fetch one past the cap so we can flag truncation without an extra
+        # COUNT. No pagination yet (spec §6) — the flag drives a UI hint.
+        rows = list(qs[:ADMIN_LIST_CAP + 1])
+        truncated = len(rows) > ADMIN_LIST_CAP
+        return JsonResponse({
+            'tickets': [_admin_dict(t, message_count=t._mc)
+                        for t in rows[:ADMIN_LIST_CAP]],
+            'truncated': truncated,
+        })
 
     # POST — create on behalf of a customer
     try:
@@ -72,10 +86,14 @@ def collection(request):
     if customer_email and customer_email not in ccs:
         ccs = _clean_ccs([customer_email] + ccs)
 
+    category = data.get('category') or 'question'
+    if category not in dict(Ticket.CATEGORY_CHOICES):
+        category = 'other'
+
     user = request.portal_user
     ticket = Ticket.objects.create(
         company=company, created_by=user, subject=subject[:512],
-        category=data.get('category') or 'question', cc_emails=ccs,
+        category=category, cc_emails=ccs,
         status=Ticket.STATUS_WAITING_ON_CUSTOMER)
     first = TicketMessage.objects.create(
         ticket=ticket, author=user, author_email=user.email,

@@ -188,6 +188,14 @@ def _message_dict(m, for_customer=False):
     }
 
 
+def _with_message_count(qs):
+    """Annotate `_mc` = non-internal message count, so list endpoints don't run
+    a per-row COUNT (N+1). Matches the semantics _ticket_dict computes lazily."""
+    from django.db.models import Count, Q
+    return qs.annotate(
+        _mc=Count('messages', filter=Q(messages__is_internal=False)))
+
+
 def _ticket_dict(t, message_count=None):
     return {
         'number': t.number,
@@ -230,8 +238,9 @@ def _clean_ccs(raw):
 def tickets_collection(request):
     user = request.portal_user
     if request.method == 'GET':
-        qs = Ticket.for_user(user).order_by('-updated_at')
-        return JsonResponse({'tickets': [_ticket_dict(t) for t in qs]})
+        qs = _with_message_count(Ticket.for_user(user)).order_by('-updated_at')
+        return JsonResponse({'tickets': [_ticket_dict(t, message_count=t._mc)
+                                         for t in qs]})
 
     # POST — create
     if not user.company_id:
