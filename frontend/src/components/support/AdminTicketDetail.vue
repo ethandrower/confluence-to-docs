@@ -21,9 +21,13 @@
         </span>
       </header>
 
-      <!-- Controls strip -->
-      <details class="atd-details" open>
-        <summary>Details</summary>
+      <!-- Controls strip (collapsed by default) -->
+      <details class="atd-details">
+        <summary>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+          <span>Details</span>
+          <span class="atd-details-hint">{{ detailsHint }}</span>
+        </summary>
         <div class="atd-controls">
           <label class="ctrl"><span>Status</span>
             <select v-model="statusDraft" class="ctrl-input" aria-label="Ticket status" @change="onStatusChange">
@@ -92,7 +96,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 
 const props = defineProps({
@@ -138,6 +142,16 @@ function activityLabel(a) {
 function fmtWhen(d) {
   return new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
+
+const detailsHint = computed(() => {
+  const t = props.ticket
+  if (!t) return ''
+  const bits = []
+  bits.push(t.jira_key ? t.jira_key : 'No Jira link')
+  const n = (t.cc_emails || []).length
+  bits.push(n ? `${n} CC` : 'No CC')
+  return bits.join(' · ')
+})
 
 const statusDraft = ref('')
 const jiraDraft = ref('')
@@ -220,20 +234,25 @@ async function onSendReply() {
 .atd-back { display: none; align-items: center; gap: 6px; align-self: flex-start; color: var(--muted-foreground); font-size: 13px; font-weight: 550; padding: 4px 8px 4px 4px; border-radius: var(--radius-sm); cursor: pointer; }
 .atd-back svg { width: 15px; height: 15px; }
 .atd-back:hover { color: var(--foreground); background: var(--muted); }
-.atd-head-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0 0 4px; }
+.atd-head-main { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
 .atd-head-main h1 { font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
-.atd-status { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 650; white-space: nowrap; margin-top: 4px; }
+.atd-status { align-self: flex-start; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 650; white-space: nowrap; padding: 4px 11px; border-radius: 999px; margin-top: 2px; }
 .atd-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.status--success { color: var(--success); }
-.status--warning { color: var(--warning); }
-.status--info { color: var(--info); }
-.status--muted { color: var(--muted-foreground); }
+.status--success { color: var(--success); background: color-mix(in srgb, var(--success) 13%, transparent); }
+.status--warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); }
+.status--info { color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent); }
+.status--muted { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 13%, transparent); }
 
-/* Details / controls */
+/* Details / controls (collapsed by default) */
 .atd-details { flex-shrink: 0; border-bottom: 1px solid var(--border); padding: 0 28px; }
-.atd-details summary { cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding: 14px 0; }
+.atd-details summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding: 13px 0; list-style: none; }
+.atd-details summary::-webkit-details-marker { display: none; }
 .atd-details summary:hover { color: var(--foreground); }
+.atd-details .chev { width: 13px; height: 13px; flex-shrink: 0; transition: transform 0.18s ease; }
+.atd-details[open] .chev { transform: rotate(90deg); }
+.atd-details-hint { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; color: var(--muted-foreground); }
+.atd-details[open] .atd-details-hint { display: none; }
 .atd-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 4px 0 20px; }
 .ctrl { display: block; }
 .ctrl > span { display: block; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; }
@@ -249,9 +268,11 @@ async function onSendReply() {
 .btn-outline.sm { padding: 0 12px; height: 38px; }
 .btn-outline:disabled { opacity: 0.6; cursor: default; }
 
-/* Conversation */
-.atd-thread { list-style: none; margin: 0; padding: 24px 28px; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
-.msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 14px 16px; }
+/* Conversation — the hero. A subtle canvas so the pane reads as an
+   intentional workspace, not a blank void when a thread is short. */
+.atd-thread { list-style: none; margin: 0; padding: 24px 28px; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 14px; align-content: start; background: color-mix(in srgb, var(--muted) 55%, var(--background)); }
+.msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 14px 16px; max-width: 780px; box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent); }
+.msg--staff, .msg--internal { margin-left: auto; }
 .msg--staff { background: color-mix(in srgb, var(--info) 7%, var(--card)); border-color: color-mix(in srgb, var(--info) 25%, var(--border)); }
 .msg--internal { background: color-mix(in srgb, var(--warning) 8%, var(--card)); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); border-left: 3px solid var(--warning); }
 .msg-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
