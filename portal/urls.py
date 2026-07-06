@@ -59,6 +59,7 @@ urlpatterns = [
     path('admin/tickets/', tickets_admin.collection, name='admin-tickets'),
     path('admin/tickets/<int:number>/', tickets_admin.detail, name='admin-ticket'),
     path('admin/tickets/<int:number>/messages/', tickets_admin.reply, name='admin-ticket-reply'),
+    path('admin/tickets/<int:number>/messages/<int:message_id>/resend/', tickets_admin.resend_message, name='admin-ticket-resend'),
     path('admin/tickets/<int:number>/status/', tickets_admin.set_status, name='admin-ticket-status'),
     path('admin/tickets/<int:number>/jira/', tickets_admin.set_jira, name='admin-ticket-jira'),
     path('admin/tickets/<int:number>/cc/', tickets_admin.set_cc, name='admin-ticket-cc'),

@@ -10,6 +10,7 @@ from django.views.decorators.http import require_http_methods
 from portal import ticket_notify
 from portal.decorators import require_portal_admin
 from portal.models import Company, Ticket, TicketMessage
+from portal.rate_limit import is_rate_limited
 from portal.views.tickets import (
     _clean_ccs, _message_dict, _ticket_dict, _with_message_count,
     log_ticket_activity,
@@ -111,7 +112,8 @@ def detail(request, number):
         return JsonResponse({'error': 'Not found'}, status=404)
     msgs = list(t.messages.all())
     d = _admin_dict(t, message_count=len(msgs))
-    d['messages'] = [dict(_message_dict(m), is_internal=m.is_internal)
+    d['messages'] = [dict(_message_dict(m), is_internal=m.is_internal,
+                          delivery_detail=m.delivery_detail)
                      for m in msgs]
     d['activity'] = [{
         'action': a.action, 'detail': a.detail,
@@ -149,8 +151,30 @@ def reply(request, number):
                         actor=user)
     return JsonResponse({'ok': True,
                          'message': dict(_message_dict(m),
-                                         is_internal=m.is_internal),
+                                         is_internal=m.is_internal,
+                                         delivery_detail=m.delivery_detail),
                          'status': t.status})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+@require_portal_admin
+def resend_message(request, number, message_id):
+    """Re-send a customer-facing message whose delivery failed (or to retry a
+    stuck send). Re-uses the staff-reply send path, which records the new
+    outcome on the message. Admin-only, rate-limited per ticket."""
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    m = TicketMessage.objects.filter(id=message_id, ticket=t).first()
+    if not m:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    if is_rate_limited('ticket-resend', f't{t.number}', 10, 60 * 60):
+        return JsonResponse({'error': 'Too many resends, try later'}, status=429)
+    ticket_notify.notify_staff_reply(t, m)
+    m.refresh_from_db()
+    return JsonResponse({'ok': True, 'delivery_status': m.delivery_status,
+                         'delivery_detail': m.delivery_detail})
 
 
 @csrf_exempt

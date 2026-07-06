@@ -404,6 +404,22 @@ class TicketMessage(models.Model):
     ORIGIN_STAFF = 'staff'
     ORIGIN_EMAIL = 'email'  # Phase 2 inbound
 
+    # Delivery of the customer-facing email this message triggered (if any).
+    # Tier A = synchronous submission truth only: 'sent' = the mail backend
+    # accepted it, 'failed' = the send raised. 'not_applicable' = nothing was
+    # emailed to a customer for this row (internal notes, customer's own
+    # replies). 'queued' is reserved for Tier B (async webhook delivery truth).
+    DELIVERY_NA = 'not_applicable'
+    DELIVERY_QUEUED = 'queued'
+    DELIVERY_SENT = 'sent'
+    DELIVERY_FAILED = 'failed'
+    DELIVERY_CHOICES = [
+        (DELIVERY_NA, 'Not applicable'),
+        (DELIVERY_QUEUED, 'Queued'),
+        (DELIVERY_SENT, 'Sent'),
+        (DELIVERY_FAILED, 'Failed'),
+    ]
+
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='messages')
     author = models.ForeignKey('PortalUser', null=True, blank=True, on_delete=models.SET_NULL)
     author_email = models.EmailField(blank=True)
@@ -411,6 +427,10 @@ class TicketMessage(models.Model):
     origin = models.CharField(max_length=16, default=ORIGIN_PORTAL)
     # Staff-only note: never customer-visible, never emailed to the customer.
     is_internal = models.BooleanField(default=False)
+    delivery_status = models.CharField(max_length=16, choices=DELIVERY_CHOICES,
+                                       default=DELIVERY_NA)
+    delivery_detail = models.CharField(max_length=256, blank=True)  # admin-only
+    delivery_attempted_at = models.DateTimeField(null=True, blank=True)
     # Phase-2 email-threading plumbing, populated on outbound sends now.
     email_message_id = models.CharField(max_length=256, blank=True)
     reply_token = models.CharField(max_length=64, blank=True)

@@ -109,6 +109,52 @@ class TicketNotifyTests(TestCase):
         message_id = sent.extra_headers.get('Message-ID', '')
         self.assertRegex(message_id, r'^<[^<>]+@notification\.citemed\.com>$')
 
+    def test_staff_reply_records_delivery_sent(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='hi', origin='staff')
+        from portal import ticket_notify
+        ticket_notify.notify_staff_reply(self.t, m)
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_SENT)
+        self.assertTrue(m.delivery_attempted_at)
+        self.assertEqual(m.delivery_detail, '')
+
+    def test_send_failure_records_failed_with_detail(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='hi', origin='staff')
+        from portal import ticket_notify
+        with patch('portal.ticket_notify.EmailMultiAlternatives.send',
+                   side_effect=RuntimeError('smtp boom')):
+            ticket_notify.notify_staff_reply(self.t, m)
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_FAILED)
+        self.assertIn('boom', m.delivery_detail)
+
+    def test_internal_note_delivery_not_applicable(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='note', origin='staff',
+            is_internal=True)
+        from portal import ticket_notify
+        ticket_notify.notify_staff_reply(self.t, m)
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_NA)
+
+    def test_status_notification_does_not_overwrite_anchor_delivery(self):
+        # notify_status reuses an existing message as a threading anchor; it
+        # must not clobber that message's own delivery_status.
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='earlier reply', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT)
+        from portal import ticket_notify
+        self.t.status = Ticket.STATUS_RESOLVED
+        self.t.save(update_fields=['status'])
+        ticket_notify.notify_status(self.t)
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_SENT)
+
     def test_customer_recipients_dedupe_case_insensitively(self):
         self.t.cc_emails = ['DUP@ext.com', 'dup@ext.com', 'other@ext.com']
         self.t.save(update_fields=['cc_emails'])
@@ -241,6 +287,21 @@ class CustomerTicketApiTests(TestCase):
         self.assertNotIn('priscilla@citemed.com', raw)
         self.assertNotIn('Priscilla Murphy', raw)
 
+    def test_customer_payload_has_status_but_not_delivery_detail(self):
+        t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')
+        staff = PortalUser.objects.create(email='p@citemed.com', role='admin')
+        TicketMessage.objects.create(
+            ticket=t, author=staff, body='reply', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_FAILED,
+            delivery_detail='SMTPException: mailbox full')
+        self._login()
+        r = self.client.get(f'/api/tickets/{t.number}/')
+        payload = r.json()
+        self.assertIn('delivery_status', payload['messages'][0])
+        raw = json.dumps(payload)
+        self.assertNotIn('delivery_detail', raw)
+        self.assertNotIn('mailbox full', raw)
+
     def test_cross_tenant_detail_404s(self):
         t = Ticket.objects.create(company=self.globex, created_by=self.other, subject='X')
         self._login()
@@ -362,6 +423,40 @@ class AdminTicketApiTests(TestCase):
         self.t.refresh_from_db()
         self.assertEqual(self.t.status, Ticket.STATUS_RESOLVED)
         self.assertTrue(mail.outbox)
+
+    def test_resend_resends_failed_message(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_FAILED,
+            delivery_detail='old error')
+        self._login()
+        r = self.client.post(
+            f'/api/admin/tickets/{self.t.number}/messages/{m.id}/resend/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['delivery_status'], TicketMessage.DELIVERY_SENT)
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_SENT)
+        self.assertTrue(any(self.cust.email in x.to for x in mail.outbox))
+
+    def test_resend_requires_admin(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_FAILED)
+        self._login(self.cust)
+        r = self.client.post(
+            f'/api/admin/tickets/{self.t.number}/messages/{m.id}/resend/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_resend_rejects_message_from_other_ticket(self):
+        other = Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                      subject='Other')
+        m = TicketMessage.objects.create(ticket=other, author=self.staff,
+                                         body='hi', origin='staff')
+        self._login()
+        r = self.client.post(
+            f'/api/admin/tickets/{self.t.number}/messages/{m.id}/resend/')
+        self.assertEqual(r.status_code, 404)
 
     def test_on_behalf_create_rejects_invalid_category(self):
         self._login()

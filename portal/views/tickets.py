@@ -166,6 +166,7 @@ def _message_dict(m, for_customer=False):
             'author_name': STAFF_PUBLIC_NAME,
             'author_email': '',
             'is_staff': True,
+            'delivery_status': m.delivery_status,
             'created_at': m.created_at.isoformat(),
         }
     # Never render a blank sender: fall back to author name → author email →
@@ -184,6 +185,7 @@ def _message_dict(m, for_customer=False):
         'author_name': author_name,
         'author_email': (m.author.email if m.author else m.author_email),
         'is_staff': is_staff,
+        'delivery_status': m.delivery_status,
         'created_at': m.created_at.isoformat(),
     }
 

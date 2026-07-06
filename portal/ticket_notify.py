@@ -15,6 +15,9 @@ from email.utils import parseaddr
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+from django.utils import timezone
+
+from portal.models import TicketMessage
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +91,21 @@ def _thread_headers(ticket, message):
     return headers
 
 
+def _record_delivery(message, status, detail=''):
+    """Persist the submission outcome onto the message it belongs to."""
+    message.delivery_status = status
+    message.delivery_detail = detail[:256]
+    message.delivery_attempted_at = timezone.now()
+    message.save(update_fields=['delivery_status', 'delivery_detail',
+                                'delivery_attempted_at'])
+
+
 def _send_threaded(ticket, message, recipients, *, heading, body,
-                   cta_label, cta_url, note=''):
+                   cta_label, cta_url, note='', track=False):
+    """Send a threaded customer-facing email. When `track` is set, record the
+    submission outcome (sent/failed) on `message` so the UI can surface whether
+    the mail actually left. `track=False` for anchor-only reuse (notify_status),
+    which must not clobber the anchor message's own status."""
     recipients = [r for r in recipients if r]
     if not recipients:
         return
@@ -108,9 +124,14 @@ def _send_threaded(ticket, message, recipients, *, heading, body,
         sent = msg.send()
         logger.info('ticket_notify sent (%s) → %s (sent=%s)',
                     subject, recipients, sent)
+        if track:
+            _record_delivery(message, TicketMessage.DELIVERY_SENT)
     except Exception as e:
         logger.error('ticket_notify failed (%s) → %s: %s',
                      subject, recipients, e)
+        if track:
+            _record_delivery(message, TicketMessage.DELIVERY_FAILED,
+                             f'{type(e).__name__}: {e}')
 
 
 def notify_ticket_created(ticket, first_message):
@@ -122,6 +143,7 @@ def notify_ticket_created(ticket, first_message):
              'We will reply by email; you can also follow the conversation in your portal.',
         cta_label='View your ticket',
         cta_url=f'{_site()}/support/{ticket.number}',
+        track=True,
     )
     _notify_support_new(ticket, first_message)
 
@@ -157,6 +179,7 @@ def notify_staff_reply(ticket, message):
         body=message.body,
         cta_label='View & reply',
         cta_url=f'{_site()}/support/{ticket.number}',
+        track=True,
     )
 
 

@@ -62,6 +62,19 @@
             <span class="msg-time">{{ fmtWhen(m.created_at) }}</span>
           </div>
           <p class="msg-body">{{ m.body }}</p>
+          <div v-if="m.delivery_status === 'sent'" class="msg-delivery msg-delivery--ok">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            Sent
+          </div>
+          <div v-else-if="m.delivery_status === 'failed'" class="msg-delivery msg-delivery--fail">
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+              Not delivered<span v-if="m.delivery_detail" class="msg-delivery-detail"> · {{ m.delivery_detail }}</span>
+            </span>
+            <button class="msg-retry" :disabled="resendingId === m.id" @click="onResend(m)">
+              {{ resendingId === m.id ? 'Retrying…' : 'Retry' }}
+            </button>
+          </div>
         </li>
         <li v-if="!ticket.messages.length" class="msg-empty">No messages yet.</li>
       </ol>
@@ -162,6 +175,19 @@ const replyBody = ref('')
 const replyInternal = ref(false)
 const sending = ref(false)
 const replyError = ref('')
+const resendingId = ref(null)
+
+async function onResend(m) {
+  if (!props.ticket) return
+  resendingId.value = m.id
+  try {
+    const res = await store.adminResend(props.ticket.number, m.id)
+    m.delivery_status = res.delivery_status
+    m.delivery_detail = res.delivery_detail
+  } finally {
+    resendingId.value = null
+  }
+}
 
 function syncDrafts(t) {
   if (!t) return
@@ -282,6 +308,15 @@ async function onSendReply() {
 .msg-author { font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
 .msg-time { font-size: 0.76rem; color: var(--muted-foreground); margin-left: auto; }
 .msg-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; }
+.msg-delivery { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; }
+.msg-delivery svg { width: 12px; height: 12px; flex-shrink: 0; vertical-align: -1px; margin-right: 3px; }
+.msg-delivery--ok { color: var(--muted-foreground); }
+.msg-delivery--fail { color: var(--destructive); }
+.msg-delivery--fail > span { display: inline-flex; align-items: center; min-width: 0; }
+.msg-delivery-detail { font-weight: 400; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-retry { flex-shrink: 0; font: inherit; font-size: 0.72rem; font-weight: 600; color: var(--destructive); background: none; border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent); border-radius: var(--radius-sm); padding: 2px 9px; cursor: pointer; transition: background 0.15s; }
+.msg-retry:hover:not(:disabled) { background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.msg-retry:disabled { opacity: 0.6; cursor: default; }
 .msg-empty { text-align: center; color: var(--muted-foreground); font-size: 0.88rem; padding: 24px 0; list-style: none; }
 
 /* Activity feed */

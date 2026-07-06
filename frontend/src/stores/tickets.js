@@ -106,8 +106,13 @@ export const useTicketsStore = defineStore('tickets', () => {
     return api('/admin/tickets/', { method: 'POST', body: JSON.stringify(payload) })
   }
 
+  async function adminResend(number, messageId) {
+    return api(`/admin/tickets/${number}/messages/${messageId}/resend/`, { method: 'POST' })
+  }
+
   return {
     tickets, current, loading, error, fetchTickets, fetchTicket, createTicket, reply,
     adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminSetJira, adminSetCc, adminCreate,
+    adminResend,
   }
 })
