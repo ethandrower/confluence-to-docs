@@ -61,5 +61,53 @@ export const useTicketsStore = defineStore('tickets', () => {
     return res
   }
 
-  return { tickets, current, loading, error, fetchTickets, fetchTicket, createTicket, reply }
+  // ── Admin actions ──
+  async function adminInbox() {
+    return api('/admin/tickets/inbox/')
+  }
+
+  async function adminList({ company, status } = {}) {
+    const params = new URLSearchParams()
+    if (company) params.set('company', company)
+    if (status) params.set('status', status)
+    const qs = params.toString()
+    return api(`/admin/tickets/${qs ? `?${qs}` : ''}`)
+  }
+
+  async function adminTicket(number) {
+    return api(`/admin/tickets/${number}/`)
+  }
+
+  async function adminReply(number, body, isInternal = false) {
+    return api(`/admin/tickets/${number}/messages/`, {
+      method: 'POST', body: JSON.stringify({ body, is_internal: isInternal }),
+    })
+  }
+
+  async function adminSetStatus(number, status) {
+    return api(`/admin/tickets/${number}/status/`, {
+      method: 'POST', body: JSON.stringify({ status }),
+    })
+  }
+
+  async function adminSetJira(number, jiraKey) {
+    return api(`/admin/tickets/${number}/jira/`, {
+      method: 'POST', body: JSON.stringify({ jira_key: jiraKey }),
+    })
+  }
+
+  async function adminSetCc(number, ccEmails) {
+    return api(`/admin/tickets/${number}/cc/`, {
+      method: 'POST', body: JSON.stringify({ cc_emails: ccEmails }),
+    })
+  }
+
+  async function adminCreate(payload) {
+    return api('/admin/tickets/', { method: 'POST', body: JSON.stringify(payload) })
+  }
+
+  return {
+    tickets, current, loading, error, fetchTickets, fetchTicket, createTicket, reply,
+    adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminSetJira, adminSetCc, adminCreate,
+  }
 })

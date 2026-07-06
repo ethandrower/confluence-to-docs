@@ -39,6 +39,9 @@
           <button role="tab" :aria-selected="tab==='files'" class="tab" :class="tab==='files' && 'tab--active'" @click="tab='files'">
             Files
           </button>
+          <button role="tab" :aria-selected="tab==='tickets'" class="tab" :class="tab==='tickets' && 'tab--active'" @click="tab='tickets'">
+            Tickets <span v-if="ticketsInboxCount" class="tab-count">{{ ticketsInboxCount }}</span>
+          </button>
         </div>
 
         <p v-if="store.error" class="admin-error">{{ store.error }}</p>
@@ -120,6 +123,9 @@
 
         <!-- FILES (extracted to its own component) -->
         <FilesAdmin v-if="tab==='files'" />
+
+        <!-- TICKETS (extracted to its own component) -->
+        <TicketsAdmin v-if="tab==='tickets'" />
       </div>
 
       <!-- Modal -->
@@ -184,11 +190,15 @@
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FilesAdmin from '@/components/files/FilesAdmin.vue'
+import TicketsAdmin from '@/components/support/TicketsAdmin.vue'
 import { useAdminStore } from '@/stores/admin.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useTicketsStore } from '@/stores/tickets.js'
 
 const store = useAdminStore()
 const auth = useAuthStore()
+const ticketsStore = useTicketsStore()
+const ticketsInboxCount = ref(0)
 const isOwner = computed(() => !!auth.user?.is_owner)
 // A non-owner admin cannot modify owner accounts.
 function canManage(u) {
@@ -294,7 +304,10 @@ function formatDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-onMounted(() => store.fetchAll())
+onMounted(() => {
+  store.fetchAll()
+  ticketsStore.adminInbox().then((data) => { ticketsInboxCount.value = data.awaiting_total }).catch(() => {})
+})
 </script>
 
 <style scoped>
