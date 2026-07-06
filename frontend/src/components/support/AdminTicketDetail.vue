@@ -271,7 +271,8 @@ async function onSendReply() {
 /* Conversation — the hero. A subtle canvas so the pane reads as an
    intentional workspace, not a blank void when a thread is short. */
 .atd-thread { list-style: none; margin: 0; padding: 24px 28px; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 14px; align-content: start; background: color-mix(in srgb, var(--muted) 55%, var(--background)); }
-.msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 14px 16px; max-width: 780px; box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent); }
+.msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 14px 16px; max-width: min(82%, 640px); box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent); }
+/* Chat alignment: customer on the left, CiteMed/staff (incl. internal notes) on the right. */
 .msg--staff, .msg--internal { margin-left: auto; }
 .msg--staff { background: color-mix(in srgb, var(--info) 7%, var(--card)); border-color: color-mix(in srgb, var(--info) 25%, var(--border)); }
 .msg--internal { background: color-mix(in srgb, var(--warning) 8%, var(--card)); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); border-left: 3px solid var(--warning); }
