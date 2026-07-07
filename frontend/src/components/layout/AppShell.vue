@@ -55,9 +55,12 @@
                    render no sidebar. -->
               <nav class="mobile-nav" aria-label="Main navigation">
                 <RouterLink to="/docs" class="mobile-nav-link" @click="mobileOpen = false">Documentation</RouterLink>
-                <RouterLink to="/tickets" class="mobile-nav-link" @click="mobileOpen = false">Contact</RouterLink>
+                <RouterLink v-if="!auth.user" to="/tickets" class="mobile-nav-link" @click="mobileOpen = false">Contact</RouterLink>
                 <RouterLink v-if="auth.user && !auth.user.is_admin" to="/files" class="mobile-nav-link" @click="mobileOpen = false">Share Files</RouterLink>
                 <RouterLink v-if="auth.user && !auth.user.is_admin" to="/support" class="mobile-nav-link" @click="mobileOpen = false">Support</RouterLink>
+                <RouterLink v-if="auth.user?.is_admin" to="/manage/tickets" class="mobile-nav-link" @click="mobileOpen = false">
+                  Tickets <span v-if="awaitingCount" class="mobile-nav-badge">{{ awaitingCount }}</span>
+                </RouterLink>
                 <RouterLink v-if="auth.user?.is_admin" to="/manage" class="mobile-nav-link" @click="mobileOpen = false">Manage</RouterLink>
                 <button v-if="auth.user" type="button" class="mobile-nav-link mobile-nav-link--action" @click="signOut">Sign out</button>
                 <RouterLink v-else to="/login" class="mobile-nav-link mobile-nav-link--action" @click="mobileOpen = false">Log in</RouterLink>
@@ -92,7 +95,9 @@
           </svg>
           View all docs
         </RouterLink>
-        <RouterLink to="/tickets" class="topbar-btn hidden sm:inline-flex">
+        <!-- Contact (public form) is only for anonymous / pre-sales visitors.
+             Signed-in customers use Support (tracked tickets) instead. -->
+        <RouterLink v-if="!auth.user" to="/tickets" class="topbar-btn hidden sm:inline-flex">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
           </svg>
@@ -109,6 +114,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
           </svg>
           Support
+        </RouterLink>
+        <RouterLink v-if="auth.user?.is_admin" to="/manage/tickets" class="topbar-btn hidden sm:inline-flex" title="Support tickets">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+          </svg>
+          Tickets
+          <span v-if="awaitingCount" class="topbar-badge" :aria-label="`${awaitingCount} awaiting reply`">{{ awaitingCount }}</span>
         </RouterLink>
         <RouterLink v-if="auth.user?.is_admin" to="/manage" class="topbar-btn hidden sm:inline-flex" title="Manage users & companies">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
@@ -135,10 +147,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDocsStore } from '@/stores/docs.js'
+import { useTicketsStore } from '@/stores/tickets.js'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
@@ -149,6 +162,21 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const store = useDocsStore()
+const tickets = useTicketsStore()
+
+// Awaiting-reply count for the admin "Tickets" nav badge. Fetched once when
+// the user resolves to an admin (auth.user populates after the router guard's
+// fetchMe, which may be after mount).
+const awaitingCount = ref(0)
+let awaitingLoaded = false
+watch(() => auth.user?.is_admin, (isAdmin) => {
+  if (isAdmin && !awaitingLoaded) {
+    awaitingLoaded = true
+    tickets.adminInbox()
+      .then((d) => { awaitingCount.value = d.awaiting_total || 0 })
+      .catch(() => {})
+  }
+}, { immediate: true })
 
 async function signOut() {
   mobileOpen.value = false
@@ -225,6 +253,37 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--primary) 85%, #fff);
   border-color: color-mix(in srgb, var(--primary) 85%, #fff);
 }
+/* Count badge on the admin "Tickets" nav item (awaiting reply) */
+.topbar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mobile-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .topbar-icon {
   display: inline-flex;
   align-items: center;
