@@ -49,6 +49,20 @@
               </span>
             </div>
             <ScrollArea class="h-[calc(100vh-3.5rem)] pb-6">
+              <!-- Primary nav — the top-bar actions are hidden on mobile, so
+                   these links are the only way to move between sections (and
+                   sign out) on a phone, especially on ticket/file pages that
+                   render no sidebar. -->
+              <nav class="mobile-nav" aria-label="Main navigation">
+                <RouterLink to="/docs" class="mobile-nav-link" @click="mobileOpen = false">Documentation</RouterLink>
+                <RouterLink to="/tickets" class="mobile-nav-link" @click="mobileOpen = false">Contact</RouterLink>
+                <RouterLink v-if="auth.user && !auth.user.is_admin" to="/files" class="mobile-nav-link" @click="mobileOpen = false">Share Files</RouterLink>
+                <RouterLink v-if="auth.user && !auth.user.is_admin" to="/support" class="mobile-nav-link" @click="mobileOpen = false">Support</RouterLink>
+                <RouterLink v-if="auth.user?.is_admin" to="/manage" class="mobile-nav-link" @click="mobileOpen = false">Manage</RouterLink>
+                <button v-if="auth.user" type="button" class="mobile-nav-link mobile-nav-link--action" @click="signOut">Sign out</button>
+                <RouterLink v-else to="/login" class="mobile-nav-link mobile-nav-link--action" @click="mobileOpen = false">Log in</RouterLink>
+              </nav>
+              <div v-if="!hideSidebar" class="mobile-nav-sep" aria-hidden="true"></div>
               <slot name="sidebar" />
             </ScrollArea>
           </SheetContent>
@@ -137,6 +151,7 @@ const auth = useAuthStore()
 const store = useDocsStore()
 
 async function signOut() {
+  mobileOpen.value = false
   await auth.logout()
   router.push({ name: 'login' })
 }
@@ -244,6 +259,28 @@ onBeforeUnmount(() => {
   margin: 0 2px;
 }
 
+/* Mobile Sheet navigation */
+.mobile-nav { display: flex; flex-direction: column; padding: 8px; }
+.mobile-nav-link {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--foreground);
+  cursor: pointer;
+}
+.mobile-nav-link:hover { background: var(--muted); }
+.mobile-nav-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.mobile-nav-link.router-link-active { color: var(--primary); font-weight: 600; }
+.mobile-nav-link--action { color: var(--muted-foreground); }
+.mobile-nav-sep { height: 1px; background: var(--sidebar-border); margin: 8px 12px; }
+
 /* Top-bar search field (opens the ⌘K palette) */
 .topbar-search {
   display: inline-flex;
@@ -336,4 +373,20 @@ onBeforeUnmount(() => {
   outline-offset: 2px;
 }
 main:focus-visible { outline: none; }
+
+/* Below sm, the top-bar actions are hidden and navigation moves into the
+   mobile Sheet. The Tailwind `hidden sm:inline-flex` classes are overridden by
+   the scoped `display:inline-flex` rules above (scoped selectors out-specific
+   Tailwind's `.hidden`), so the hide MUST live here — and at the END of the
+   block, so equal-specificity source order lets it win over every base rule
+   (including `.topbar-search`, defined later above). Otherwise actions
+   overflow the bar on mobile. */
+@media (max-width: 639px) {
+  .topbar-btn,
+  .topbar-btn-ghost,
+  .topbar-search,
+  .topbar-divider {
+    display: none;
+  }
+}
 </style>
