@@ -43,8 +43,13 @@ def _mail_domain():
 
 def _customer_recipients(ticket):
     emails = []
-    if ticket.created_by and ticket.created_by.email:
-        emails.append(ticket.created_by.email)
+    # Only include created_by when it's the CUSTOMER (self-serve tickets). For
+    # on-behalf tickets created_by is the staff member — they must not receive
+    # the customer-facing "we received your request" mail; the real customer is
+    # in cc_emails (folded in at on-behalf create).
+    cb = ticket.created_by
+    if cb and cb.email and cb.role == 'customer':
+        emails.append(cb.email)
     emails.extend(e for e in (ticket.cc_emails or []) if e)
     seen = set()
     deduped = []

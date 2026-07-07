@@ -57,7 +57,8 @@ class Command(BaseCommand):
                     mid = (ev.get('message', {}).get('headers', {}) or {}).get('message-id', '')
                     etype = ev.get('event', '')
                     reason = ev.get('reason') or ev.get('delivery-status', {}).get('description', '')
-                    if apply_delivery_event(mid, etype, reason):
+                    recipient = ev.get('recipient', '')
+                    if apply_delivery_event(mid, etype, reason, recipient):
                         updated += 1
                 url = (body.get('paging', {}) or {}).get('next')
                 if not items:

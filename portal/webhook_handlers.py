@@ -34,22 +34,33 @@ def _find_message(esp_message_id):
     return None
 
 
-def apply_delivery_event(esp_message_id, event_type, reason=''):
+def apply_delivery_event(esp_message_id, event_type, reason='', recipient=''):
     """Update the matching ticket message's delivery_status. Returns True if a
-    message was updated. Ignores non-terminal events and unknown ids."""
+    message was updated. Ignores non-terminal events and unknown ids.
+
+    One message can go to several recipients (customer + CCs) with different
+    outcomes. To honor 'never silently drop a failure', a bounce/failure to ANY
+    recipient wins and sticks — a later 'delivered' for another recipient does
+    not clear it. The failing address is recorded so staff know which one."""
     from portal.models import TicketMessage
     if event_type not in (DELIVERED_EVENTS | FAILED_EVENTS):
         return False
     msg = _find_message(esp_message_id)
     if not msg:
         return False  # event for a non-ticket email (magic link, etc.)
-    if event_type in DELIVERED_EVENTS:
+
+    if event_type in FAILED_EVENTS:
+        msg.delivery_status = TicketMessage.DELIVERY_BOUNCED
+        detail = 'spam complaint' if event_type == 'complained' else (reason or event_type)
+        if recipient:
+            detail = f'{recipient}: {detail}'
+        msg.delivery_detail = detail[:256]
+    else:  # delivered
+        if msg.delivery_status == TicketMessage.DELIVERY_BOUNCED:
+            return False  # keep the known bounce; don't let another recipient hide it
         msg.delivery_status = TicketMessage.DELIVERY_DELIVERED
         msg.delivery_detail = ''
-    else:
-        msg.delivery_status = TicketMessage.DELIVERY_BOUNCED
-        msg.delivery_detail = (('spam complaint' if event_type == 'complained'
-                                else reason) or event_type)[:256]
+
     msg.save(update_fields=['delivery_status', 'delivery_detail'])
     logger.info('delivery event=%s esp_id=%s msg=%s → %s',
                 event_type, esp_message_id, msg.id, msg.delivery_status)
@@ -61,4 +72,5 @@ def handle_esp_tracking(sender, event, esp_name=None, **kwargs):
     reason = (getattr(event, 'description', None)
               or getattr(event, 'reject_reason', None) or '')
     apply_delivery_event(getattr(event, 'message_id', None),
-                         getattr(event, 'event_type', None), reason)
+                         getattr(event, 'event_type', None), reason,
+                         getattr(event, 'recipient', '') or '')

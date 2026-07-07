@@ -177,6 +177,29 @@ class TicketNotifyTests(TestCase):
         self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_BOUNCED)
         self.assertIn('mailbox full', m.delivery_detail)
 
+    def test_onbehalf_recipients_exclude_staff_creator(self):
+        # On-behalf ticket: created_by is staff, customer is in cc. The staff
+        # creator must NOT receive the customer-facing confirmation.
+        from portal import ticket_notify
+        ob = Ticket.objects.create(company=self.acme, created_by=self.staff,
+                                   subject='OB', cc_emails=['client@acme.com'])
+        r = ticket_notify._customer_recipients(ob)
+        self.assertIn('client@acme.com', r)
+        self.assertNotIn(self.staff.email, r)
+
+    def test_bounce_wins_over_later_delivered(self):
+        # A bounce to one recipient must not be hidden by another recipient's
+        # delivered event, regardless of arrival order.
+        from portal.webhook_handlers import apply_delivery_event
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<x@mg>')
+        apply_delivery_event('x@mg', 'bounced', 'no such user', 'bad@x.com')
+        apply_delivery_event('x@mg', 'delivered', '', 'good@x.com')  # later, other recipient
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_BOUNCED)
+        self.assertIn('bad@x.com', m.delivery_detail)
+
     def test_apply_delivery_event_matches_bracketless_id(self):
         # The Events API returns the message-id WITHOUT angle brackets; our
         # stored esp_message_id has them. Matching must be bracket-tolerant.
