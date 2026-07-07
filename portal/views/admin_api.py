@@ -18,12 +18,28 @@ from portal.models import Company, PortalUser
 
 
 def _company_dict(c):
+    d = c.contract_end_date
     return {
         'id': c.id,
         'name': c.name,
-        'contract_end_date': c.contract_end_date.isoformat() if c.contract_end_date else None,
+        # Tolerate either a date object or an ISO string (defensive).
+        'contract_end_date': d.isoformat() if hasattr(d, 'isoformat') else (d or None),
         'user_count': c.users.count(),
     }
+
+
+def _clean_contract_date(raw):
+    """Return (date_or_None, error_message). Parses an ISO 'YYYY-MM-DD' string
+    into a date so it's never assigned to the DateField as a raw string."""
+    if not raw:
+        return None, None
+    if not isinstance(raw, str):
+        return raw, None  # already a date/None
+    from django.utils.dateparse import parse_date
+    parsed = parse_date(raw.strip())
+    if parsed is None:
+        return None, 'Invalid contract_end_date; use YYYY-MM-DD'
+    return parsed, None
 
 
 def _super_emails():
@@ -79,7 +95,10 @@ def companies(request):
         return JsonResponse({'error': 'Company name is required'}, status=400)
     if Company.objects.filter(name__iexact=name).exists():
         return JsonResponse({'error': 'A company with that name already exists'}, status=409)
-    c = Company.objects.create(name=name, contract_end_date=data.get('contract_end_date') or None)
+    cdate, err = _clean_contract_date(data.get('contract_end_date'))
+    if err:
+        return JsonResponse({'error': err}, status=400)
+    c = Company.objects.create(name=name, contract_end_date=cdate)
     return JsonResponse({'company': _company_dict(c)}, status=201)
 
 
@@ -106,7 +125,10 @@ def company_detail(request, company_id):
             return JsonResponse({'error': 'A company with that name already exists'}, status=409)
         c.name = name
     if 'contract_end_date' in data:
-        c.contract_end_date = data['contract_end_date'] or None
+        cdate, err = _clean_contract_date(data['contract_end_date'])
+        if err:
+            return JsonResponse({'error': err}, status=400)
+        c.contract_end_date = cdate
     c.save()
     return JsonResponse({'company': _company_dict(c)})
 
