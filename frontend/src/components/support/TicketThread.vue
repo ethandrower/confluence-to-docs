@@ -104,9 +104,11 @@ export default { name: 'TicketThread' }
 </script>
 
 <style scoped>
-.tt { display: flex; flex-direction: column; gap: 1.25rem; }
+/* Fill the SupportView thread column so the message list scrolls internally
+   while the header stays put and the reply form docks at the bottom. */
+.tt { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 
-.tt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.tt-head { flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
 .tt-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0 0 0.15rem; }
 .tt-head h1 { font-family: var(--font-ui); font-size: 1.4rem; font-weight: 700; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
 
@@ -117,7 +119,7 @@ export default { name: 'TicketThread' }
 .status--info { color: var(--info); }
 .status--muted { color: var(--muted-foreground); }
 
-.tt-messages { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.tt-messages { list-style: none; margin: 0; padding: 1rem 0; display: grid; gap: 0.75rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; }
 .tt-msg {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -146,6 +148,7 @@ export default { name: 'TicketThread' }
 .tt-link:hover { text-decoration: none; }
 
 .tt-reopen-note {
+  flex-shrink: 0;
   font-size: 0.85rem; color: var(--warning); margin: 0;
   padding: 0.6rem 0.85rem;
   border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
@@ -153,7 +156,7 @@ export default { name: 'TicketThread' }
   background: color-mix(in srgb, var(--warning) 10%, transparent);
 }
 
-.tt-reply { display: flex; flex-direction: column; gap: 0.5rem; border-top: 1px solid var(--border); padding-top: 1.1rem; }
+.tt-reply { flex-shrink: 0; display: flex; flex-direction: column; gap: 0.5rem; border-top: 1px solid var(--border); padding-top: 1.1rem; margin-top: 0.5rem; }
 .tt-reply label { font-size: 0.8125rem; font-weight: 550; color: var(--foreground); }
 .tt-textarea {
   padding: 0.6rem 0.75rem;
