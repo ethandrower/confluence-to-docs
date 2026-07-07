@@ -45,16 +45,14 @@
         </div>
       </div>
 
-      <!-- New ticket modal -->
-      <Transition name="modal">
-        <div v-if="newModal" class="modal-overlay" @click.self="newModal = false">
-          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="new-ticket-title">
-            <div class="modal-head">
-              <h2 id="new-ticket-title" class="modal-title">New ticket</h2>
-              <button class="modal-close" aria-label="Close" @click="newModal = false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18 18 6M6 6l12 12"/></svg>
-              </button>
-            </div>
+      <!-- New ticket modal — Reka Dialog handles focus trap, Escape, focus
+           restore and the overlay (replaces the hand-rolled modal). -->
+      <Dialog v-model:open="newModal">
+        <DialogContent class="mt-dialog">
+          <div class="mt-dialog-body">
+            <DialogHeader>
+              <DialogTitle class="modal-title">New ticket</DialogTitle>
+            </DialogHeader>
             <p v-if="newError" class="form-error" role="alert">{{ newError }}</p>
             <label class="field"><span>Client</span>
               <select v-model="newForm.company_id">
@@ -85,8 +83,8 @@
               <button class="btn-primary" :disabled="newSaving" @click="saveNewTicket">{{ newSaving ? 'Creating…' : 'Create ticket' }}</button>
             </div>
           </div>
-        </div>
-      </Transition>
+        </DialogContent>
+      </Dialog>
     </template>
   </AppShell>
 </template>
@@ -96,6 +94,7 @@ import { ref, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import AdminTicketList from '@/components/support/AdminTicketList.vue'
 import AdminTicketDetail from '@/components/support/AdminTicketDetail.vue'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useTicketsStore } from '@/stores/tickets'
 
 const store = useTicketsStore()
@@ -249,14 +248,10 @@ onMounted(() => {
 .btn-ghost { color: var(--muted-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; }
 .btn-ghost:hover { background: var(--muted); color: var(--foreground); }
 
-/* Modal */
-.modal-overlay { position: fixed; inset: 0; z-index: 60; background: oklch(0 0 0 / 0.45); display: flex; align-items: center; justify-content: center; padding: 20px; }
-.modal { width: 100%; max-width: 460px; background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 24px; box-shadow: 0 20px 50px oklch(0 0 0 / 0.25); }
-.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.modal-title { font-family: var(--font-ui); font-size: 1.15rem; font-weight: 600; color: var(--foreground); margin: 0; }
-.modal-close { flex-shrink: 0; width: 28px; height: 28px; display: inline-grid; place-items: center; border: none; background: none; color: var(--muted-foreground); border-radius: var(--radius-sm); cursor: pointer; }
-.modal-close svg { width: 15px; height: 15px; }
-.modal-close:hover { background: var(--secondary); color: var(--foreground); }
+/* New-ticket dialog (Reka Dialog provides the overlay/panel; this lays out
+   the form body inside DialogContent). */
+.mt-dialog-body { display: block; }
+.modal-title { font-family: var(--font-ui); font-size: 1.15rem; font-weight: 600; color: var(--foreground); margin: 0 0 14px; }
 .form-error { color: var(--destructive); font-size: 0.85rem; margin: 0 0 10px; }
 .field { display: block; margin-bottom: 13px; }
 .field > span { display: block; font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--muted-foreground); margin-bottom: 5px; }
@@ -265,8 +260,6 @@ onMounted(() => {
 .field textarea { width: 100%; padding: 8px 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
 .field textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; border-color: var(--ring); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.modal-enter-active, .modal-leave-active { transition: opacity 0.18s; }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
 
 @media (max-width: 860px) {
   .mt-body { position: relative; }
