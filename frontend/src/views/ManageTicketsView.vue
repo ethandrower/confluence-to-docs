@@ -162,7 +162,7 @@ async function selectTicket(number) {
 function onDetailUpdated(patch) {
   if (!selected.value) return
   if (patch.status) selected.value.status = patch.status
-  if (patch.jira_key !== undefined) selected.value.jira_key = patch.jira_key
+  if (patch.jira_links) selected.value.jira_links = patch.jira_links
   if (patch.cc_emails) selected.value.cc_emails = patch.cc_emails
   if (patch.message) selected.value.messages.push(patch.message)
   const row = list.value.find((t) => t.number === selected.value.number)

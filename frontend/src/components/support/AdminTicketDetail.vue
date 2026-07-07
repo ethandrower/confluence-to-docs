@@ -39,15 +39,22 @@
               <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
             </select>
           </label>
-          <label class="ctrl"><span>Jira key</span>
+          <div class="ctrl"><span>Jira links</span>
+            <ul v-if="ticket.jira_links && ticket.jira_links.length" class="jira-list">
+              <li v-for="jl in ticket.jira_links" :key="jl.key" class="jira-item">
+                <a class="jira-key" :href="jl.url" target="_blank" rel="noopener noreferrer">{{ jl.key }} ↗</a>
+                <span v-if="jl.status" class="jira-status" :class="`jira-status--${jl.status_category || 'new'}`">{{ jl.status }}</span>
+                <span v-else class="jira-status jira-status--muted">status unavailable</span>
+                <button class="jira-remove" :aria-label="`Unlink ${jl.key}`" :disabled="jiraSaving" @click="onJira('remove', jl.key)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+              </li>
+            </ul>
             <div class="ctrl-inline">
-              <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="e.g. ECD-123" aria-label="Jira key" />
-              <button class="btn-outline sm" :disabled="jiraSaving" @click="onSaveJira">{{ jiraSaving ? 'Saving…' : 'Save' }}</button>
+              <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="e.g. ECD-123" aria-label="Add Jira key" @keydown.enter.prevent="onJira('add', jiraDraft)" />
+              <button class="btn-outline sm" :disabled="jiraSaving || !jiraDraft.trim()" @click="onJira('add', jiraDraft)">{{ jiraSaving ? '…' : 'Link' }}</button>
             </div>
-            <a v-if="ticket.jira_key" class="jira-link" :href="`https://citemed.atlassian.net/browse/${ticket.jira_key}`" target="_blank" rel="noopener noreferrer">
-              View {{ ticket.jira_key }} in Jira ↗
-            </a>
-          </label>
+          </div>
           <label class="ctrl"><span>CC</span>
             <div class="ctrl-inline">
               <div class="ctrl-inline-grow">
@@ -149,14 +156,15 @@ function statusTone(s) { return STATUS_TONES[s] || 'muted' }
 
 const ACTIVITY_LABELS = {
   created: 'Ticket created', message_sent: 'Reply sent', note_added: 'Internal note added',
-  status_changed: 'Status changed', jira_linked: 'Jira link updated', cc_changed: 'CC list updated',
+  status_changed: 'Status changed', jira_linked: 'Jira linked', jira_unlinked: 'Jira unlinked',
+  cc_changed: 'CC list updated',
 }
 function activityLabel(a) {
   if (a.action === 'status_changed' && a.detail) {
     return `Status: ${statusLabel(a.detail.old)} → ${statusLabel(a.detail.new)}`
   }
-  if (a.action === 'jira_linked' && a.detail?.jira_key) {
-    return `Jira linked: ${a.detail.jira_key}`
+  if ((a.action === 'jira_linked' || a.action === 'jira_unlinked') && a.detail?.key) {
+    return `${a.action === 'jira_linked' ? 'Jira linked' : 'Jira unlinked'}: ${a.detail.key}`
   }
   return ACTIVITY_LABELS[a.action] || a.action
 }
@@ -169,7 +177,8 @@ const detailsHint = computed(() => {
   const t = props.ticket
   if (!t) return ''
   const bits = []
-  bits.push(t.jira_key ? t.jira_key : 'No Jira link')
+  const jn = (t.jira_links || []).length
+  bits.push(jn ? `${jn} Jira` : 'No Jira link')
   const n = (t.cc_emails || []).length
   bits.push(n ? `${n} CC` : 'No CC')
   return bits.join(' · ')
@@ -208,7 +217,7 @@ async function onResend(m) {
 function syncDrafts(t) {
   if (!t) return
   statusDraft.value = t.status
-  jiraDraft.value = t.jira_key || ''
+  jiraDraft.value = ''
   ccDraft.value = [...(t.cc_emails || [])]
   replyBody.value = ''
   replyInternal.value = false
@@ -238,15 +247,17 @@ async function onStatusChange() {
   }
 }
 
-async function onSaveJira() {
-  if (!props.ticket) return
+async function onJira(action, key) {
+  key = (key || '').trim()
+  if (!props.ticket || (action === 'add' && !key)) return
   jiraSaving.value = true
   actionError.value = ''
   try {
-    const res = await store.adminSetJira(props.ticket.number, jiraDraft.value.trim())
-    emit('updated', { jira_key: res.jira_key })
+    const res = await store.adminJiraLink(props.ticket.number, action, key)
+    if (action === 'add') jiraDraft.value = ''
+    emit('updated', { jira_links: res.jira_links })
   } catch (e) {
-    actionError.value = e.message || 'Could not save the Jira key.'
+    actionError.value = e.message || 'Could not update Jira links.'
   } finally {
     jiraSaving.value = false
   }
@@ -328,8 +339,20 @@ async function onSendReply() {
 .ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }
 .ctrl-inline .ctrl-input { flex: 1 1 auto; min-width: 0; }
 .ctrl-inline-grow { flex: 1 1 auto; min-width: 0; }
-.jira-link { display: inline-block; margin-top: 7px; font-size: 12.5px; color: var(--brand-accent, var(--primary)); text-decoration: none; }
-.jira-link:hover { text-decoration: underline; }
+.jira-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.jira-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.jira-key { flex-shrink: 0; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--brand-accent, var(--primary)); text-decoration: none; }
+.jira-key:hover { text-decoration: underline; }
+.jira-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jira-status--new { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
+.jira-status--indeterminate { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.jira-status--done { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); }
+.jira-status--muted { color: var(--muted-foreground); background: none; font-weight: 400; font-style: italic; }
+.jira-remove { margin-left: auto; flex-shrink: 0; display: inline-grid; place-items: center; width: 22px; height: 22px; border: none; background: none; color: var(--muted-foreground); border-radius: var(--radius-sm); cursor: pointer; }
+.jira-remove svg { width: 12px; height: 12px; }
+.jira-remove:hover { background: color-mix(in srgb, var(--destructive) 12%, transparent); color: var(--destructive); }
+.jira-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.jira-remove:disabled { opacity: 0.5; cursor: default; }
 
 .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
 .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }

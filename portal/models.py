@@ -345,8 +345,9 @@ class Ticket(models.Model):
     status = models.CharField(max_length=32, choices=STATUS_CHOICES,
                               default=STATUS_WAITING_ON_SUPPORT)
     cc_emails = models.JSONField(default=list, blank=True)
-    # Internal-only Jira reference. NEVER serialized to customers.
-    jira_key = models.CharField(max_length=32, blank=True)
+    # Internal Jira references live in JiraTicketLink (admin-only, never
+    # serialized to customers). Was a single `jira_key` CharField — migrated
+    # to the link model in 0019 to support multiple keys + live status.
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -458,3 +459,26 @@ class TicketActivity(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class JiraTicketLink(models.Model):
+    """A link from a support ticket to an internal Jira issue. ADMIN-ONLY —
+    never serialized to customers. Supports multiple issues per ticket and
+    caches the issue's live status (refreshed on admin view)."""
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='jira_links')
+    key = models.CharField(max_length=32)  # e.g. ECD-123
+    cached_status = models.CharField(max_length=64, blank=True)
+    cached_status_category = models.CharField(max_length=32, blank=True)  # new/indeterminate/done
+    cached_summary = models.CharField(max_length=512, blank=True)
+    fetched_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['ticket', 'key'],
+                                    name='uniq_jira_key_per_ticket'),
+        ]
+
+    def __str__(self):
+        return f'{self.key} → {self.ticket.display_number}'

@@ -301,9 +301,10 @@ class CustomerTicketApiTests(TestCase):
             ticket=t, body='x', origin='email', author_email='ext@client.com')
         self.assertEqual(_message_dict(email_msg)['author_name'], 'ext@client.com')
 
-    def test_detail_hides_internal_messages_and_jira_key(self):
-        t = Ticket.objects.create(company=self.acme, created_by=self.cust,
-                                  subject='A', jira_key='ENG-99')
+    def test_detail_hides_internal_messages_and_jira_links(self):
+        from portal.models import JiraTicketLink
+        t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')
+        JiraTicketLink.objects.create(ticket=t, key='ENG-99')
         TicketMessage.objects.create(ticket=t, body='public', origin='staff')
         TicketMessage.objects.create(ticket=t, body='secret', origin='staff',
                                      is_internal=True)
@@ -562,10 +563,43 @@ class AdminTicketApiTests(TestCase):
         raw = json.dumps(r.json())
         self.assertIn('Priscilla Murphy', raw)
 
-    def test_jira_key_set_and_visible_to_admin_only(self):
+    @patch('portal.jira_client.fetch_issue')
+    def test_jira_link_add_shows_live_status_in_admin_detail(self, fetch):
+        fetch.return_value = {'status': 'In Progress',
+                              'status_category': 'indeterminate', 'summary': 'Fix sync'}
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                             data=json.dumps({'action': 'add', 'key': 'ECD-42'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        d = self.client.get(f'/api/admin/tickets/{self.t.number}/').json()
+        link = next(j for j in d['jira_links'] if j['key'] == 'ECD-42')
+        self.assertEqual(link['status'], 'In Progress')
+        self.assertEqual(link['status_category'], 'indeterminate')
+
+    @patch('portal.jira_client.fetch_issue', return_value=None)
+    def test_jira_link_remove(self, _fetch):
+        from portal.models import JiraTicketLink
+        JiraTicketLink.objects.create(ticket=self.t, key='ECD-42')
         self._login()
         self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
-                         data=json.dumps({'jira_key': 'ENG-42'}),
+                         data=json.dumps({'action': 'remove', 'key': 'ECD-42'}),
                          content_type='application/json')
-        r = self.client.get(f'/api/admin/tickets/{self.t.number}/')
-        self.assertEqual(r.json()['jira_key'], 'ENG-42')
+        self.assertEqual(self.t.jira_links.count(), 0)
+
+    def test_jira_add_rejects_invalid_key(self):
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                             data=json.dumps({'action': 'add', 'key': 'not a key'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+    @patch('portal.jira_client.fetch_issue', return_value=None)
+    def test_jira_status_unavailable_degrades_gracefully(self, _fetch):
+        # API failure must not 500; link is created, status just blank.
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                             data=json.dumps({'action': 'add', 'key': 'ECD-7'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['jira_links'][0]['status'], '')
