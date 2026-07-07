@@ -250,9 +250,16 @@ MAILGUN_SERVER_NAME = env('MAILGUN_SERVER_NAME', default='')
 ANYMAIL = {
     'MAILGUN_API_KEY': MAILGUN_ACCESS_KEY,
     'MAILGUN_SENDER_DOMAIN': MAILGUN_SERVER_NAME,
-    'MAILGUN_WEBHOOK_SIGNING_KEY': env('MAILGUN_WEBHOOK_SIGNING_KEY', default=''),
     'SEND_DEFAULTS': {'track_opens': False, 'track_clicks': False},
 }
+# Only set the webhook signing key when provided. Setting it to '' would make
+# Anymail verify delivery webhooks against an EMPTY HMAC key (forgeable), and
+# real Mailgun events would fail to validate. Leaving it unset lets Anymail fall
+# back to the API key. Configure MAILGUN_WEBHOOK_SIGNING_KEY in prod (deploy
+# checklist) so genuine events validate against the real signing key.
+_mailgun_webhook_key = env('MAILGUN_WEBHOOK_SIGNING_KEY', default='')
+if _mailgun_webhook_key:
+    ANYMAIL['MAILGUN_WEBHOOK_SIGNING_KEY'] = _mailgun_webhook_key
 
 if MAILGUN_ACCESS_KEY:
     EMAIL_BACKEND = 'anymail.backends.mailgun.EmailBackend'
