@@ -58,14 +58,8 @@
 
     <div class="ntf-group">
       <label for="nt-cc">CC emails <span class="ntf-optional">(optional)</span></label>
-      <input
-        id="nt-cc"
-        v-model="ccRaw"
-        type="text"
-        class="ntf-input"
-        placeholder="teammate@company.com, other@company.com"
-      />
-      <p class="ntf-hint">Separate multiple addresses with commas. They'll be copied on replies.</p>
+      <EmailChipsInput id="nt-cc" v-model="ccList" aria-label="CC email addresses" />
+      <p class="ntf-hint">Type an address and press comma or Enter. They'll be copied on replies.</p>
     </div>
 
     <p v-if="serverError" class="ntf-server-error" role="alert">{{ serverError }}</p>
@@ -83,6 +77,7 @@
 import { ref, reactive, watch } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { useDebouncedSearch } from '@/lib/useDebounce'
+import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 
 const emit = defineEmits(['created', 'cancel'])
 const store = useTicketsStore()
@@ -90,7 +85,7 @@ const store = useTicketsStore()
 const subject = ref('')
 const category = ref('question')
 const body = ref('')
-const ccRaw = ref('')
+const ccList = ref([])
 const errors = reactive({})
 const serverError = ref('')
 const submitting = ref(false)
@@ -119,10 +114,6 @@ function validate() {
   return valid
 }
 
-function parseCcs() {
-  return ccRaw.value.split(',').map((e) => e.trim()).filter(Boolean)
-}
-
 async function submit() {
   if (!validate()) return
   submitting.value = true
@@ -132,7 +123,7 @@ async function submit() {
       subject: subject.value.trim(),
       body: body.value.trim(),
       category: category.value,
-      cc_emails: parseCcs(),
+      cc_emails: ccList.value,
     })
     emit('created', ticket)
   } catch (e) {

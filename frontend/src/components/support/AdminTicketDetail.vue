@@ -43,9 +43,11 @@
               View {{ ticket.jira_key }} in Jira ↗
             </a>
           </label>
-          <label class="ctrl"><span>CC (comma-separated)</span>
+          <label class="ctrl"><span>CC</span>
             <div class="ctrl-inline">
-              <input v-model="ccDraft" class="ctrl-input" type="text" placeholder="name@example.com, other@example.com" aria-label="CC email addresses" />
+              <div class="ctrl-inline-grow">
+                <EmailChipsInput v-model="ccDraft" aria-label="CC email addresses" />
+              </div>
               <button class="btn-outline sm" :disabled="ccSaving" @click="onSaveCc">{{ ccSaving ? 'Saving…' : 'Save' }}</button>
             </div>
           </label>
@@ -112,6 +114,7 @@
 import { ref, watch, computed } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { linkify } from '@/lib/linkify'
+import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 
 const props = defineProps({
   ticket: { type: Object, default: null },
@@ -169,7 +172,7 @@ const detailsHint = computed(() => {
 
 const statusDraft = ref('')
 const jiraDraft = ref('')
-const ccDraft = ref('')
+const ccDraft = ref([])
 const jiraSaving = ref(false)
 const ccSaving = ref(false)
 const replyBody = ref('')
@@ -194,7 +197,7 @@ function syncDrafts(t) {
   if (!t) return
   statusDraft.value = t.status
   jiraDraft.value = t.jira_key || ''
-  ccDraft.value = (t.cc_emails || []).join(', ')
+  ccDraft.value = [...(t.cc_emails || [])]
   replyBody.value = ''
   replyInternal.value = false
   replyError.value = ''
@@ -222,9 +225,8 @@ async function onSaveCc() {
   if (!props.ticket) return
   ccSaving.value = true
   try {
-    const emails = ccDraft.value.split(',').map((s) => s.trim()).filter(Boolean)
-    const res = await store.adminSetCc(props.ticket.number, emails)
-    ccDraft.value = res.cc_emails.join(', ')
+    const res = await store.adminSetCc(props.ticket.number, ccDraft.value)
+    ccDraft.value = res.cc_emails
     emit('updated', { cc_emails: res.cc_emails })
   } finally {
     ccSaving.value = false
@@ -285,8 +287,9 @@ async function onSendReply() {
 .ctrl > span { display: block; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; }
 .ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
 .ctrl-input:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
-.ctrl-inline { display: flex; gap: 8px; }
+.ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }
 .ctrl-inline .ctrl-input { flex: 1 1 auto; min-width: 0; }
+.ctrl-inline-grow { flex: 1 1 auto; min-width: 0; }
 .jira-link { display: inline-block; margin-top: 7px; font-size: 12.5px; color: var(--brand-accent, var(--primary)); text-decoration: none; }
 .jira-link:hover { text-decoration: underline; }
 
