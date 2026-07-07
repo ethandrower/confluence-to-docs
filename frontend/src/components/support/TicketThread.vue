@@ -11,13 +11,13 @@
     </header>
 
     <ol class="tt-messages" role="list">
-      <li v-for="m in ticket.messages" :key="m.id" class="tt-msg" :class="{ 'tt-msg--staff': m.is_staff }">
+      <li v-for="m in ticket.messages" :key="m.id" class="tt-msg" :class="{ 'tt-msg--staff': m.is_staff, 'tt-msg--mine': !m.is_staff }">
         <div class="tt-msg-head">
           <span v-if="m.is_staff" class="tt-badge">CiteMed</span>
           <span class="tt-author">{{ m.author_name }}</span>
           <span class="tt-time">{{ fullDate(m.created_at) }}</span>
         </div>
-        <p class="tt-body">{{ m.body }}</p>
+        <p class="tt-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="tt-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
       </li>
     </ol>
 
@@ -47,6 +47,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
+import { linkify } from '@/lib/linkify'
 
 const props = defineProps({
   ticket: { type: Object, required: true },
@@ -122,8 +123,13 @@ export default { name: 'TicketThread' }
   border-radius: var(--radius-md);
   background: var(--card);
   padding: 0.85rem 1rem;
+  max-width: min(85%, 560px);
 }
+/* Chat alignment from the customer's POV: their own messages right, CiteMed
+   staff left (mirror of the admin pane, which is customer-left / staff-right). */
+.tt-msg--mine { justify-self: end; }
 .tt-msg--staff {
+  justify-self: start;
   background: color-mix(in srgb, var(--info) 7%, var(--card));
   border-color: color-mix(in srgb, var(--info) 25%, var(--border));
 }
@@ -135,7 +141,9 @@ export default { name: 'TicketThread' }
 }
 .tt-author { font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
 .tt-time { font-size: 0.76rem; color: var(--muted-foreground); margin-left: auto; }
-.tt-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; }
+.tt-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tt-link { color: var(--brand-accent); text-decoration: underline; }
+.tt-link:hover { text-decoration: none; }
 
 .tt-reopen-note {
   font-size: 0.85rem; color: var(--warning); margin: 0;

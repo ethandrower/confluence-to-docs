@@ -61,7 +61,7 @@
             <span class="msg-author">{{ m.author_name }}</span>
             <span class="msg-time">{{ fmtWhen(m.created_at) }}</span>
           </div>
-          <p class="msg-body">{{ m.body }}</p>
+          <p class="msg-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="msg-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
           <div v-if="m.delivery_status === 'sent'" class="msg-delivery msg-delivery--ok">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
             Sent
@@ -111,6 +111,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
+import { linkify } from '@/lib/linkify'
 
 const props = defineProps({
   ticket: { type: Object, default: null },
@@ -307,7 +308,9 @@ async function onSendReply() {
 .msg-badge--internal { color: var(--warning); background: color-mix(in srgb, var(--warning) 18%, transparent); }
 .msg-author { font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
 .msg-time { font-size: 0.76rem; color: var(--muted-foreground); margin-left: auto; }
-.msg-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; }
+.msg-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-link { color: var(--brand-accent); text-decoration: underline; }
+.msg-link:hover { text-decoration: none; }
 .msg-delivery { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; }
 .msg-delivery svg { width: 12px; height: 12px; flex-shrink: 0; vertical-align: -1px; margin-right: 3px; }
 .msg-delivery--ok { color: var(--muted-foreground); }
