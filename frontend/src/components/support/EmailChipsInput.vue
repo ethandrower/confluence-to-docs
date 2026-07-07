@@ -165,6 +165,7 @@ function focusInput() {
 }
 .chip-x svg { width: 11px; height: 11px; }
 .chip-x:hover { background: color-mix(in srgb, var(--foreground) 12%, transparent); color: var(--foreground); }
+.chip-x:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .chips-input {
   flex: 1 1 90px;
   min-width: 90px;

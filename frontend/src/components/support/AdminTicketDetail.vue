@@ -18,7 +18,7 @@
             <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status) }}
           </span>
         </div>
-        <h1 class="atd-subject-h">{{ ticket.subject }}</h1>
+        <h1 ref="subjectHeadingEl" tabindex="-1" class="atd-subject-h">{{ ticket.subject }}</h1>
       </header>
 
       <p v-if="actionError" class="atd-action-error" role="alert">
@@ -69,11 +69,11 @@
             <span class="msg-time">{{ fmtWhen(m.created_at) }}</span>
           </div>
           <p class="msg-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="msg-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
-          <div v-if="m.is_staff && m.delivery_status === 'sent'" class="msg-delivery msg-delivery--ok">
+          <div v-if="m.is_staff && m.delivery_status === 'sent'" class="msg-delivery msg-delivery--ok" aria-live="polite">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
             Sent
           </div>
-          <div v-else-if="m.is_staff && m.delivery_status === 'failed'" class="msg-delivery msg-delivery--fail">
+          <div v-else-if="m.is_staff && m.delivery_status === 'failed'" class="msg-delivery msg-delivery--fail" aria-live="polite">
             <span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
               Not delivered<span v-if="m.delivery_detail" class="msg-delivery-detail"> · {{ m.delivery_detail }}</span>
@@ -116,7 +116,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { linkify } from '@/lib/linkify'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
@@ -216,6 +216,16 @@ function syncDrafts(t) {
 }
 watch(() => props.ticket, syncDrafts, { immediate: true })
 
+// On mobile, selecting a ticket slides in this pane; move focus to the subject
+// heading so keyboard/AT users land in the opened conversation. Desktop keeps
+// focus on the list (the two-pane layout keeps both visible).
+const subjectHeadingEl = ref(null)
+watch(() => props.ticket?.number, (n, old) => {
+  if (n && n !== old && window.matchMedia('(max-width: 860px)').matches) {
+    nextTick(() => subjectHeadingEl.value?.focus())
+  }
+})
+
 async function onStatusChange() {
   if (!props.ticket) return
   actionError.value = ''
@@ -287,6 +297,7 @@ async function onSendReply() {
 .atd-back { display: none; align-items: center; gap: 6px; align-self: flex-start; color: var(--muted-foreground); font-size: 13px; font-weight: 550; padding: 4px 8px 4px 4px; border-radius: var(--radius-sm); cursor: pointer; }
 .atd-back svg { width: 15px; height: 15px; }
 .atd-back:hover { color: var(--foreground); background: var(--muted); }
+.atd-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
 .atd-subject-h { font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 4px 0 0; }
@@ -322,6 +333,7 @@ async function onSendReply() {
 
 .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
 .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
+.btn-outline:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-outline.sm { padding: 0 12px; height: 38px; }
 .btn-outline:disabled { opacity: 0.6; cursor: default; }
 
@@ -349,6 +361,7 @@ async function onSendReply() {
 .msg-delivery-detail { font-weight: 400; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-retry { flex-shrink: 0; font: inherit; font-size: 0.72rem; font-weight: 600; color: var(--destructive); background: none; border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent); border-radius: var(--radius-sm); padding: 2px 9px; cursor: pointer; transition: background 0.15s; }
 .msg-retry:hover:not(:disabled) { background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.msg-retry:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .msg-retry:disabled { opacity: 0.6; cursor: default; }
 .msg-empty { text-align: center; color: var(--muted-foreground); font-size: 0.88rem; padding: 24px 0; list-style: none; }
 

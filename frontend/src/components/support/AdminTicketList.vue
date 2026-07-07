@@ -1,11 +1,11 @@
 <template>
   <div class="atl">
     <div class="atl-head">
-      <div class="atl-modes" role="tablist" aria-label="Ticket views">
-        <button role="tab" :aria-selected="mode === 'inbox'" class="seg" :class="mode === 'inbox' && 'seg--active'" @click="$emit('open-inbox')">
+      <div class="atl-modes" role="group" aria-label="Ticket views">
+        <button type="button" :aria-pressed="mode === 'inbox'" class="seg" :class="mode === 'inbox' && 'seg--active'" @click="$emit('open-inbox')">
           Inbox <span v-if="inboxTotal" class="seg-badge">{{ inboxTotal }}</span>
         </button>
-        <button role="tab" :aria-selected="mode === 'all'" class="seg" :class="mode === 'all' && 'seg--active'" @click="$emit('open-all')">
+        <button type="button" :aria-pressed="mode === 'all'" class="seg" :class="mode === 'all' && 'seg--active'" @click="$emit('open-all')">
           All
         </button>
       </div>
@@ -113,6 +113,7 @@ function relDate(d) {
 .atl-modes { display: flex; align-items: center; gap: 6px; }
 .seg { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 13.5px; font-weight: 550; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
 .seg:hover { color: var(--foreground); }
+.seg:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .seg--active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); color: var(--primary); }
 .seg-badge { font-size: 11px; font-weight: 700; background: var(--primary); color: var(--primary-foreground); border-radius: 999px; padding: 1px 7px; }
 
@@ -139,6 +140,7 @@ function relDate(d) {
   background: transparent; cursor: pointer; transition: background 0.12s;
 }
 .atl-row:hover { background: var(--accent); }
+.atl-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .atl-row--active { background: color-mix(in srgb, var(--primary) 10%, var(--card)); box-shadow: inset 3px 0 0 var(--primary); }
 .atl-row-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 .atl-ref { font-family: var(--font-ui); font-weight: 650; font-size: 13px; color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
