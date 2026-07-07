@@ -27,7 +27,7 @@
     </div>
 
     <!-- Docs deflection: suggest matching pages before a ticket is filed. -->
-    <div v-if="docHints.length" class="ntf-deflect">
+    <div v-if="docHints.length" class="ntf-deflect" role="region" aria-live="polite" aria-label="Suggested documentation">
       <p class="ntf-deflect-title">These docs might answer your question</p>
       <ul class="ntf-deflect-list">
         <li v-for="d in docHints" :key="d.slug">
@@ -58,7 +58,7 @@
 
     <div class="ntf-group">
       <label for="nt-cc">CC emails <span class="ntf-optional">(optional)</span></label>
-      <EmailChipsInput id="nt-cc" v-model="ccList" aria-label="CC email addresses" />
+      <EmailChipsInput input-id="nt-cc" v-model="ccList" aria-label="CC email addresses" />
       <p class="ntf-hint">Type an address and press comma or Enter. They'll be copied on replies.</p>
     </div>
 
@@ -74,12 +74,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { useDebouncedSearch } from '@/lib/useDebounce'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 
 const emit = defineEmits(['created', 'cancel'])
+
+// The form is v-if-mounted when the customer opens it, so move focus to the
+// first field on reveal instead of leaving it on the toggle button.
+onMounted(() => document.getElementById('nt-subject')?.focus())
 const store = useTicketsStore()
 
 const subject = ref('')

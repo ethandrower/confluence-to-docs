@@ -7,9 +7,14 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from portal import ticket_notify
+import re
+
+from django.conf import settings
+from django.utils import timezone
+
+from portal import jira_client, ticket_notify
 from portal.decorators import require_portal_admin
-from portal.models import Company, Ticket, TicketMessage
+from portal.models import Company, JiraTicketLink, Ticket, TicketMessage
 from portal.rate_limit import is_rate_limited
 from portal.views.tickets import (
     _clean_ccs, _message_dict, _ticket_dict, _with_message_count,
@@ -18,17 +23,49 @@ from portal.views.tickets import (
 
 # Max rows the admin "All" list returns without pagination (spec §4e/§6).
 ADMIN_LIST_CAP = 200
+# Re-fetch a linked Jira issue's status at most this often.
+JIRA_CACHE_SECONDS = 60
+JIRA_KEY_RE = re.compile(r'^[A-Z][A-Z0-9]+-\d+$')
 
 
 def _admin_dict(t, message_count=None):
     d = _ticket_dict(t, message_count=message_count)
     d.update({
         'company': {'id': t.company_id, 'name': t.company.name},
-        'jira_key': t.jira_key,
         'cc_emails': t.cc_emails,
         'created_by_email': t.created_by.email if t.created_by else '',
     })
     return d
+
+
+def _jira_link_dict(link):
+    domain = getattr(settings, 'CONFLUENCE_DOMAIN', '')
+    return {
+        'key': link.key,
+        'status': link.cached_status,
+        'status_category': link.cached_status_category,
+        'summary': link.cached_summary,
+        'url': f'https://{domain}/browse/{link.key}' if domain else '',
+    }
+
+
+def _refresh_jira_links(ticket):
+    """Refresh each linked issue's cached status if stale, then return the
+    serialized links. Best-effort — a failed fetch keeps the stale cache."""
+    now = timezone.now()
+    for link in ticket.jira_links.all():
+        stale = (link.fetched_at is None
+                 or (now - link.fetched_at).total_seconds() > JIRA_CACHE_SECONDS)
+        if stale:
+            data = jira_client.fetch_issue(link.key)
+            if data:
+                link.cached_status = data['status'][:64]
+                link.cached_status_category = data['status_category'][:32]
+                link.cached_summary = data['summary'][:512]
+                link.fetched_at = now
+                link.save(update_fields=['cached_status', 'cached_status_category',
+                                         'cached_summary', 'fetched_at'])
+    return [_jira_link_dict(l) for l in ticket.jira_links.all()]
 
 
 def _get(number):
@@ -120,6 +157,7 @@ def detail(request, number):
         'actor': a.actor.email if a.actor else '',
         'created_at': a.created_at.isoformat(),
     } for a in t.activity.all()[:50]]
+    d['jira_links'] = _refresh_jira_links(t)
     return JsonResponse(d)
 
 
@@ -211,6 +249,8 @@ def set_status(request, number):
 @require_http_methods(['POST'])
 @require_portal_admin
 def set_jira(request, number):
+    """Add or remove a Jira link. {action:'add'|'remove', key:'ECD-123'}.
+    A ticket can have multiple links. Admin-only; never customer-visible."""
     t = _get(number)
     if not t:
         return JsonResponse({'error': 'Not found'}, status=404)
@@ -218,11 +258,27 @@ def set_jira(request, number):
         data = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid request body'}, status=400)
-    t.jira_key = (data.get('jira_key') or '').strip()[:32]
-    t.save(update_fields=['jira_key', 'updated_at'])
-    log_ticket_activity(t, 'jira_linked', actor=request.portal_user,
-                        jira_key=t.jira_key)
-    return JsonResponse({'ok': True, 'jira_key': t.jira_key})
+    action = data.get('action', 'add')
+    key = (data.get('key') or '').strip().upper()
+    if action == 'remove':
+        JiraTicketLink.objects.filter(ticket=t, key=key).delete()
+        log_ticket_activity(t, 'jira_unlinked', actor=request.portal_user, key=key)
+    else:
+        if not JIRA_KEY_RE.match(key):
+            return JsonResponse({'error': 'Invalid Jira key (e.g. ECD-123)'}, status=400)
+        link, created = JiraTicketLink.objects.get_or_create(ticket=t, key=key)
+        if created:
+            data_ = jira_client.fetch_issue(key)  # populate status immediately
+            if data_:
+                link.cached_status = data_['status'][:64]
+                link.cached_status_category = data_['status_category'][:32]
+                link.cached_summary = data_['summary'][:512]
+                link.fetched_at = timezone.now()
+                link.save(update_fields=['cached_status', 'cached_status_category',
+                                         'cached_summary', 'fetched_at'])
+            log_ticket_activity(t, 'jira_linked', actor=request.portal_user, key=key)
+    t.save(update_fields=['updated_at'])
+    return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t)})
 
 
 @csrf_exempt

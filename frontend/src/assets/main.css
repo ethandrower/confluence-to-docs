@@ -50,7 +50,7 @@
   --destructive: #C0392B;
   /* Semantic status hues (light) — each carries meaning, not decoration.
      info reuses the brand accent; danger reuses --destructive. */
-  --success: #1F8B4C;            /* approved / received / complete */
+  --success: #1A7A43;            /* approved / received / complete (darkened to clear WCAG AA on white) */
   --warning: #9A6A15;            /* in-progress / due-soon / partial */
   --info: #2C5BB8;               /* in-review / open / informational */
   --border: #E4E8F0;             /* Grey 3 */

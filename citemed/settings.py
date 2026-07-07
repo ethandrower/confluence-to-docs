@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'django_celery_beat',
+    'anymail',
     'portal',
 ]
 
@@ -235,13 +236,33 @@ FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 # is_published flag so a future Confluence re-sync can't clobber this intent.
 DOCS_ALLOWED_SPACES = env.list('DOCS_ALLOWED_SPACES', default=[])
 
-# Email — Mailgun when MAILGUN_ACCESS_KEY is set, otherwise console (dev/tests).
-# Mirrors the citemed_web pattern so we don't introduce a second mental model.
+# Email — Mailgun (via django-anymail) when MAILGUN_ACCESS_KEY is set,
+# otherwise console (dev/tests). Anymail gives us provider-agnostic sending,
+# the ESP message-id (for delivery-webhook correlation), and signed tracking
+# webhooks (delivered/bounced) — see portal/ticket_notify.py + the Mailgun
+# webhook. MAILGUN_WEBHOOK_SIGNING_KEY authenticates inbound events.
 MAILGUN_ACCESS_KEY = env('MAILGUN_ACCESS_KEY', default='')
 MAILGUN_SERVER_NAME = env('MAILGUN_SERVER_NAME', default='')
 
+# Open/click tracking OFF by default (Gmail otherwise shows "loading external
+# images" from the tracking pixel; we don't need it). django-mailgun used to
+# map X-Mailgun-Track-* headers; Anymail uses these send defaults instead.
+ANYMAIL = {
+    'MAILGUN_API_KEY': MAILGUN_ACCESS_KEY,
+    'MAILGUN_SENDER_DOMAIN': MAILGUN_SERVER_NAME,
+    'SEND_DEFAULTS': {'track_opens': False, 'track_clicks': False},
+}
+# Only set the webhook signing key when provided. Setting it to '' would make
+# Anymail verify delivery webhooks against an EMPTY HMAC key (forgeable), and
+# real Mailgun events would fail to validate. Leaving it unset lets Anymail fall
+# back to the API key. Configure MAILGUN_WEBHOOK_SIGNING_KEY in prod (deploy
+# checklist) so genuine events validate against the real signing key.
+_mailgun_webhook_key = env('MAILGUN_WEBHOOK_SIGNING_KEY', default='')
+if _mailgun_webhook_key:
+    ANYMAIL['MAILGUN_WEBHOOK_SIGNING_KEY'] = _mailgun_webhook_key
+
 if MAILGUN_ACCESS_KEY:
-    EMAIL_BACKEND = 'django_mailgun.MailgunBackend'
+    EMAIL_BACKEND = 'anymail.backends.mailgun.EmailBackend'
 else:
     # SMTP fallback if EMAIL_HOST is set, else console (default for local dev).
     EMAIL_BACKEND = env(

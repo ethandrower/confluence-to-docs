@@ -145,20 +145,15 @@ def request_magic_link(request):
     }
 
     try:
+        # Open/click tracking is disabled globally via ANYMAIL SEND_DEFAULTS
+        # (the tracking pixel triggers Gmail's "loading external images" prompt
+        # and click-rewriting makes sign-in URLs look like phishing redirects —
+        # both bad UX on a login link).
         msg = EmailMultiAlternatives(
             subject='Your CiteMed Support Portal sign-in link',
             body=render_to_string('emails/magic_link.txt', ctx),
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[email],
-            # Disable Mailgun's open/click tracking on auth emails:
-            # the tracking pixel triggers Gmail's "loading external
-            # images" prompt and click-rewriting makes login URLs look
-            # like phishing redirects. Both are bad UX on a sign-in
-            # link. Mailgun reads these as `o:tracking-*` directives.
-            headers={
-                'X-Mailgun-Track-Opens': 'no',
-                'X-Mailgun-Track-Clicks': 'no',
-            },
         )
         msg.attach_alternative(
             render_to_string('emails/magic_link.html', ctx),

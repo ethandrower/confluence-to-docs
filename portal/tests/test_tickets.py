@@ -141,6 +141,88 @@ class TicketNotifyTests(TestCase):
         m.refresh_from_db()
         self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_NA)
 
+    def test_send_captures_esp_message_id(self):
+        # Anymail's test backend exposes anymail_status.message_id; we store it
+        # so delivery webhooks can correlate events back to this message.
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='hi', origin='staff')
+        from portal import ticket_notify
+        with override_settings(EMAIL_BACKEND='anymail.backends.test.EmailBackend'):
+            ticket_notify.notify_staff_reply(self.t, m)
+        m.refresh_from_db()
+        self.assertTrue(m.esp_message_id)
+
+    def test_delivery_webhook_marks_delivered(self):
+        from anymail.signals import tracking, AnymailTrackingEvent
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<abc@mg>')
+        tracking.send(sender=object,
+                      event=AnymailTrackingEvent(event_type='delivered', message_id='<abc@mg>'),
+                      esp_name='Mailgun')
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_DELIVERED)
+
+    def test_delivery_webhook_marks_bounced_with_reason(self):
+        from anymail.signals import tracking, AnymailTrackingEvent
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<b@mg>')
+        tracking.send(sender=object,
+                      event=AnymailTrackingEvent(event_type='bounced', message_id='<b@mg>',
+                                                 description='mailbox full'),
+                      esp_name='Mailgun')
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_BOUNCED)
+        self.assertIn('mailbox full', m.delivery_detail)
+
+    def test_onbehalf_recipients_exclude_staff_creator(self):
+        # On-behalf ticket: created_by is staff, customer is in cc. The staff
+        # creator must NOT receive the customer-facing confirmation.
+        from portal import ticket_notify
+        ob = Ticket.objects.create(company=self.acme, created_by=self.staff,
+                                   subject='OB', cc_emails=['client@acme.com'])
+        r = ticket_notify._customer_recipients(ob)
+        self.assertIn('client@acme.com', r)
+        self.assertNotIn(self.staff.email, r)
+
+    def test_bounce_wins_over_later_delivered(self):
+        # A bounce to one recipient must not be hidden by another recipient's
+        # delivered event, regardless of arrival order.
+        from portal.webhook_handlers import apply_delivery_event
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<x@mg>')
+        apply_delivery_event('x@mg', 'bounced', 'no such user', 'bad@x.com')
+        apply_delivery_event('x@mg', 'delivered', '', 'good@x.com')  # later, other recipient
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_BOUNCED)
+        self.assertIn('bad@x.com', m.delivery_detail)
+
+    def test_apply_delivery_event_matches_bracketless_id(self):
+        # The Events API returns the message-id WITHOUT angle brackets; our
+        # stored esp_message_id has them. Matching must be bracket-tolerant.
+        from portal.webhook_handlers import apply_delivery_event
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<abc@mg>')
+        self.assertTrue(apply_delivery_event('abc@mg', 'delivered'))
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_DELIVERED)
+
+    def test_delivery_webhook_ignores_unknown_message_id(self):
+        from anymail.signals import tracking, AnymailTrackingEvent
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<known@mg>')
+        # Event for a different id (e.g. a magic-link email) must not touch us.
+        tracking.send(sender=object,
+                      event=AnymailTrackingEvent(event_type='delivered', message_id='<other@mg>'),
+                      esp_name='Mailgun')
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_SENT)
+
     def test_status_notification_does_not_overwrite_anchor_delivery(self):
         # notify_status reuses an existing message as a threading anchor; it
         # must not clobber that message's own delivery_status.
@@ -253,9 +335,10 @@ class CustomerTicketApiTests(TestCase):
             ticket=t, body='x', origin='email', author_email='ext@client.com')
         self.assertEqual(_message_dict(email_msg)['author_name'], 'ext@client.com')
 
-    def test_detail_hides_internal_messages_and_jira_key(self):
-        t = Ticket.objects.create(company=self.acme, created_by=self.cust,
-                                  subject='A', jira_key='ENG-99')
+    def test_detail_hides_internal_messages_and_jira_links(self):
+        from portal.models import JiraTicketLink
+        t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='A')
+        JiraTicketLink.objects.create(ticket=t, key='ENG-99')
         TicketMessage.objects.create(ticket=t, body='public', origin='staff')
         TicketMessage.objects.create(ticket=t, body='secret', origin='staff',
                                      is_internal=True)
@@ -514,10 +597,43 @@ class AdminTicketApiTests(TestCase):
         raw = json.dumps(r.json())
         self.assertIn('Priscilla Murphy', raw)
 
-    def test_jira_key_set_and_visible_to_admin_only(self):
+    @patch('portal.jira_client.fetch_issue')
+    def test_jira_link_add_shows_live_status_in_admin_detail(self, fetch):
+        fetch.return_value = {'status': 'In Progress',
+                              'status_category': 'indeterminate', 'summary': 'Fix sync'}
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                             data=json.dumps({'action': 'add', 'key': 'ECD-42'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        d = self.client.get(f'/api/admin/tickets/{self.t.number}/').json()
+        link = next(j for j in d['jira_links'] if j['key'] == 'ECD-42')
+        self.assertEqual(link['status'], 'In Progress')
+        self.assertEqual(link['status_category'], 'indeterminate')
+
+    @patch('portal.jira_client.fetch_issue', return_value=None)
+    def test_jira_link_remove(self, _fetch):
+        from portal.models import JiraTicketLink
+        JiraTicketLink.objects.create(ticket=self.t, key='ECD-42')
         self._login()
         self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
-                         data=json.dumps({'jira_key': 'ENG-42'}),
+                         data=json.dumps({'action': 'remove', 'key': 'ECD-42'}),
                          content_type='application/json')
-        r = self.client.get(f'/api/admin/tickets/{self.t.number}/')
-        self.assertEqual(r.json()['jira_key'], 'ENG-42')
+        self.assertEqual(self.t.jira_links.count(), 0)
+
+    def test_jira_add_rejects_invalid_key(self):
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                             data=json.dumps({'action': 'add', 'key': 'not a key'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+    @patch('portal.jira_client.fetch_issue', return_value=None)
+    def test_jira_status_unavailable_degrades_gracefully(self, _fetch):
+        # API failure must not 500; link is created, status just blank.
+        self._login()
+        r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                             data=json.dumps({'action': 'add', 'key': 'ECD-7'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['jira_links'][0]['status'], '')

@@ -90,9 +90,9 @@ export const useTicketsStore = defineStore('tickets', () => {
     })
   }
 
-  async function adminSetJira(number, jiraKey) {
+  async function adminJiraLink(number, action, key) {
     return api(`/admin/tickets/${number}/jira/`, {
-      method: 'POST', body: JSON.stringify({ jira_key: jiraKey }),
+      method: 'POST', body: JSON.stringify({ action, key }),
     })
   }
 
@@ -112,7 +112,7 @@ export const useTicketsStore = defineStore('tickets', () => {
 
   return {
     tickets, current, loading, error, fetchTickets, fetchTicket, createTicket, reply,
-    adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminSetJira, adminSetCc, adminCreate,
+    adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminJiraLink, adminSetCc, adminCreate,
     adminResend,
   }
 })

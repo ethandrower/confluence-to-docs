@@ -14,6 +14,7 @@
       </span>
       <input
         ref="inputEl"
+        :id="inputId || undefined"
         v-model="draft"
         type="text"
         class="chips-input"
@@ -27,16 +28,18 @@
       />
     </div>
     <p v-if="error" class="chips-error" role="alert">{{ error }}</p>
+    <span class="sr-only" aria-live="polite">{{ liveMsg }}</span>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
   placeholder: { type: String, default: 'name@company.com' },
   ariaLabel: { type: String, default: 'Email addresses' },
+  inputId: { type: String, default: '' },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -44,6 +47,11 @@ const draft = ref('')
 const focused = ref(false)
 const error = ref('')
 const inputEl = ref(null)
+const liveMsg = ref('')  // visually-hidden aria-live announcements
+
+function announce(verb, email, count) {
+  liveMsg.value = `${verb} ${email}. ${count} recipient${count === 1 ? '' : 's'}.`
+}
 
 // Deliberately loose — the backend (_clean_ccs) is the authority and re-validates.
 // This is just enough to reject obvious non-emails before they become a chip.
@@ -53,11 +61,15 @@ function addEmails(raw) {
   const parts = raw.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean)
   const next = [...props.modelValue]
   let bad = ''
+  let lastAdded = ''
   for (const p of parts) {
     if (!EMAIL_RE.test(p)) { bad = p; continue }
-    if (!next.some((e) => e.toLowerCase() === p.toLowerCase())) next.push(p)
+    if (!next.some((e) => e.toLowerCase() === p.toLowerCase())) { next.push(p); lastAdded = p }
   }
-  if (next.length !== props.modelValue.length) emit('update:modelValue', next)
+  if (next.length !== props.modelValue.length) {
+    emit('update:modelValue', next)
+    announce('Added', lastAdded, next.length)
+  }
   return bad
 }
 
@@ -92,8 +104,13 @@ function onBlur() {
 }
 
 function removeAt(i) {
-  emit('update:modelValue', props.modelValue.filter((_, idx) => idx !== i))
+  const removed = props.modelValue[i]
+  const next = props.modelValue.filter((_, idx) => idx !== i)
+  emit('update:modelValue', next)
   error.value = ''
+  announce('Removed', removed, next.length)
+  // Keep keyboard focus in the field instead of dropping it to <body>.
+  nextTick(() => inputEl.value?.focus())
 }
 
 function focusInput() {
@@ -148,6 +165,7 @@ function focusInput() {
 }
 .chip-x svg { width: 11px; height: 11px; }
 .chip-x:hover { background: color-mix(in srgb, var(--foreground) 12%, transparent); color: var(--foreground); }
+.chip-x:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .chips-input {
   flex: 1 1 90px;
   min-width: 90px;

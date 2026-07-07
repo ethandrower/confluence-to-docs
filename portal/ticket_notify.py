@@ -43,8 +43,13 @@ def _mail_domain():
 
 def _customer_recipients(ticket):
     emails = []
-    if ticket.created_by and ticket.created_by.email:
-        emails.append(ticket.created_by.email)
+    # Only include created_by when it's the CUSTOMER (self-serve tickets). For
+    # on-behalf tickets created_by is the staff member — they must not receive
+    # the customer-facing "we received your request" mail; the real customer is
+    # in cc_emails (folded in at on-behalf create).
+    cb = ticket.created_by
+    if cb and cb.email and cb.role == 'customer':
+        emails.append(cb.email)
     emails.extend(e for e in (ticket.cc_emails or []) if e)
     seen = set()
     deduped = []
@@ -82,8 +87,6 @@ def _thread_headers(ticket, message):
     headers = {
         'Message-ID': message.email_message_id,
         'Reply-To': f'ticket-{ticket.number}+{message.reply_token}@{domain}',
-        'X-Mailgun-Track-Opens': 'no',
-        'X-Mailgun-Track-Clicks': 'no',
     }
     if prior_ids:
         headers['In-Reply-To'] = prior_ids[-1]
@@ -91,13 +94,29 @@ def _thread_headers(ticket, message):
     return headers
 
 
-def _record_delivery(message, status, detail=''):
+def _esp_message_id(msg):
+    """Mailgun's message-id from the Anymail send status, if available. Absent
+    under the console/test-less backend (dev). For one Mailgun API call all
+    recipients share one id; if Anymail hands back a set, take one."""
+    status = getattr(msg, 'anymail_status', None)
+    mid = getattr(status, 'message_id', None)
+    if isinstance(mid, (set, list, tuple)):
+        mid = next(iter(mid), None)
+    # Compare to None (not truthiness): the test backend uses id 0, which is
+    # a valid id, and real Mailgun ids are non-empty strings anyway.
+    return '' if mid is None else str(mid)
+
+
+def _record_delivery(message, status, detail='', esp_id=''):
     """Persist the submission outcome onto the message it belongs to."""
     message.delivery_status = status
     message.delivery_detail = detail[:256]
     message.delivery_attempted_at = timezone.now()
-    message.save(update_fields=['delivery_status', 'delivery_detail',
-                                'delivery_attempted_at'])
+    fields = ['delivery_status', 'delivery_detail', 'delivery_attempted_at']
+    if esp_id:
+        message.esp_message_id = esp_id[:256]
+        fields.append('esp_message_id')
+    message.save(update_fields=fields)
 
 
 def _send_threaded(ticket, message, recipients, *, heading, body,
@@ -125,7 +144,8 @@ def _send_threaded(ticket, message, recipients, *, heading, body,
         logger.info('ticket_notify sent (%s) → %s (sent=%s)',
                     subject, recipients, sent)
         if track:
-            _record_delivery(message, TicketMessage.DELIVERY_SENT)
+            _record_delivery(message, TicketMessage.DELIVERY_SENT,
+                             esp_id=_esp_message_id(msg))
     except Exception as e:
         logger.error('ticket_notify failed (%s) → %s: %s',
                      subject, recipients, e)
@@ -161,8 +181,7 @@ def _notify_support_new(ticket, first_message):
             'cta_url': f'{_site()}/manage',
         })
         msg = EmailMultiAlternatives(
-            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support],
-            headers={'X-Mailgun-Track-Opens': 'no', 'X-Mailgun-Track-Clicks': 'no'})
+            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support])
         sent = msg.send()
         logger.info('ticket_notify staff-new sent → %s (sent=%s)', support, sent)
     except Exception as e:
@@ -197,8 +216,7 @@ def notify_customer_reply(ticket, message):
             'cta_url': f'{_site()}/manage',
         })
         msg = EmailMultiAlternatives(
-            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support],
-            headers={'X-Mailgun-Track-Opens': 'no', 'X-Mailgun-Track-Clicks': 'no'})
+            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support])
         sent = msg.send()
         logger.info('ticket_notify customer-reply sent → %s (sent=%s)', support, sent)
     except Exception as e:

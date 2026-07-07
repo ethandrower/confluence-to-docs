@@ -18,7 +18,7 @@
             <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status) }}
           </span>
         </div>
-        <h1 class="atd-subject-h">{{ ticket.subject }}</h1>
+        <h1 ref="subjectHeadingEl" tabindex="-1" class="atd-subject-h">{{ ticket.subject }}</h1>
       </header>
 
       <p v-if="actionError" class="atd-action-error" role="alert">
@@ -39,15 +39,22 @@
               <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
             </select>
           </label>
-          <label class="ctrl"><span>Jira key</span>
+          <div class="ctrl"><span>Jira links</span>
+            <ul v-if="ticket.jira_links && ticket.jira_links.length" class="jira-list">
+              <li v-for="jl in ticket.jira_links" :key="jl.key" class="jira-item">
+                <a class="jira-key" :href="jl.url" target="_blank" rel="noopener noreferrer">{{ jl.key }} ↗</a>
+                <span v-if="jl.status" class="jira-status" :class="`jira-status--${jl.status_category || 'new'}`">{{ jl.status }}</span>
+                <span v-else class="jira-status jira-status--muted">status unavailable</span>
+                <button class="jira-remove" :aria-label="`Unlink ${jl.key}`" :disabled="jiraSaving" @click="onJira('remove', jl.key)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+              </li>
+            </ul>
             <div class="ctrl-inline">
-              <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="e.g. ECD-123" aria-label="Jira key" />
-              <button class="btn-outline sm" :disabled="jiraSaving" @click="onSaveJira">{{ jiraSaving ? 'Saving…' : 'Save' }}</button>
+              <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="e.g. ECD-123" aria-label="Add Jira key" @keydown.enter.prevent="onJira('add', jiraDraft)" />
+              <button class="btn-outline sm" :disabled="jiraSaving || !jiraDraft.trim()" @click="onJira('add', jiraDraft)">{{ jiraSaving ? '…' : 'Link' }}</button>
             </div>
-            <a v-if="ticket.jira_key" class="jira-link" :href="`https://citemed.atlassian.net/browse/${ticket.jira_key}`" target="_blank" rel="noopener noreferrer">
-              View {{ ticket.jira_key }} in Jira ↗
-            </a>
-          </label>
+          </div>
           <label class="ctrl"><span>CC</span>
             <div class="ctrl-inline">
               <div class="ctrl-inline-grow">
@@ -69,14 +76,14 @@
             <span class="msg-time">{{ fmtWhen(m.created_at) }}</span>
           </div>
           <p class="msg-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="msg-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
-          <div v-if="m.is_staff && m.delivery_status === 'sent'" class="msg-delivery msg-delivery--ok">
+          <div v-if="m.is_staff && (m.delivery_status === 'delivered' || m.delivery_status === 'sent')" class="msg-delivery msg-delivery--ok" aria-live="polite">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-            Sent
+            {{ m.delivery_status === 'delivered' ? 'Delivered' : 'Sent' }}
           </div>
-          <div v-else-if="m.is_staff && m.delivery_status === 'failed'" class="msg-delivery msg-delivery--fail">
+          <div v-else-if="m.is_staff && (m.delivery_status === 'failed' || m.delivery_status === 'bounced')" class="msg-delivery msg-delivery--fail" aria-live="polite">
             <span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
-              Not delivered<span v-if="m.delivery_detail" class="msg-delivery-detail"> · {{ m.delivery_detail }}</span>
+              {{ m.delivery_status === 'bounced' ? 'Bounced' : 'Not delivered' }}<span v-if="m.delivery_detail" class="msg-delivery-detail"> · {{ m.delivery_detail }}</span>
             </span>
             <button class="msg-retry" :disabled="resendingId === m.id" @click="onResend(m)">
               {{ resendingId === m.id ? 'Retrying…' : 'Retry' }}
@@ -116,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { linkify } from '@/lib/linkify'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
@@ -149,14 +156,15 @@ function statusTone(s) { return STATUS_TONES[s] || 'muted' }
 
 const ACTIVITY_LABELS = {
   created: 'Ticket created', message_sent: 'Reply sent', note_added: 'Internal note added',
-  status_changed: 'Status changed', jira_linked: 'Jira link updated', cc_changed: 'CC list updated',
+  status_changed: 'Status changed', jira_linked: 'Jira linked', jira_unlinked: 'Jira unlinked',
+  cc_changed: 'CC list updated',
 }
 function activityLabel(a) {
   if (a.action === 'status_changed' && a.detail) {
     return `Status: ${statusLabel(a.detail.old)} → ${statusLabel(a.detail.new)}`
   }
-  if (a.action === 'jira_linked' && a.detail?.jira_key) {
-    return `Jira linked: ${a.detail.jira_key}`
+  if ((a.action === 'jira_linked' || a.action === 'jira_unlinked') && a.detail?.key) {
+    return `${a.action === 'jira_linked' ? 'Jira linked' : 'Jira unlinked'}: ${a.detail.key}`
   }
   return ACTIVITY_LABELS[a.action] || a.action
 }
@@ -169,7 +177,8 @@ const detailsHint = computed(() => {
   const t = props.ticket
   if (!t) return ''
   const bits = []
-  bits.push(t.jira_key ? t.jira_key : 'No Jira link')
+  const jn = (t.jira_links || []).length
+  bits.push(jn ? `${jn} Jira` : 'No Jira link')
   const n = (t.cc_emails || []).length
   bits.push(n ? `${n} CC` : 'No CC')
   return bits.join(' · ')
@@ -208,13 +217,23 @@ async function onResend(m) {
 function syncDrafts(t) {
   if (!t) return
   statusDraft.value = t.status
-  jiraDraft.value = t.jira_key || ''
+  jiraDraft.value = ''
   ccDraft.value = [...(t.cc_emails || [])]
   replyBody.value = ''
   replyInternal.value = false
   replyError.value = ''
 }
 watch(() => props.ticket, syncDrafts, { immediate: true })
+
+// On mobile, selecting a ticket slides in this pane; move focus to the subject
+// heading so keyboard/AT users land in the opened conversation. Desktop keeps
+// focus on the list (the two-pane layout keeps both visible).
+const subjectHeadingEl = ref(null)
+watch(() => props.ticket?.number, (n, old) => {
+  if (n && n !== old && window.matchMedia('(max-width: 860px)').matches) {
+    nextTick(() => subjectHeadingEl.value?.focus())
+  }
+})
 
 async function onStatusChange() {
   if (!props.ticket) return
@@ -228,15 +247,17 @@ async function onStatusChange() {
   }
 }
 
-async function onSaveJira() {
-  if (!props.ticket) return
+async function onJira(action, key) {
+  key = (key || '').trim()
+  if (!props.ticket || (action === 'add' && !key)) return
   jiraSaving.value = true
   actionError.value = ''
   try {
-    const res = await store.adminSetJira(props.ticket.number, jiraDraft.value.trim())
-    emit('updated', { jira_key: res.jira_key })
+    const res = await store.adminJiraLink(props.ticket.number, action, key)
+    if (action === 'add') jiraDraft.value = ''
+    emit('updated', { jira_links: res.jira_links })
   } catch (e) {
-    actionError.value = e.message || 'Could not save the Jira key.'
+    actionError.value = e.message || 'Could not update Jira links.'
   } finally {
     jiraSaving.value = false
   }
@@ -287,6 +308,7 @@ async function onSendReply() {
 .atd-back { display: none; align-items: center; gap: 6px; align-self: flex-start; color: var(--muted-foreground); font-size: 13px; font-weight: 550; padding: 4px 8px 4px 4px; border-radius: var(--radius-sm); cursor: pointer; }
 .atd-back svg { width: 15px; height: 15px; }
 .atd-back:hover { color: var(--foreground); background: var(--muted); }
+.atd-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
 .atd-subject-h { font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 4px 0 0; }
@@ -317,11 +339,24 @@ async function onSendReply() {
 .ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }
 .ctrl-inline .ctrl-input { flex: 1 1 auto; min-width: 0; }
 .ctrl-inline-grow { flex: 1 1 auto; min-width: 0; }
-.jira-link { display: inline-block; margin-top: 7px; font-size: 12.5px; color: var(--brand-accent, var(--primary)); text-decoration: none; }
-.jira-link:hover { text-decoration: underline; }
+.jira-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.jira-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.jira-key { flex-shrink: 0; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--brand-accent, var(--primary)); text-decoration: none; }
+.jira-key:hover { text-decoration: underline; }
+.jira-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jira-status--new { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
+.jira-status--indeterminate { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.jira-status--done { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); }
+.jira-status--muted { color: var(--muted-foreground); background: none; font-weight: 400; font-style: italic; }
+.jira-remove { margin-left: auto; flex-shrink: 0; display: inline-grid; place-items: center; width: 22px; height: 22px; border: none; background: none; color: var(--muted-foreground); border-radius: var(--radius-sm); cursor: pointer; }
+.jira-remove svg { width: 12px; height: 12px; }
+.jira-remove:hover { background: color-mix(in srgb, var(--destructive) 12%, transparent); color: var(--destructive); }
+.jira-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.jira-remove:disabled { opacity: 0.5; cursor: default; }
 
 .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
 .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
+.btn-outline:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-outline.sm { padding: 0 12px; height: 38px; }
 .btn-outline:disabled { opacity: 0.6; cursor: default; }
 
@@ -349,6 +384,7 @@ async function onSendReply() {
 .msg-delivery-detail { font-weight: 400; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-retry { flex-shrink: 0; font: inherit; font-size: 0.72rem; font-weight: 600; color: var(--destructive); background: none; border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent); border-radius: var(--radius-sm); padding: 2px 9px; cursor: pointer; transition: background 0.15s; }
 .msg-retry:hover:not(:disabled) { background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.msg-retry:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .msg-retry:disabled { opacity: 0.6; cursor: default; }
 .msg-empty { text-align: center; color: var(--muted-foreground); font-size: 0.88rem; padding: 24px 0; list-style: none; }
 
@@ -372,7 +408,10 @@ async function onSendReply() {
 .btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s, background 0.15s, border-color 0.15s; }
 .btn-primary:hover { filter: brightness(0.94); }
 .btn-primary:disabled { opacity: 0.6; }
-.btn-primary--internal { background: var(--warning); border-color: var(--warning); color: #fff; }
+/* --background flips opposite to --warning across themes: light theme = light
+   text on dark-gold, dark theme = dark text on light-gold. Fixes the ~1.97:1
+   white-on-gold in dark mode. */
+.btn-primary--internal { background: var(--warning); border-color: var(--warning); color: var(--background); }
 
 @media (max-width: 860px) {
   .atd-back { display: inline-flex; }

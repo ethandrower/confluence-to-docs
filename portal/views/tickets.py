@@ -99,17 +99,8 @@ def submit_ticket(request):
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[settings.SUPPORT_EMAIL],
             reply_to=[email],
-            headers={
-                'X-Portal-Submission-Id': str(submission.pk),
-                # Same tracking-off rationale as the magic-link email:
-                # the tracking pixel causes Gmail to show "loading
-                # external images" before render. We don't need open
-                # tracking for an internal staff notification anyway.
-                # Mailgun maps these X-Mailgun-* SMTP headers to its
-                # o:tracking-* API options.
-                'X-Mailgun-Track-Opens': 'no',
-                'X-Mailgun-Track-Clicks': 'no',
-            },
+            # Tracking is disabled globally via ANYMAIL SEND_DEFAULTS.
+            headers={'X-Portal-Submission-Id': str(submission.pk)},
         )
         msg.attach_alternative(html_body, 'text/html')
         msg.send()
