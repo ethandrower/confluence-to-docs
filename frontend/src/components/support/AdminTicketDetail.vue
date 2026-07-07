@@ -372,7 +372,10 @@ async function onSendReply() {
 .btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s, background 0.15s, border-color 0.15s; }
 .btn-primary:hover { filter: brightness(0.94); }
 .btn-primary:disabled { opacity: 0.6; }
-.btn-primary--internal { background: var(--warning); border-color: var(--warning); color: #fff; }
+/* --background flips opposite to --warning across themes: light theme = light
+   text on dark-gold, dark theme = dark text on light-gold. Fixes the ~1.97:1
+   white-on-gold in dark mode. */
+.btn-primary--internal { background: var(--warning); border-color: var(--warning); color: var(--background); }
 
 @media (max-width: 860px) {
   .atd-back { display: inline-flex; }
