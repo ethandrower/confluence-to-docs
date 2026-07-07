@@ -99,8 +99,8 @@ watch(() => props.number, load)
 .sv-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 .sv-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
-.sv-head h1 { font-family: var(--font-ui); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
-.sv-head-actions { display: flex; align-items: center; gap: 0.6rem; }
+.sv-head h1 { font-family: var(--font-ui); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; color: var(--foreground); margin: 0; min-width: 0; }
+.sv-head-actions { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
 
 .refresh-btn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
 .refresh-btn svg { width: 15px; height: 15px; }
@@ -110,7 +110,7 @@ watch(() => props.number, load)
 @keyframes rspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-btn.is-spinning svg { animation: none; } }
 
-.btn-primary { background: var(--primary); color: var(--primary-foreground); border: none; border-radius: 8px; height: 34px; padding: 0 14px; cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600; transition: opacity 0.15s; }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); border: none; border-radius: 8px; height: 34px; padding: 0 14px; cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; transition: opacity 0.15s; }
 .btn-primary:hover { opacity: 0.9; }
 
 .sv-error { color: var(--destructive); font-size: 0.9rem; padding: 1rem; border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--destructive) 6%, transparent); }
