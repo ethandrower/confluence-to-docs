@@ -21,6 +21,11 @@
         <h1 class="atd-subject-h">{{ ticket.subject }}</h1>
       </header>
 
+      <p v-if="actionError" class="atd-action-error" role="alert">
+        {{ actionError }}
+        <button class="atd-action-error-x" aria-label="Dismiss" @click="actionError = ''">×</button>
+      </p>
+
       <!-- Controls strip (collapsed by default) -->
       <details class="atd-details">
         <summary>
@@ -180,14 +185,21 @@ const replyInternal = ref(false)
 const sending = ref(false)
 const replyError = ref('')
 const resendingId = ref(null)
+// Surfaces failures from the control-strip actions (status / Jira / CC /
+// resend) so a save that silently fails can never leave the operator
+// believing it stuck.
+const actionError = ref('')
 
 async function onResend(m) {
   if (!props.ticket) return
   resendingId.value = m.id
+  actionError.value = ''
   try {
     const res = await store.adminResend(props.ticket.number, m.id)
     m.delivery_status = res.delivery_status
     m.delivery_detail = res.delivery_detail
+  } catch (e) {
+    actionError.value = e.message || 'Could not resend. Please try again.'
   } finally {
     resendingId.value = null
   }
@@ -206,16 +218,25 @@ watch(() => props.ticket, syncDrafts, { immediate: true })
 
 async function onStatusChange() {
   if (!props.ticket) return
-  await store.adminSetStatus(props.ticket.number, statusDraft.value)
-  emit('updated', { status: statusDraft.value })
+  actionError.value = ''
+  try {
+    await store.adminSetStatus(props.ticket.number, statusDraft.value)
+    emit('updated', { status: statusDraft.value })
+  } catch (e) {
+    actionError.value = e.message || 'Could not update status.'
+    statusDraft.value = props.ticket.status // revert the dropdown to server truth
+  }
 }
 
 async function onSaveJira() {
   if (!props.ticket) return
   jiraSaving.value = true
+  actionError.value = ''
   try {
     const res = await store.adminSetJira(props.ticket.number, jiraDraft.value.trim())
     emit('updated', { jira_key: res.jira_key })
+  } catch (e) {
+    actionError.value = e.message || 'Could not save the Jira key.'
   } finally {
     jiraSaving.value = false
   }
@@ -224,10 +245,13 @@ async function onSaveJira() {
 async function onSaveCc() {
   if (!props.ticket) return
   ccSaving.value = true
+  actionError.value = ''
   try {
     const res = await store.adminSetCc(props.ticket.number, ccDraft.value)
     ccDraft.value = res.cc_emails
     emit('updated', { cc_emails: res.cc_emails })
+  } catch (e) {
+    actionError.value = e.message || 'Could not save CC recipients.'
   } finally {
     ccSaving.value = false
   }
@@ -272,6 +296,9 @@ async function onSendReply() {
 .status--warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); }
 .status--info { color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent); }
 .status--muted { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 13%, transparent); }
+
+.atd-action-error { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 28px; font-size: 0.82rem; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-bottom: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); flex-shrink: 0; }
+.atd-action-error-x { margin-left: auto; flex-shrink: 0; border: none; background: none; color: var(--destructive); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px; }
 
 /* Details / controls (collapsed by default) */
 .atd-details { flex-shrink: 0; border-bottom: 1px solid var(--border); padding: 0 28px; }
