@@ -26,6 +26,23 @@
       </div>
     </div>
 
+    <!-- Docs deflection: suggest matching pages before a ticket is filed. -->
+    <div v-if="docHints.length" class="ntf-deflect">
+      <p class="ntf-deflect-title">These docs might answer your question</p>
+      <ul class="ntf-deflect-list">
+        <li v-for="d in docHints" :key="d.slug">
+          <RouterLink
+            :to="{ name: 'doc-page', params: { slug: d.slug } }"
+            target="_blank"
+            class="ntf-deflect-link"
+          >
+            <span class="ntf-deflect-doc">{{ d.title }}</span>
+            <span v-if="d.space" class="ntf-deflect-space">{{ d.space }}</span>
+          </RouterLink>
+        </li>
+      </ul>
+    </div>
+
     <div class="ntf-group">
       <label for="nt-message">Message</label>
       <textarea
@@ -63,8 +80,9 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
+import { useDebouncedSearch } from '@/lib/useDebounce'
 
 const emit = defineEmits(['created', 'cancel'])
 const store = useTicketsStore()
@@ -76,6 +94,22 @@ const ccRaw = ref('')
 const errors = reactive({})
 const serverError = ref('')
 const submitting = ref(false)
+
+// Docs deflection — suggest up to 3 matching doc pages as the subject is typed,
+// reusing the existing docs search endpoint. Advisory only; never blocks submit.
+async function searchDocs(q) {
+  try {
+    const r = await fetch(`/api/docs/search/?q=${encodeURIComponent(q)}&match=any`,
+      { credentials: 'same-origin' })
+    if (!r.ok) return []
+    const data = await r.json()
+    return (data.results || []).slice(0, 3)
+  } catch {
+    return []
+  }
+}
+const { results: docHints, search: searchHints } = useDebouncedSearch(searchDocs, 250)
+watch(subject, (v) => searchHints((v || '').trim().length >= 3 ? v : ''))
 
 function validate() {
   Object.keys(errors).forEach((k) => delete errors[k])
@@ -152,6 +186,15 @@ select.ntf-input {
   background-size: 18px;
   padding-right: 34px;
 }
+
+.ntf-deflect { border: 1px solid color-mix(in srgb, var(--info) 22%, var(--border)); background: color-mix(in srgb, var(--info) 5%, var(--card)); border-radius: var(--radius-md); padding: 0.7rem 0.85rem; margin-top: -0.35rem; }
+.ntf-deflect-title { font-size: 0.76rem; font-weight: 650; color: var(--muted-foreground); margin: 0 0 0.4rem; }
+.ntf-deflect-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
+.ntf-deflect-link { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; padding: 0.35rem 0.4rem; border-radius: var(--radius-sm); text-decoration: none; color: var(--foreground); transition: background 0.12s; }
+.ntf-deflect-link:hover { background: color-mix(in srgb, var(--info) 10%, transparent); }
+.ntf-deflect-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.ntf-deflect-doc { font-size: 0.84rem; font-weight: 550; color: var(--brand-accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ntf-deflect-space { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-foreground); }
 
 .ntf-error { font-size: 0.75rem; color: var(--destructive); margin: 0; }
 .ntf-hint { font-size: 0.76rem; color: var(--muted-foreground); margin: 0; }

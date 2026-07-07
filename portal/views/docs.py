@@ -505,16 +505,32 @@ def search_docs(request):
     # tsvector), so on Postgres it errored and search returned nothing in prod.
     # icontains over title + body is reliable on both backends and more than
     # fast enough for this corpus. Title matches rank above body-only matches.
+    #
+    # Two modes: the default (⌘K) matches the whole query as one literal
+    # substring. `match=any` (ticket deflection) matches any individual word so
+    # a multi-word subject that never appears verbatim can still surface docs.
     from django.db.models import Q, Case, When, IntegerField
-    pages = published_pages().filter(
-        Q(title__icontains=q) | Q(raw_storage__icontains=q)
-    ).annotate(
-        _title_hit=Case(
-            When(title__icontains=q, then=0),
-            default=1,
-            output_field=IntegerField(),
-        )
-    ).order_by('_title_hit', 'title')[:20]
+    if request.GET.get('match') == 'any':
+        terms = [w for w in q.split() if len(w) >= 3] or [q]
+        body_q = Q()
+        title_q = Q()
+        for w in terms:
+            body_q |= Q(title__icontains=w) | Q(raw_storage__icontains=w)
+            title_q |= Q(title__icontains=w)
+        pages = published_pages().filter(body_q).annotate(
+            _title_hit=Case(When(title_q, then=0), default=1,
+                            output_field=IntegerField())
+        ).order_by('_title_hit', 'title')[:20]
+    else:
+        pages = published_pages().filter(
+            Q(title__icontains=q) | Q(raw_storage__icontains=q)
+        ).annotate(
+            _title_hit=Case(
+                When(title__icontains=q, then=0),
+                default=1,
+                output_field=IntegerField(),
+            )
+        ).order_by('_title_hit', 'title')[:20]
 
     results = []
     for p in pages:
