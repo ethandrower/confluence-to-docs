@@ -45,10 +45,7 @@ def _send(subject, recipients, *, heading, body, cta_label, cta_url, note=''):
     try:
         text = render_to_string('emails/notification.txt', ctx)
         html = render_to_string('emails/notification.html', ctx)
-        msg = EmailMultiAlternatives(
-            subject, text, _from(), recipients,
-            headers={'X-Mailgun-Track-Opens': 'no', 'X-Mailgun-Track-Clicks': 'no'},
-        )
+        msg = EmailMultiAlternatives(subject, text, _from(), recipients)
         msg.attach_alternative(html, 'text/html')
         sent = msg.send()
         logger.info("file_notify sent (%s) → %s (sent=%s)", subject, recipients, sent)

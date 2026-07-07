@@ -15,7 +15,7 @@ Pillow>=10.0
 # Production / deploy
 gunicorn>=21.2
 whitenoise>=6.6
-django-mailgun-provider==0.2.3
+django-anymail[mailgun]>=15,<16
 markdown>=3.5
 
 # Atlassian Trinity — Confluence/Jira/Bitbucket CLI used by sync_from_mcp

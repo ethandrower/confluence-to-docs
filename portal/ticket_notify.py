@@ -82,8 +82,6 @@ def _thread_headers(ticket, message):
     headers = {
         'Message-ID': message.email_message_id,
         'Reply-To': f'ticket-{ticket.number}+{message.reply_token}@{domain}',
-        'X-Mailgun-Track-Opens': 'no',
-        'X-Mailgun-Track-Clicks': 'no',
     }
     if prior_ids:
         headers['In-Reply-To'] = prior_ids[-1]
@@ -161,8 +159,7 @@ def _notify_support_new(ticket, first_message):
             'cta_url': f'{_site()}/manage',
         })
         msg = EmailMultiAlternatives(
-            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support],
-            headers={'X-Mailgun-Track-Opens': 'no', 'X-Mailgun-Track-Clicks': 'no'})
+            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support])
         sent = msg.send()
         logger.info('ticket_notify staff-new sent → %s (sent=%s)', support, sent)
     except Exception as e:
@@ -197,8 +194,7 @@ def notify_customer_reply(ticket, message):
             'cta_url': f'{_site()}/manage',
         })
         msg = EmailMultiAlternatives(
-            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support],
-            headers={'X-Mailgun-Track-Opens': 'no', 'X-Mailgun-Track-Clicks': 'no'})
+            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support])
         sent = msg.send()
         logger.info('ticket_notify customer-reply sent → %s (sent=%s)', support, sent)
     except Exception as e:
