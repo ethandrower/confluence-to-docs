@@ -21,6 +21,17 @@
       <p>Have a question, found an issue, or need help? Send us a message and our team will get back to you.</p>
     </div>
 
+    <!-- Signed-in notice -->
+    <div v-if="auth.user" class="signin-notice" role="note">
+      <svg class="signin-notice-icon" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+      </svg>
+      <p>
+        You're signed in — open a support ticket instead to track replies and history.
+        <RouterLink :to="{ name: 'support' }" class="signin-notice-link">Go to support tickets</RouterLink>
+      </p>
+    </div>
+
     <!-- Form card -->
     <div v-if="!submitted" class="form-card">
       <form @submit.prevent="submit" class="contact-form">
@@ -123,6 +134,9 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import axios from 'axios'
+import { useAuthStore } from '@/stores/auth.js'
+
+const auth = useAuthStore()
 
 const form = reactive({
   name: '',
@@ -256,6 +270,50 @@ function reset() {
   line-height: 1.6;
   max-width: 440px;
   margin-inline: auto;
+}
+
+/* ── Signed-in notice ── */
+.signin-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--info) 25%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--info) 7%, var(--card));
+}
+
+.signin-notice-icon {
+  color: var(--info);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.signin-notice p {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.signin-notice-link {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  color: var(--info);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--info) 40%, transparent);
+  white-space: nowrap;
+}
+
+.signin-notice-link:hover {
+  text-decoration-color: var(--info);
+}
+
+.signin-notice-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* ── Form card ── */
