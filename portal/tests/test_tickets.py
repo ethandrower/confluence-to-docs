@@ -448,6 +448,26 @@ class AdminTicketApiTests(TestCase):
             f'/api/admin/tickets/{self.t.number}/messages/{m.id}/resend/')
         self.assertEqual(r.status_code, 403)
 
+    def test_resend_rejects_non_staff_message(self):
+        # Resend is for staff replies only — never re-emit a customer's own
+        # message back to them dressed up as a staff reply.
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.cust, body='my question', origin='portal',
+            delivery_status=TicketMessage.DELIVERY_FAILED)
+        self._login()
+        r = self.client.post(
+            f'/api/admin/tickets/{self.t.number}/messages/{m.id}/resend/')
+        self.assertEqual(r.status_code, 400)
+
+    def test_resend_rejects_internal_note(self):
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='note', origin='staff',
+            is_internal=True, delivery_status=TicketMessage.DELIVERY_NA)
+        self._login()
+        r = self.client.post(
+            f'/api/admin/tickets/{self.t.number}/messages/{m.id}/resend/')
+        self.assertEqual(r.status_code, 400)
+
     def test_resend_rejects_message_from_other_ticket(self):
         other = Ticket.objects.create(company=self.acme, created_by=self.cust,
                                       subject='Other')

@@ -169,6 +169,12 @@ def resend_message(request, number, message_id):
     m = TicketMessage.objects.filter(id=message_id, ticket=t).first()
     if not m:
         return JsonResponse({'error': 'Not found'}, status=404)
+    # Resend only re-emits staff replies to the customer. Never re-send a
+    # customer's own message (would arrive dressed as a staff reply) or an
+    # internal note (never leaves the building).
+    if m.origin != TicketMessage.ORIGIN_STAFF or m.is_internal:
+        return JsonResponse({'error': 'Only staff replies can be resent'},
+                            status=400)
     if is_rate_limited('ticket-resend', f't{t.number}', 10, 60 * 60):
         return JsonResponse({'error': 'Too many resends, try later'}, status=429)
     ticket_notify.notify_staff_reply(t, m)
