@@ -141,6 +141,54 @@ class TicketNotifyTests(TestCase):
         m.refresh_from_db()
         self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_NA)
 
+    def test_send_captures_esp_message_id(self):
+        # Anymail's test backend exposes anymail_status.message_id; we store it
+        # so delivery webhooks can correlate events back to this message.
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='hi', origin='staff')
+        from portal import ticket_notify
+        with override_settings(EMAIL_BACKEND='anymail.backends.test.EmailBackend'):
+            ticket_notify.notify_staff_reply(self.t, m)
+        m.refresh_from_db()
+        self.assertTrue(m.esp_message_id)
+
+    def test_delivery_webhook_marks_delivered(self):
+        from anymail.signals import tracking, AnymailTrackingEvent
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<abc@mg>')
+        tracking.send(sender=object,
+                      event=AnymailTrackingEvent(event_type='delivered', message_id='<abc@mg>'),
+                      esp_name='Mailgun')
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_DELIVERED)
+
+    def test_delivery_webhook_marks_bounced_with_reason(self):
+        from anymail.signals import tracking, AnymailTrackingEvent
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<b@mg>')
+        tracking.send(sender=object,
+                      event=AnymailTrackingEvent(event_type='bounced', message_id='<b@mg>',
+                                                 description='mailbox full'),
+                      esp_name='Mailgun')
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_BOUNCED)
+        self.assertIn('mailbox full', m.delivery_detail)
+
+    def test_delivery_webhook_ignores_unknown_message_id(self):
+        from anymail.signals import tracking, AnymailTrackingEvent
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<known@mg>')
+        # Event for a different id (e.g. a magic-link email) must not touch us.
+        tracking.send(sender=object,
+                      event=AnymailTrackingEvent(event_type='delivered', message_id='<other@mg>'),
+                      esp_name='Mailgun')
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_SENT)
+
     def test_status_notification_does_not_overwrite_anchor_delivery(self):
         # notify_status reuses an existing message as a threading anchor; it
         # must not clobber that message's own delivery_status.

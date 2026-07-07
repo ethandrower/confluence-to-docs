@@ -411,12 +411,16 @@ class TicketMessage(models.Model):
     # replies). 'queued' is reserved for Tier B (async webhook delivery truth).
     DELIVERY_NA = 'not_applicable'
     DELIVERY_QUEUED = 'queued'
-    DELIVERY_SENT = 'sent'
-    DELIVERY_FAILED = 'failed'
+    DELIVERY_SENT = 'sent'          # accepted by the ESP; awaiting a delivery event
+    DELIVERY_DELIVERED = 'delivered'  # Tier B: Mailgun confirmed delivery
+    DELIVERY_BOUNCED = 'bounced'    # Tier B: bounced / rejected / complained
+    DELIVERY_FAILED = 'failed'      # submission to the ESP failed
     DELIVERY_CHOICES = [
         (DELIVERY_NA, 'Not applicable'),
         (DELIVERY_QUEUED, 'Queued'),
         (DELIVERY_SENT, 'Sent'),
+        (DELIVERY_DELIVERED, 'Delivered'),
+        (DELIVERY_BOUNCED, 'Bounced'),
         (DELIVERY_FAILED, 'Failed'),
     ]
 
@@ -431,6 +435,10 @@ class TicketMessage(models.Model):
                                        default=DELIVERY_NA)
     delivery_detail = models.CharField(max_length=256, blank=True)  # admin-only
     delivery_attempted_at = models.DateTimeField(null=True, blank=True)
+    # ESP (Mailgun) message-id captured at send, used to correlate delivery
+    # webhook events back to this message (Tier B). Distinct from
+    # email_message_id (our RFC-5322 Message-ID used for inbox threading).
+    esp_message_id = models.CharField(max_length=256, blank=True, db_index=True)
     # Phase-2 email-threading plumbing, populated on outbound sends now.
     email_message_id = models.CharField(max_length=256, blank=True)
     reply_token = models.CharField(max_length=64, blank=True)

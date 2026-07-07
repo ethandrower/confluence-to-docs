@@ -69,14 +69,14 @@
             <span class="msg-time">{{ fmtWhen(m.created_at) }}</span>
           </div>
           <p class="msg-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="msg-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
-          <div v-if="m.is_staff && m.delivery_status === 'sent'" class="msg-delivery msg-delivery--ok" aria-live="polite">
+          <div v-if="m.is_staff && (m.delivery_status === 'delivered' || m.delivery_status === 'sent')" class="msg-delivery msg-delivery--ok" aria-live="polite">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-            Sent
+            {{ m.delivery_status === 'delivered' ? 'Delivered' : 'Sent' }}
           </div>
-          <div v-else-if="m.is_staff && m.delivery_status === 'failed'" class="msg-delivery msg-delivery--fail" aria-live="polite">
+          <div v-else-if="m.is_staff && (m.delivery_status === 'failed' || m.delivery_status === 'bounced')" class="msg-delivery msg-delivery--fail" aria-live="polite">
             <span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
-              Not delivered<span v-if="m.delivery_detail" class="msg-delivery-detail"> · {{ m.delivery_detail }}</span>
+              {{ m.delivery_status === 'bounced' ? 'Bounced' : 'Not delivered' }}<span v-if="m.delivery_detail" class="msg-delivery-detail"> · {{ m.delivery_detail }}</span>
             </span>
             <button class="msg-retry" :disabled="resendingId === m.id" @click="onResend(m)">
               {{ resendingId === m.id ? 'Retrying…' : 'Retry' }}
