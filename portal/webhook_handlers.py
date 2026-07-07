@@ -1,10 +1,12 @@
-"""Inbound ESP webhook handling.
+"""ESP delivery-tracking (ECD-2248).
 
-Tier B delivery tracking (ECD-2248): Anymail's Mailgun tracking webhook view
-verifies the signature and fires the `anymail.signals.tracking` signal for each
-delivery event. We map that event back to the TicketMessage it belongs to (via
-the ESP message-id captured at send) and enrich its delivery_status so staff
-see true delivered/bounced state, not just "the API accepted it".
+Two entry points feed the same status-apply logic:
+  - the Mailgun tracking webhook (Anymail signal) — real-time, used in prod;
+  - the `poll_mailgun_events` command — pulls the Mailgun Events API, used
+    where the webhook can't reach us (local dev) and as a prod backstop for
+    missed events.
+Both map an ESP delivery event to the TicketMessage that triggered the send
+(via the ESP message-id captured at send) and update its delivery_status.
 """
 import logging
 
@@ -13,39 +15,50 @@ from django.dispatch import receiver
 
 logger = logging.getLogger(__name__)
 
-# Anymail normalizes ESP event types. We only act on terminal delivery outcomes.
-_DELIVERED = {'delivered'}
-_FAILED = {'bounced', 'rejected', 'failed', 'complained'}
+# Anymail-normalized / Mailgun event types → terminal delivery outcomes.
+DELIVERED_EVENTS = {'delivered'}
+FAILED_EVENTS = {'bounced', 'rejected', 'failed', 'complained', 'permanent_fail'}
 
 
-@receiver(tracking)
-def handle_esp_tracking(sender, event, esp_name=None, **kwargs):
-    # Imported lazily to avoid app-loading order issues.
+def _find_message(esp_message_id):
+    """Match tolerantly on the ESP message-id — the Events API returns it
+    without angle brackets, Anymail/our capture may include them."""
     from portal.models import TicketMessage
+    if not esp_message_id:
+        return None
+    bare = esp_message_id.strip('<>')
+    for candidate in (esp_message_id, bare, f'<{bare}>'):
+        m = TicketMessage.objects.filter(esp_message_id=candidate).first()
+        if m:
+            return m
+    return None
 
-    mid = getattr(event, 'message_id', None)
-    event_type = getattr(event, 'event_type', None)
-    if not mid or event_type not in (_DELIVERED | _FAILED):
-        return
 
-    msg = TicketMessage.objects.filter(esp_message_id=mid).first()
+def apply_delivery_event(esp_message_id, event_type, reason=''):
+    """Update the matching ticket message's delivery_status. Returns True if a
+    message was updated. Ignores non-terminal events and unknown ids."""
+    from portal.models import TicketMessage
+    if event_type not in (DELIVERED_EVENTS | FAILED_EVENTS):
+        return False
+    msg = _find_message(esp_message_id)
     if not msg:
-        # Event for a non-ticket email (magic link, contact form, file share).
-        return
-
-    if event_type in _DELIVERED:
+        return False  # event for a non-ticket email (magic link, etc.)
+    if event_type in DELIVERED_EVENTS:
         msg.delivery_status = TicketMessage.DELIVERY_DELIVERED
         msg.delivery_detail = ''
     else:
         msg.delivery_status = TicketMessage.DELIVERY_BOUNCED
-        if event_type == 'complained':
-            reason = 'spam complaint'
-        else:
-            reason = (getattr(event, 'description', None)
-                      or getattr(event, 'reject_reason', None)
-                      or event_type)
-        msg.delivery_detail = str(reason)[:256]
-
+        msg.delivery_detail = (('spam complaint' if event_type == 'complained'
+                                else reason) or event_type)[:256]
     msg.save(update_fields=['delivery_status', 'delivery_detail'])
-    logger.info('ticket delivery event=%s msg=%s esp_id=%s → %s',
-                event_type, msg.id, mid, msg.delivery_status)
+    logger.info('delivery event=%s esp_id=%s msg=%s → %s',
+                event_type, esp_message_id, msg.id, msg.delivery_status)
+    return True
+
+
+@receiver(tracking)
+def handle_esp_tracking(sender, event, esp_name=None, **kwargs):
+    reason = (getattr(event, 'description', None)
+              or getattr(event, 'reject_reason', None) or '')
+    apply_delivery_event(getattr(event, 'message_id', None),
+                         getattr(event, 'event_type', None), reason)

@@ -61,6 +61,11 @@
     {
       "command": "python manage.py cleanup_expired_tokens",
       "schedule": "0 3 * * *"
+    },
+    {
+      "comment": "Backstop for the Mailgun delivery webhook — reconciles any events it missed (ECD-2248).",
+      "command": "python manage.py poll_mailgun_events --hours 1",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

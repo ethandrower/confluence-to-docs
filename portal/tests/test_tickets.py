@@ -177,6 +177,17 @@ class TicketNotifyTests(TestCase):
         self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_BOUNCED)
         self.assertIn('mailbox full', m.delivery_detail)
 
+    def test_apply_delivery_event_matches_bracketless_id(self):
+        # The Events API returns the message-id WITHOUT angle brackets; our
+        # stored esp_message_id has them. Matching must be bracket-tolerant.
+        from portal.webhook_handlers import apply_delivery_event
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, body='hi', origin='staff',
+            delivery_status=TicketMessage.DELIVERY_SENT, esp_message_id='<abc@mg>')
+        self.assertTrue(apply_delivery_event('abc@mg', 'delivered'))
+        m.refresh_from_db()
+        self.assertEqual(m.delivery_status, TicketMessage.DELIVERY_DELIVERED)
+
     def test_delivery_webhook_ignores_unknown_message_id(self):
         from anymail.signals import tracking, AnymailTrackingEvent
         m = TicketMessage.objects.create(
