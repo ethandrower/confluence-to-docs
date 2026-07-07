@@ -58,7 +58,7 @@
 
     <div class="ntf-group">
       <label for="nt-cc">CC emails <span class="ntf-optional">(optional)</span></label>
-      <EmailChipsInput id="nt-cc" v-model="ccList" aria-label="CC email addresses" />
+      <EmailChipsInput input-id="nt-cc" v-model="ccList" aria-label="CC email addresses" />
       <p class="ntf-hint">Type an address and press comma or Enter. They'll be copied on replies.</p>
     </div>
 
