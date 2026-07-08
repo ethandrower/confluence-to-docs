@@ -10,16 +10,21 @@
       </span>
     </header>
 
-    <ol class="tt-messages" role="list">
-      <li v-for="m in ticket.messages" :key="m.id" class="tt-msg" :class="{ 'tt-msg--staff': m.is_staff, 'tt-msg--mine': !m.is_staff }">
-        <div class="tt-msg-head">
-          <span v-if="m.is_staff" class="tt-badge">CiteMed</span>
-          <span class="tt-author">{{ m.author_name }}</span>
-          <span class="tt-time">{{ fullDate(m.created_at) }}</span>
-        </div>
-        <p class="tt-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="tt-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
-      </li>
-    </ol>
+    <div class="tt-scroll-wrap">
+      <ol ref="containerRef" class="tt-messages" role="list" @scroll="checkAtBottom">
+        <li v-for="m in ticket.messages" :key="m.id" class="tt-msg" :class="{ 'tt-msg--staff': m.is_staff, 'tt-msg--mine': !m.is_staff }">
+          <div class="tt-msg-head">
+            <span v-if="m.is_staff" class="tt-badge">CiteMed</span>
+            <span class="tt-author">{{ m.author_name }}</span>
+            <span class="tt-time">{{ fullDate(m.created_at) }}</span>
+          </div>
+          <p class="tt-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="tt-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
+        </li>
+      </ol>
+      <button v-if="showNewPill" type="button" class="tt-newpill" @click="scrollToBottom(true)">
+        New messages ↓
+      </button>
+    </div>
 
     <p v-if="isClosed" class="tt-reopen-note">
       This ticket is {{ statusLabel(ticket.status).toLowerCase() }} — replying will reopen it.
@@ -33,6 +38,8 @@
         class="tt-textarea"
         rows="4"
         placeholder="Write your reply…"
+        @focus="textareaFocused = true"
+        @blur="textareaFocused = false"
       />
       <p v-if="serverError" class="tt-error" role="alert">{{ serverError }}</p>
       <div class="tt-reply-actions">
@@ -45,9 +52,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { linkify } from '@/lib/linkify'
+import { usePolling } from '@/lib/usePolling'
+import { useThreadScroll } from '@/lib/useThreadScroll'
 
 const props = defineProps({
   ticket: { type: Object, required: true },
@@ -57,6 +66,20 @@ const store = useTicketsStore()
 const body = ref('')
 const sending = ref(false)
 const serverError = ref('')
+
+const { containerRef, atBottom, showNewPill, checkAtBottom, scrollToBottom, resetToBottom } =
+  useThreadScroll(() => props.ticket.messages.length)
+
+const textareaFocused = ref(false)
+const isTyping = computed(() => textareaFocused.value || body.value.trim() !== '')
+
+// Jump to newest when navigating to a different ticket in the same component.
+watch(() => props.ticket.number, () => resetToBottom())
+
+usePolling(() => store.fetchTicket(props.ticket.number, { silent: true }), {
+  intervalMs: 10000,
+  enabled: () => !isTyping.value,
+})
 
 const isClosed = computed(() => props.ticket.status === 'resolved' || props.ticket.status === 'closed')
 
@@ -91,6 +114,7 @@ async function submit() {
   try {
     await store.reply(props.ticket.number, text)
     body.value = ''
+    nextTick(() => scrollToBottom(true))
   } catch (e) {
     serverError.value = e.message || 'Failed to send reply. Please try again.'
   } finally {
@@ -119,7 +143,18 @@ export default { name: 'TicketThread' }
 .status--info { color: var(--info); }
 .status--muted { color: var(--muted-foreground); }
 
+.tt-scroll-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
 .tt-messages { list-style: none; margin: 0; padding: 1rem 0; display: grid; gap: 0.75rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; }
+.tt-newpill {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 0.78rem; font-weight: 600;
+  color: var(--primary-foreground); background: var(--primary);
+  border: none; border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--foreground) 18%, transparent);
+}
+.tt-newpill:hover { filter: brightness(0.95); }
+.tt-newpill:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .tt-msg {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);

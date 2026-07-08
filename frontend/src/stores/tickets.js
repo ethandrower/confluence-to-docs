@@ -18,29 +18,31 @@ export const useTicketsStore = defineStore('tickets', () => {
   const loading = ref(false)
   const error = ref('')
 
-  async function fetchTickets() {
-    loading.value = true
-    error.value = ''
+  async function fetchTickets({ silent = false } = {}) {
+    if (!silent) loading.value = true
+    if (!silent) error.value = ''
     try {
       const data = await api('/tickets/')
       tickets.value = data.tickets
     } catch (e) {
-      error.value = e.message
+      if (!silent) error.value = e.message
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 
-  async function fetchTicket(number) {
-    loading.value = true
-    error.value = ''
+  async function fetchTicket(number, { silent = false } = {}) {
+    if (!silent) loading.value = true
+    if (!silent) error.value = ''
     try {
       current.value = await api(`/tickets/${number}/`)
     } catch (e) {
-      error.value = e.message
-      current.value = null
+      if (!silent) {
+        error.value = e.message
+        current.value = null
+      }
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 
