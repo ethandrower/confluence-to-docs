@@ -147,11 +147,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDocsStore } from '@/stores/docs.js'
 import { useTicketsStore } from '@/stores/tickets.js'
+import { usePolling } from '@/lib/usePolling'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
@@ -164,19 +165,25 @@ const auth = useAuthStore()
 const store = useDocsStore()
 const tickets = useTicketsStore()
 
-// Awaiting-reply count for the admin "Tickets" nav badge. Fetched once when
-// the user resolves to an admin (auth.user populates after the router guard's
-// fetchMe, which may be after mount).
+// Awaiting-reply count for the admin "Tickets" nav badge. Polled every 15s
+// while the tab is visible and the user is an admin; fires immediately on
+// mount/refocus so it still loads promptly once auth.user resolves.
 const awaitingCount = ref(0)
-let awaitingLoaded = false
-watch(() => auth.user?.is_admin, (isAdmin) => {
-  if (isAdmin && !awaitingLoaded) {
-    awaitingLoaded = true
-    tickets.adminInbox()
-      .then((d) => { awaitingCount.value = d.awaiting_total || 0 })
-      .catch(() => {})
+
+async function refreshAwaiting() {
+  if (!auth.user?.is_admin) return
+  try {
+    const d = await tickets.adminInbox()
+    awaitingCount.value = d.awaiting_total || 0
+  } catch {
+    // ignore — badge just stays at its last value
   }
-}, { immediate: true })
+}
+
+usePolling(refreshAwaiting, {
+  intervalMs: 15000,
+  enabled: () => !!auth.user?.is_admin,
+})
 
 async function signOut() {
   mobileOpen.value = false
