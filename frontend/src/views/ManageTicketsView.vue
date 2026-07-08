@@ -97,6 +97,7 @@ import AdminTicketList from '@/components/support/AdminTicketList.vue'
 import AdminTicketDetail from '@/components/support/AdminTicketDetail.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useTicketsStore } from '@/stores/tickets'
+import { usePolling } from '@/lib/usePolling'
 
 const store = useTicketsStore()
 
@@ -120,25 +121,25 @@ async function loadCompanies(force = false) {
   if (r.ok) companies.value = (await r.json()).companies
 }
 
-async function loadInbox() {
-  listLoading.value = true
+async function loadInbox({ silent = false } = {}) {
+  if (!silent) listLoading.value = true
   try {
     const data = await store.adminInbox()
     list.value = data.tickets
     inboxTotal.value = data.awaiting_total
     truncated.value = false
   } finally {
-    listLoading.value = false
+    if (!silent) listLoading.value = false
   }
 }
-async function loadAll() {
-  listLoading.value = true
+async function loadAll({ silent = false } = {}) {
+  if (!silent) listLoading.value = true
   try {
     const data = await store.adminList({ company: allCompany.value, status: allStatus.value })
     list.value = data.tickets
     truncated.value = !!data.truncated
   } finally {
-    listLoading.value = false
+    if (!silent) listLoading.value = false
   }
 }
 function openInbox() {
@@ -233,6 +234,10 @@ async function refresh() {
 onMounted(() => {
   loadCompanies()
   loadInbox()
+})
+
+usePolling(() => (mode.value === 'inbox' ? loadInbox({ silent: true }) : loadAll({ silent: true })), {
+  intervalMs: 15000,
 })
 </script>
 
