@@ -40,6 +40,7 @@
               :loading="detailLoading"
               @back="selectedNumber = null"
               @updated="onDetailUpdated"
+              @refreshed="onDetailRefreshed"
             />
           </section>
         </div>
@@ -171,6 +172,14 @@ function onDetailUpdated(patch) {
     // Reply moved the ticket out of the inbox queue — refresh the count quietly.
     loadInbox()
   }
+}
+
+function onDetailRefreshed(fresh) {
+  // Only apply if it's still the open ticket (a poll can resolve after switching).
+  if (!fresh || selectedNumber.value !== fresh.number) return
+  selected.value = fresh
+  const row = list.value.find((t) => t.number === fresh.number)
+  if (row && row.status !== fresh.status) row.status = fresh.status
 }
 
 // New ticket modal

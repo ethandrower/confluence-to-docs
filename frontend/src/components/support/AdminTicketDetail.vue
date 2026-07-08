@@ -67,7 +67,8 @@
       </details>
 
       <!-- Conversation -->
-      <ol class="atd-thread" role="list">
+      <div class="atd-scroll-wrap">
+      <ol ref="containerRef" class="atd-thread" role="list" @scroll="checkAtBottom">
         <li v-for="m in ticket.messages" :key="m.id" class="msg" :class="{ 'msg--staff': m.is_staff, 'msg--internal': m.is_internal }">
           <div class="msg-head">
             <span v-if="m.is_internal" class="msg-badge msg-badge--internal">Internal</span>
@@ -92,6 +93,10 @@
         </li>
         <li v-if="!ticket.messages.length" class="msg-empty">No messages yet.</li>
       </ol>
+      <button v-if="showNewPill" type="button" class="atd-newpill" @click="scrollToBottom(true)">
+        New messages ↓
+      </button>
+      </div>
 
       <details class="activity-feed">
         <summary>Activity ({{ ticket.activity.length }})</summary>
@@ -106,7 +111,7 @@
       <!-- Docked composer -->
       <form class="composer" @submit.prevent="onSendReply">
         <label for="admin-reply-body">Reply to {{ ticket.display_number }}</label>
-        <textarea id="admin-reply-body" v-model="replyBody" class="composer-textarea" rows="3" placeholder="Write a reply…" />
+        <textarea id="admin-reply-body" v-model="replyBody" class="composer-textarea" rows="3" placeholder="Write a reply…" @focus="replyFocused = true" @blur="replyFocused = false" />
         <p v-if="replyError" class="form-error" role="alert">{{ replyError }}</p>
         <div class="composer-actions">
           <label class="internal-toggle">
@@ -127,12 +132,14 @@ import { ref, watch, computed, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { linkify } from '@/lib/linkify'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
+import { usePolling } from '@/lib/usePolling'
+import { useThreadScroll } from '@/lib/useThreadScroll'
 
 const props = defineProps({
   ticket: { type: Object, default: null },
   loading: { type: Boolean, default: false },
 })
-const emit = defineEmits(['back', 'updated'])
+const emit = defineEmits(['back', 'updated', 'refreshed'])
 
 const store = useTicketsStore()
 
@@ -199,6 +206,24 @@ const resendingId = ref(null)
 // believing it stuck.
 const actionError = ref('')
 
+const { containerRef, showNewPill, checkAtBottom, scrollToBottom, resetToBottom } =
+  useThreadScroll(() => props.ticket?.messages?.length ?? 0)
+
+const replyFocused = ref(false)
+const isComposing = computed(() => replyFocused.value || replyBody.value.trim() !== '')
+
+// Reset scroll to newest when a different ticket is opened.
+watch(() => props.ticket?.number, () => resetToBottom())
+
+usePolling(async () => {
+  if (!props.ticket) return
+  const fresh = await store.adminTicket(props.ticket.number)
+  emit('refreshed', fresh)
+}, {
+  intervalMs: 10000,
+  enabled: () => !!props.ticket && !isComposing.value,
+})
+
 async function onResend(m) {
   if (!props.ticket) return
   resendingId.value = m.id
@@ -223,7 +248,7 @@ function syncDrafts(t) {
   replyInternal.value = false
   replyError.value = ''
 }
-watch(() => props.ticket, syncDrafts, { immediate: true })
+watch(() => props.ticket?.number, () => syncDrafts(props.ticket), { immediate: true })
 
 // On mobile, selecting a ticket slides in this pane; move focus to the subject
 // heading so keyboard/AT users land in the opened conversation. Desktop keeps
@@ -289,6 +314,7 @@ async function onSendReply() {
     replyInternal.value = false
     emit('updated', { message: res.message, status: res.status })
     statusDraft.value = res.status
+    nextTick(() => scrollToBottom(true))
   } catch (e) {
     replyError.value = e.message || 'Failed to send. Please try again.'
   } finally {
@@ -362,7 +388,18 @@ async function onSendReply() {
 
 /* Conversation — the hero. A subtle canvas so the pane reads as an
    intentional workspace, not a blank void when a thread is short. */
+.atd-scroll-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
 .atd-thread { list-style: none; margin: 0; padding: 24px 28px; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 14px; align-content: start; background: color-mix(in srgb, var(--muted) 55%, var(--background)); }
+.atd-newpill {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 0.78rem; font-weight: 600;
+  color: var(--primary-foreground); background: var(--primary);
+  border: none; border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--foreground) 18%, transparent);
+}
+.atd-newpill:hover { filter: brightness(0.95); }
+.atd-newpill:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 14px 16px; max-width: min(82%, 640px); box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent); }
 /* Chat alignment: customer on the left, CiteMed/staff (incl. internal notes) on the right. */
 .msg--staff, .msg--internal { margin-left: auto; }
