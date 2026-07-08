@@ -59,6 +59,7 @@ import TicketList from '@/components/support/TicketList.vue'
 import TicketThread from '@/components/support/TicketThread.vue'
 import NewTicketForm from '@/components/support/NewTicketForm.vue'
 import { useTicketsStore } from '@/stores/tickets'
+import { usePolling } from '@/lib/usePolling'
 
 const props = defineProps({
   number: { type: [String, Number], default: null },
@@ -77,6 +78,11 @@ function load() {
     store.fetchTickets()
   }
 }
+
+usePolling(() => store.fetchTickets({ silent: true }), {
+  intervalMs: 15000,
+  enabled: () => !props.number,
+})
 
 function onCreated(ticket) {
   showForm.value = false
