@@ -96,6 +96,7 @@
       <button v-if="showNewPill" type="button" class="atd-newpill" @click="scrollToBottom(true)">
         New messages ↓
       </button>
+      <span class="sr-only" role="status" aria-live="polite">{{ showNewPill ? 'New messages below' : '' }}</span>
       </div>
 
       <details class="activity-feed">

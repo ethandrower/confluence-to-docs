@@ -18,31 +18,40 @@ export const useTicketsStore = defineStore('tickets', () => {
   const loading = ref(false)
   const error = ref('')
 
+  // Monotonic request-sequence guards: when a silent poll for one ticket/list
+  // resolves after a newer navigation-driven fetch has already started, its
+  // response must not stomp the newer one's state.
+  let ticketReqSeq = 0
+  let ticketsReqSeq = 0
+
   async function fetchTickets({ silent = false } = {}) {
+    const seq = ++ticketsReqSeq
     if (!silent) loading.value = true
     if (!silent) error.value = ''
     try {
       const data = await api('/tickets/')
-      tickets.value = data.tickets
+      if (seq === ticketsReqSeq) tickets.value = data.tickets
     } catch (e) {
-      if (!silent) error.value = e.message
+      if (seq === ticketsReqSeq && !silent) error.value = e.message
     } finally {
-      if (!silent) loading.value = false
+      if (seq === ticketsReqSeq && !silent) loading.value = false
     }
   }
 
   async function fetchTicket(number, { silent = false } = {}) {
+    const seq = ++ticketReqSeq
     if (!silent) loading.value = true
     if (!silent) error.value = ''
     try {
-      current.value = await api(`/tickets/${number}/`)
+      const data = await api(`/tickets/${number}/`)
+      if (seq === ticketReqSeq) current.value = data
     } catch (e) {
-      if (!silent) {
+      if (seq === ticketReqSeq && !silent) {
         error.value = e.message
         current.value = null
       }
     } finally {
-      if (!silent) loading.value = false
+      if (seq === ticketReqSeq && !silent) loading.value = false
     }
   }
 

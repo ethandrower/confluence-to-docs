@@ -24,6 +24,7 @@
       <button v-if="showNewPill" type="button" class="tt-newpill" @click="scrollToBottom(true)">
         New messages ↓
       </button>
+      <span class="sr-only" role="status" aria-live="polite">{{ showNewPill ? 'New messages below' : '' }}</span>
     </div>
 
     <p v-if="isClosed" class="tt-reopen-note">
@@ -67,7 +68,7 @@ const body = ref('')
 const sending = ref(false)
 const serverError = ref('')
 
-const { containerRef, atBottom, showNewPill, checkAtBottom, scrollToBottom, resetToBottom } =
+const { containerRef, showNewPill, checkAtBottom, scrollToBottom, resetToBottom } =
   useThreadScroll(() => props.ticket.messages.length)
 
 const textareaFocused = ref(false)

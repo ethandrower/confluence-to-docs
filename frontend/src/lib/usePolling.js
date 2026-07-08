@@ -53,7 +53,7 @@ export function usePolling(fn, { intervalMs, enabled = () => true }) {
   }
   function onOnline() {
     tick()
-    start()
+    if (document.visibilityState === 'visible') start()
   }
   function onOffline() {
     stop()
