@@ -57,6 +57,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { linkify } from '@/lib/linkify'
 import { usePolling } from '@/lib/usePolling'
+import { useTicketChannel } from '@/lib/useTicketChannel'
 import { useThreadScroll } from '@/lib/useThreadScroll'
 
 const props = defineProps({
@@ -77,9 +78,13 @@ const isTyping = computed(() => textareaFocused.value || body.value.trim() !== '
 // Jump to newest when navigating to a different ticket in the same component.
 watch(() => props.ticket.number, () => resetToBottom())
 
+const { connected } = useTicketChannel(
+  () => `/ws/tickets/${props.ticket.number}/`,
+  () => { if (!isTyping.value) store.fetchTicket(props.ticket.number, { silent: true }) },
+)
 usePolling(() => store.fetchTicket(props.ticket.number, { silent: true }), {
-  intervalMs: 10000,
-  enabled: () => !isTyping.value,
+  intervalMs: 30000,  // fallback cadence; only runs while the socket is down
+  enabled: () => !connected.value && !isTyping.value,
 })
 
 const isClosed = computed(() => props.ticket.status === 'resolved' || props.ticket.status === 'closed')
