@@ -294,6 +294,8 @@ def ticket_detail(request, number):
     t = _own_ticket(request, number)
     if not t:
         return JsonResponse({'error': 'Not found'}, status=404)
+    # Intentional read-tracking side-effect on GET: opening a thread marks it
+    # read for this user (drives the customer list's unread flag). Not a bug.
     TicketRead.objects.update_or_create(
         user=request.portal_user, ticket=t,
         defaults={'last_read_at': timezone.now()})
