@@ -134,6 +134,7 @@ import { useTicketsStore } from '@/stores/tickets'
 import { linkify } from '@/lib/linkify'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 import { usePolling } from '@/lib/usePolling'
+import { useTicketChannel } from '@/lib/useTicketChannel'
 import { useThreadScroll } from '@/lib/useThreadScroll'
 
 const props = defineProps({
@@ -216,13 +217,18 @@ const isComposing = computed(() => replyFocused.value || replyBody.value.trim() 
 // Reset scroll to newest when a different ticket is opened.
 watch(() => props.ticket?.number, () => resetToBottom())
 
-usePolling(async () => {
-  if (!props.ticket) return
+async function refreshFromServer() {
+  if (!props.ticket || isComposing.value) return
   const fresh = await store.adminTicket(props.ticket.number)
   emit('refreshed', fresh)
-}, {
-  intervalMs: 10000,
-  enabled: () => !!props.ticket && !isComposing.value,
+}
+const { connected } = useTicketChannel(
+  () => (props.ticket ? `/ws/tickets/${props.ticket.number}/` : null),
+  () => { refreshFromServer() },
+)
+usePolling(refreshFromServer, {
+  intervalMs: 30000,
+  enabled: () => !!props.ticket && !connected.value && !isComposing.value,
 })
 
 async function onResend(m) {
