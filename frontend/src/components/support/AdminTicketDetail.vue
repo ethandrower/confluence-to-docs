@@ -73,6 +73,7 @@
           <div class="msg-head">
             <span v-if="m.is_internal" class="msg-badge msg-badge--internal">Internal</span>
             <span v-else-if="m.is_staff" class="msg-badge">CiteMed</span>
+            <span v-if="m.origin === 'email'" class="msg-badge msg-badge--email">via email</span>
             <span class="msg-author">{{ m.author_name }}</span>
             <span class="msg-time">{{ fmtWhen(m.created_at) }}</span>
           </div>
@@ -415,6 +416,7 @@ async function onSendReply() {
 .msg-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
 .msg-badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; color: var(--info); background: color-mix(in srgb, var(--info) 16%, transparent); }
 .msg-badge--internal { color: var(--warning); background: color-mix(in srgb, var(--warning) 18%, transparent); }
+.msg-badge--email { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
 .msg-author { font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
 .msg-time { font-size: 0.76rem; color: var(--muted-foreground); margin-left: auto; }
 .msg-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
