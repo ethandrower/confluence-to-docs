@@ -39,12 +39,14 @@ if not DEBUG:
     SECURE_REFERRER_POLICY = 'same-origin'
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'rest_framework',
     'django_celery_beat',
     'anymail',
@@ -82,6 +84,20 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'citemed.wsgi.application'
+
+ASGI_APPLICATION = 'citemed.asgi.application'
+
+# Channels channel layer: Redis in prod (cross-worker broadcast), in-memory
+# locally so dev/tests need no Redis.
+if env('REDIS_URL', default=None):
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [env('REDIS_URL')]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
 
 DATABASES = {
     'default': env.db('DATABASE_URL', default='sqlite:///db.sqlite3')
