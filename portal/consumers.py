@@ -32,6 +32,11 @@ class TicketConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def _can_view(self, user, number):
         from portal.models import Ticket
+        # Customers see only their own company's tickets (for_user is
+        # company-scoped); portal admins/staff handle ALL companies' threads,
+        # so they must not be gated by company.
+        if is_portal_admin(user):
+            return True
         return Ticket.for_user(user).filter(number=number).exists()
 
 
@@ -41,11 +46,15 @@ class AdminInboxConsumer(AsyncJsonWebsocketConsumer):
         if user is None or not await self._is_admin(user):
             await self.close(code=4403)
             return
-        await self.channel_layer.group_add('admins', self.channel_name)
+        self.group = 'admins'
+        await self.channel_layer.group_add(self.group, self.channel_name)
         await self.accept()
 
     async def disconnect(self, code):
-        await self.channel_layer.group_discard('admins', self.channel_name)
+        # Only discard if we actually joined — a rejected connection closes
+        # before group_add, so guard like the other two consumers.
+        if hasattr(self, 'group'):
+            await self.channel_layer.group_discard(self.group, self.channel_name)
 
     async def inbox_changed(self, event):
         await self.send_json({'type': 'inbox.changed',

@@ -69,8 +69,25 @@ class TicketConsumerAuthTest(TransactionTestCase):
         connected, _ = async_to_sync(c.connect)()
         self.assertFalse(connected)
 
+    def test_admin_can_connect_to_any_companys_ticket(self):
+        # Staff/admin handle ALL companies' threads; an admin whose own company
+        # differs from the ticket's company must still be accepted — the
+        # company-scoped for_user() alone would reject them.
+        admin = PortalUser.objects.create(
+            email='staff@citemed.com', company=self.co_b, role=PortalUser.ROLE_ADMIN)
+        c = _connect(f'/ws/tickets/{self.ticket_a.number}/', admin.id)
+        connected = _connect_then_disconnect(c)
+        self.assertTrue(connected)
+
     def test_anonymous_rejected(self):
         c = _connect(f'/ws/tickets/{self.ticket_a.number}/', None)
+        connected, _ = async_to_sync(c.connect)()
+        self.assertFalse(connected)
+
+    def test_stale_user_id_rejected(self):
+        # Session points at a PortalUser row that no longer exists — the
+        # middleware's .first() returns None, distinct from the no-session case.
+        c = _connect(f'/ws/tickets/{self.ticket_a.number}/', 999999)
         connected, _ = async_to_sync(c.connect)()
         self.assertFalse(connected)
 
@@ -92,7 +109,16 @@ class AdminAndCustomerListAuthTest(TransactionTestCase):
         connected = _connect_then_disconnect(c)
         self.assertTrue(connected)
 
-    def test_customer_list_requires_company(self):
+    def test_customer_with_company_accepted(self):
         c = _connect('/ws/customer/tickets/', self.cust.id)
         connected = _connect_then_disconnect(c)
         self.assertTrue(connected)
+
+    def test_customer_without_company_rejected(self):
+        # The `not user.company_id -> close` guard: a user with no company has
+        # no tenant to scope a list to, so the customer-list WS must reject.
+        orphan = PortalUser.objects.create(
+            email='orphan@nowhere.com', company=None, role=PortalUser.ROLE_CUSTOMER)
+        c = _connect('/ws/customer/tickets/', orphan.id)
+        connected, _ = async_to_sync(c.connect)()
+        self.assertFalse(connected)
