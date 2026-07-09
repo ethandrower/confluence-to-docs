@@ -34,7 +34,10 @@ export const useTicketsStore = defineStore('tickets', () => {
     } catch (e) {
       if (seq === ticketsReqSeq && !silent) error.value = e.message
     } finally {
-      if (seq === ticketsReqSeq && !silent) loading.value = false
+      // loading tracks THIS non-silent request's lifecycle — reset it whenever
+      // it finishes. Never gate this on seq: a concurrent silent poll/WS fetch
+      // bumps the counter and would otherwise strand the spinner forever.
+      if (!silent) loading.value = false
     }
   }
 
@@ -51,7 +54,10 @@ export const useTicketsStore = defineStore('tickets', () => {
         current.value = null
       }
     } finally {
-      if (seq === ticketReqSeq && !silent) loading.value = false
+      // loading tracks THIS non-silent request's lifecycle — reset it whenever
+      // it finishes. Never gate this on seq: a concurrent silent poll/WS fetch
+      // bumps the counter and would otherwise strand the spinner forever.
+      if (!silent) loading.value = false
     }
   }
 
