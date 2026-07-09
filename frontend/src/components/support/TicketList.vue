@@ -1,10 +1,14 @@
 <template>
   <div class="tl">
     <ul v-if="tickets.length" class="tl-rows" role="list">
-      <li v-for="t in tickets" :key="t.number" class="tl-row">
+      <li v-for="t in tickets" :key="t.number" class="tl-row" :class="{ 'tl-row--unread': t.unread }">
         <RouterLink :to="{ name: 'support-ticket', params: { number: t.number } }" class="tl-link">
-          <span class="tl-number">{{ t.display_number }}</span>
+          <span class="tl-number">
+            <span v-if="t.unread" class="unread-dot" aria-hidden="true"></span>
+            {{ t.display_number }}
+          </span>
           <span class="tl-subject">{{ t.subject }}</span>
+          <span v-if="t.unread" class="sr-only">Unread new reply</span>
           <span class="tl-status" :class="`status--${statusTone(t.status)}`">
             <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status) }}
           </span>
@@ -68,8 +72,24 @@ function relDate(d) {
 }
 .tl-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--radius-md); }
 
-.tl-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); }
+.tl-number { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); }
 .tl-subject { min-width: 0; font-size: 0.9rem; font-weight: 550; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--brand-accent, var(--info)); flex-shrink: 0; }
+.tl-row--unread { border-color: color-mix(in srgb, var(--brand-accent) 25%, var(--border)); }
+.tl-row--unread .tl-subject { font-weight: 700; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .tl-status { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 600; color: var(--muted-foreground); white-space: nowrap; }
 .tl-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
