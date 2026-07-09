@@ -76,7 +76,15 @@ function relDate(d) {
 .tl-subject { min-width: 0; font-size: 0.9rem; font-weight: 550; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--brand-accent, var(--info)); flex-shrink: 0; }
-.tl-row--unread { border-color: color-mix(in srgb, var(--brand-accent) 25%, var(--border)); }
+/* Unread rows get a restrained highlight: a faint brand tint, a firmer border,
+   and a left accent bar (inset shadow, so it never shifts the row's content). */
+.tl-row--unread {
+  border-color: color-mix(in srgb, var(--brand-accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--brand-accent) 5%, var(--card));
+  box-shadow: inset 3px 0 0 0 var(--brand-accent);
+}
+.tl-row--unread:hover { border-color: color-mix(in srgb, var(--brand-accent) 45%, var(--border)); }
+.tl-row--unread .tl-number { color: var(--foreground); }
 .tl-row--unread .tl-subject { font-weight: 700; }
 
 .sr-only {
