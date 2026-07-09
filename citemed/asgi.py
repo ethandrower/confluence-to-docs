@@ -11,8 +11,14 @@ django_asgi_app = get_asgi_application()
 
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
+from channels.sessions import SessionMiddlewareStack  # noqa: E402
+
+from portal.routing import websocket_urlpatterns  # noqa: E402
+from portal.ws_auth import PortalUserMiddleware  # noqa: E402
 
 application = ProtocolTypeRouter({
     'http': django_asgi_app,
-    'websocket': AllowedHostsOriginValidator(URLRouter([])),  # routes added in Task 3
+    'websocket': AllowedHostsOriginValidator(
+        SessionMiddlewareStack(PortalUserMiddleware(URLRouter(websocket_urlpatterns)))
+    ),
 })
