@@ -34,6 +34,26 @@ def require_portal_user(view_func):
     return wrapped
 
 
+def is_portal_admin(portal_user):
+    """True if this PortalUser is a portal owner/admin, or an active Django
+    superuser matched by email. Single source of truth for admin gating,
+    shared by require_portal_admin and the WS consumers."""
+    if portal_user is None:
+        return False
+    from django.contrib.auth import get_user_model
+    from portal.models import PortalUser
+
+    User = get_user_model()
+    is_super = User.objects.filter(
+        email__iexact=portal_user.email, is_superuser=True, is_active=True
+    ).exists()
+    return (
+        is_super
+        or portal_user.role == PortalUser.ROLE_OWNER
+        or portal_user.role == PortalUser.ROLE_ADMIN
+    )
+
+
 def require_portal_admin(view_func):
     """
     Require an authenticated PortalUser who is an admin — either portal role
@@ -55,13 +75,12 @@ def require_portal_admin(view_func):
             request.session.flush()
             return JsonResponse({'error': 'Authentication required'}, status=401)
 
-        User = get_user_model()
-        is_super = User.objects.filter(
-            email__iexact=user.email, is_superuser=True, is_active=True
-        ).exists()
-        is_owner = is_super or user.role == PortalUser.ROLE_OWNER
-        is_admin = is_owner or user.role == PortalUser.ROLE_ADMIN
-        if not is_admin:
+        is_owner = (
+            user.role == PortalUser.ROLE_OWNER
+            or get_user_model().objects.filter(
+                email__iexact=user.email, is_superuser=True, is_active=True).exists()
+        )
+        if not is_portal_admin(user):
             return JsonResponse({'error': 'Admin access required'}, status=403)
 
         request.portal_user = user
