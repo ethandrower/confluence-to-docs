@@ -95,7 +95,7 @@ def handle_esp_tracking(sender, event, esp_name=None, **kwargs):
 # needed) — the helpers accept that shape too, so both real and fake
 # messages work unchanged.
 
-_RECIPIENT_RE = re.compile(r'ticket-(?P<num>\d+)\+(?P<token>[^@]+)@', re.I)
+_RECIPIENT_RE = re.compile(r'^ticket-(?P<num>\d+)\+(?P<token>[^@]+)@', re.I)
 
 
 def _addr_spec(value):
@@ -186,7 +186,7 @@ def handle_inbound(sender, event, **kwargs):
 
     author = ticket.created_by
     msg = TicketMessage.objects.create(
-        ticket=ticket, author=author, author_email=from_email,
+        ticket=ticket, author=author, author_email=from_email.strip().lower(),
         body=body, origin=TicketMessage.ORIGIN_EMAIL, email_message_id=inbound_id)
     ticket.status = Ticket.STATUS_WAITING_ON_SUPPORT
     ticket.save(update_fields=['status', 'updated_at'])

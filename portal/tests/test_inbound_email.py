@@ -69,3 +69,27 @@ class InboundHandlerTest(TestCase):
                                   attachments=[_attach('a.pdf'), _attach('b.png')]))
         m = self.t.messages.order_by('-id').first()
         self.assertIn('2 attachment', m.body.lower())
+
+    def test_token_from_another_ticket_cannot_post(self):
+        # Ticket B: different number, different reply token.
+        tb = Ticket.objects.create(company=self.co, created_by=self.cust, subject='y')
+        TicketMessage.objects.create(
+            ticket=tb, author=self.cust, author_email='staff@citemed.com',
+            body='hi from b', origin=TicketMessage.ORIGIN_STAFF, reply_token='TOKB')
+        a_before, b_before = self.t.messages.count(), tb.messages.count()
+        # Recipient targets ticket B's NUMBER but ticket A's TOKEN — the token
+        # does not belong to B, so _match_ticket returns None and nothing lands.
+        crafted = f'ticket-{tb.number}+TOK123@notification.citemed.com'
+        self._fire(_inbound_event(recipient=crafted, from_email='cust@acme.com'))
+        self.assertEqual(self.t.messages.count(), a_before)
+        self.assertEqual(tb.messages.count(), b_before)
+        # B's own token still works.
+        good = f'ticket-{tb.number}+TOKB@notification.citemed.com'
+        self._fire(_inbound_event(recipient=good, from_email='cust@acme.com'))
+        self.assertEqual(tb.messages.count(), b_before + 1)
+
+    def test_blank_token_recipient_dropped(self):
+        before = self.t.messages.count()
+        blank = f'ticket-{self.t.number}+@notification.citemed.com'
+        self._fire(_inbound_event(recipient=blank, from_email='cust@acme.com'))
+        self.assertEqual(self.t.messages.count(), before)
