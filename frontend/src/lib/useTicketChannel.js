@@ -1,4 +1,4 @@
-import { ref, onBeforeUnmount } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 
 /**
  * WebSocket client for ticket nudges, with reconnect/backoff and a reactive
@@ -68,6 +68,19 @@ export function useTicketChannel(path, onNudge) {
 
   document.addEventListener('visibilitychange', onVisibility)
   open()
+
+  // If `path` is a reactive getter, follow it: when the resolved path changes
+  // while a socket is live (e.g. the ticket number changes on a reused route
+  // component), tear down the old socket and reconnect to the new group. Stay
+  // closed if the new value is null.
+  if (typeof path === 'function') {
+    watch(pathOf, (next, prev) => {
+      if (next === prev) return
+      retry = 0
+      close()
+      if (next) open()
+    })
+  }
 
   onBeforeUnmount(() => {
     stopped = true
