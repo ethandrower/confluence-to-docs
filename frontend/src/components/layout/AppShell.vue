@@ -153,6 +153,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useDocsStore } from '@/stores/docs.js'
 import { useTicketsStore } from '@/stores/tickets.js'
 import { usePolling } from '@/lib/usePolling'
+import { useTicketChannel } from '@/lib/useTicketChannel'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
@@ -165,9 +166,10 @@ const auth = useAuthStore()
 const store = useDocsStore()
 const tickets = useTicketsStore()
 
-// Awaiting-reply count for the admin "Tickets" nav badge. Polled every 15s
-// while the tab is visible and the user is an admin; fires immediately on
-// mount/refocus so it still loads promptly once auth.user resolves.
+// Awaiting-reply count for the admin "Tickets" nav badge. Live via WS nudge
+// from the admin inbox channel, with a 30s poll fallback while disconnected
+// and the user is an admin; fires immediately on mount/refocus so it still
+// loads promptly once auth.user resolves.
 const awaitingCount = ref(0)
 
 async function refreshAwaiting() {
@@ -180,9 +182,13 @@ async function refreshAwaiting() {
   }
 }
 
+const { connected: badgeConnected } = useTicketChannel(
+  () => (auth.user?.is_admin ? '/ws/admin/tickets/' : null),
+  () => { refreshAwaiting() },
+)
 usePolling(refreshAwaiting, {
-  intervalMs: 15000,
-  enabled: () => !!auth.user?.is_admin,
+  intervalMs: 30000,
+  enabled: () => !!auth.user?.is_admin && !badgeConnected.value,
 })
 
 async function signOut() {

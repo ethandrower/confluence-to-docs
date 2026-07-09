@@ -98,6 +98,7 @@ import AdminTicketDetail from '@/components/support/AdminTicketDetail.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useTicketsStore } from '@/stores/tickets'
 import { usePolling } from '@/lib/usePolling'
+import { useTicketChannel } from '@/lib/useTicketChannel'
 
 const store = useTicketsStore()
 
@@ -236,9 +237,11 @@ onMounted(() => {
   loadInbox()
 })
 
-usePolling(() => (mode.value === 'inbox' ? loadInbox({ silent: true }) : loadAll({ silent: true })), {
-  intervalMs: 15000,
-})
+function reloadListSilent() {
+  return mode.value === 'inbox' ? loadInbox({ silent: true }) : loadAll({ silent: true })
+}
+const { connected: adminConnected } = useTicketChannel('/ws/admin/tickets/', () => { reloadListSilent() })
+usePolling(reloadListSilent, { intervalMs: 30000, enabled: () => !adminConnected.value })
 </script>
 
 <style scoped>
