@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from portal.models import Company, PortalUser, Ticket, TicketRead
+from portal.models import Company, PortalUser, Ticket, TicketMessage, TicketRead
 
 
 class MarkReadTest(TestCase):
@@ -25,3 +25,40 @@ class MarkReadTest(TestCase):
         # opening again updates the timestamp, no duplicate row
         self.client.get(f'/api/tickets/{self.t.number}/')
         self.assertEqual(TicketRead.objects.filter(user=self.user, ticket=self.t).count(), 1)
+
+
+class UnreadListTest(TestCase):
+    def setUp(self):
+        self.co = Company.objects.create(name='Acme')
+        self.other = Company.objects.create(name='Other')
+        self.user = PortalUser.objects.create(email='c@acme.com', company=self.co, role=PortalUser.ROLE_CUSTOMER)
+        self.t = Ticket.objects.create(company=self.co, created_by=self.user, subject='x')
+
+    def _login(self):
+        s = self.client.session; s['portal_user_id'] = self.user.id; s.save()
+
+    def _row(self, number):
+        r = self.client.get('/api/tickets/')
+        self.assertEqual(r.status_code, 200)
+        return next(t for t in r.json()['tickets'] if t['number'] == number)
+
+    def test_unread_true_when_staff_reply_and_never_opened(self):
+        self._login()
+        TicketMessage.objects.create(ticket=self.t, author=self.user, author_email='s@x.com',
+                                     body='hi', origin=TicketMessage.ORIGIN_STAFF)
+        self.assertTrue(self._row(self.t.number)['unread'])
+
+    def test_unread_false_after_opening(self):
+        self._login()
+        TicketMessage.objects.create(ticket=self.t, author=self.user, author_email='s@x.com',
+                                     body='hi', origin=TicketMessage.ORIGIN_STAFF)
+        self.client.get(f'/api/tickets/{self.t.number}/')  # marks read
+        self.assertFalse(self._row(self.t.number)['unread'])
+
+    def test_own_and_internal_messages_do_not_mark_unread(self):
+        self._login()
+        TicketMessage.objects.create(ticket=self.t, author=self.user, author_email='c@acme.com',
+                                     body='mine', origin=TicketMessage.ORIGIN_PORTAL)
+        TicketMessage.objects.create(ticket=self.t, author=self.user, author_email='s@x.com',
+                                     body='note', origin=TicketMessage.ORIGIN_STAFF, is_internal=True)
+        self.assertFalse(self._row(self.t.number)['unread'])

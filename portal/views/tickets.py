@@ -191,7 +191,7 @@ def _with_message_count(qs):
         _mc=Count('messages', filter=Q(messages__is_internal=False)))
 
 
-def _ticket_dict(t, message_count=None):
+def _ticket_dict(t, message_count=None, unread=False):
     return {
         'number': t.number,
         'display_number': t.display_number,
@@ -202,6 +202,7 @@ def _ticket_dict(t, message_count=None):
         'updated_at': t.updated_at.isoformat(),
         'message_count': message_count if message_count is not None
                          else t.messages.filter(is_internal=False).count(),
+        'unread': unread,
     }
 
 
@@ -233,9 +234,23 @@ def _clean_ccs(raw):
 def tickets_collection(request):
     user = request.portal_user
     if request.method == 'GET':
-        qs = _with_message_count(Ticket.for_user(user)).order_by('-updated_at')
-        return JsonResponse({'tickets': [_ticket_dict(t, message_count=t._mc)
-                                         for t in qs]})
+        from django.db.models import Max, Q
+        qs = _with_message_count(Ticket.for_user(user)).order_by('-updated_at').annotate(
+            _last_staff_at=Max('messages__created_at', filter=Q(
+                messages__origin=TicketMessage.ORIGIN_STAFF, messages__is_internal=False)))
+        rows = list(qs)
+        reads = dict(TicketRead.objects.filter(
+            user=user, ticket__in=rows).values_list('ticket_id', 'last_read_at'))
+
+        def _unread(t):
+            last_staff = t._last_staff_at
+            if last_staff is None:
+                return False
+            lr = reads.get(t.id)
+            return lr is None or last_staff > lr
+
+        return JsonResponse({'tickets': [
+            _ticket_dict(t, message_count=t._mc, unread=_unread(t)) for t in rows]})
 
     # POST — create
     if not user.company_id:
