@@ -60,6 +60,7 @@ import TicketThread from '@/components/support/TicketThread.vue'
 import NewTicketForm from '@/components/support/NewTicketForm.vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { usePolling } from '@/lib/usePolling'
+import { useTicketChannel } from '@/lib/useTicketChannel'
 
 const props = defineProps({
   number: { type: [String, Number], default: null },
@@ -79,9 +80,13 @@ function load() {
   }
 }
 
+const { connected: listConnected } = useTicketChannel(
+  () => (props.number ? null : '/ws/customer/tickets/'),
+  () => { if (!props.number) store.fetchTickets({ silent: true }) },
+)
 usePolling(() => store.fetchTickets({ silent: true }), {
-  intervalMs: 15000,
-  enabled: () => !props.number,
+  intervalMs: 30000,
+  enabled: () => !props.number && !listConnected.value,
 })
 
 function onCreated(ticket) {
