@@ -18,7 +18,10 @@ Pillow>=10.0
 # Production / deploy
 gunicorn>=21.2
 whitenoise>=6.6
-django-anymail[mailgun]>=15,<16
+# Pinned <15: anymail 15 declares django>=5.0, which conflicts with the Django<5.0
+# pin below and breaks a clean `pip install` on the Dokku buildpack. 14.x has the
+# same Mailgun backend + tracking-signal API this project uses.
+django-anymail[mailgun]>=14,<15
 markdown>=3.5
 
 # Atlassian Trinity — Confluence/Jira/Bitbucket CLI used by sync_from_mcp
