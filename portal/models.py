@@ -452,7 +452,7 @@ class TicketMessage(models.Model):
     esp_message_id = models.CharField(max_length=256, blank=True, db_index=True)
     # Phase-2 email-threading plumbing, populated on outbound sends now.
     email_message_id = models.CharField(max_length=256, blank=True)
-    reply_token = models.CharField(max_length=64, blank=True)
+    reply_token = models.CharField(max_length=64, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

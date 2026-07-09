@@ -1,5 +1,5 @@
 from django.urls import path
-from anymail.webhooks.mailgun import MailgunTrackingWebhookView
+from anymail.webhooks.mailgun import MailgunTrackingWebhookView, MailgunInboundWebhookView
 from portal.views import docs, auth, tickets, admin_api, files, files_admin, tickets_admin
 
 urlpatterns = [
@@ -50,6 +50,9 @@ urlpatterns = [
     # Mailgun delivery-tracking webhook (Tier B) — signature-verified by Anymail
     # via MAILGUN_WEBHOOK_SIGNING_KEY; fires anymail.signals.tracking.
     path('webhooks/mailgun/', MailgunTrackingWebhookView.as_view(), name='mailgun-webhook'),
+    # Mailgun inbound-route webhook (ECD-2250) — appends emailed customer
+    # replies to their ticket; fires anymail.signals.inbound.
+    path('webhooks/mailgun/inbound/', MailgunInboundWebhookView.as_view(), name='mailgun-inbound'),
 
     # Tickets
     path('tickets/submit/', tickets.submit_ticket, name='submit-ticket'),
