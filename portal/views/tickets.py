@@ -132,7 +132,7 @@ from django.db import transaction
 
 from portal import realtime, ticket_notify
 from portal.decorators import require_portal_user
-from portal.models import Ticket, TicketMessage, TicketActivity
+from portal.models import Ticket, TicketMessage, TicketActivity, TicketRead
 
 TICKET_RATE_MAX = 20          # ticket creations per user-company per hour
 TICKET_RATE_WINDOW = 60 * 60
@@ -279,6 +279,9 @@ def ticket_detail(request, number):
     t = _own_ticket(request, number)
     if not t:
         return JsonResponse({'error': 'Not found'}, status=404)
+    TicketRead.objects.update_or_create(
+        user=request.portal_user, ticket=t,
+        defaults={'last_read_at': timezone.now()})
     msgs = t.messages.filter(is_internal=False)
     data = _ticket_dict(t, message_count=msgs.count())
     data['cc_emails'] = t.cc_emails

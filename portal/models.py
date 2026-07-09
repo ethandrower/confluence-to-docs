@@ -400,6 +400,16 @@ class Ticket(models.Model):
         return cls.objects.filter(company_id=company_id)
 
 
+class TicketRead(models.Model):
+    """Per-user read state for a ticket — drives the customer list's unread dot."""
+    user = models.ForeignKey('PortalUser', on_delete=models.CASCADE, related_name='ticket_reads')
+    ticket = models.ForeignKey('Ticket', on_delete=models.CASCADE, related_name='reads')
+    last_read_at = models.DateTimeField()
+
+    class Meta:
+        unique_together = (('user', 'ticket'),)
+
+
 class TicketMessage(models.Model):
     ORIGIN_PORTAL = 'portal'
     ORIGIN_STAFF = 'staff'
