@@ -1,6 +1,6 @@
 # Confluence to Docs
 
-Turn a Confluence space into a clean, self-service support portal — with searchable documentation, passwordless login, and ticket submission via Jira Service Management.
+Turn a Confluence space into a clean, self-service support portal — with searchable documentation, passwordless login, and a built-in support-ticket system with real-time (WebSocket) updates and email threading.
 
 ## How it works
 
@@ -109,9 +109,23 @@ The API can filter by space key to serve different doc sets from the same portal
 
 No passwords — users authenticate via a time-limited magic link (15 min expiry) sent to their email.
 
-### Ticket integration
+### Support tickets
 
-Users can submit support requests that create tickets in Jira Service Management. The portal checks if the user is a known JSM customer and exposes request types from your service desk.
+The portal includes a full **native support-ticket system** (it replaced the earlier Jira Service Management hand-off — Jira is now an optional read-only *link* on a ticket, not the system of record). Signed-in customers open tickets, and staff work them from a two-pane helpdesk:
+
+- **Customer side** — create tickets, thread replies, see status; each ticket is tenant-scoped to the customer's company.
+- **Staff side** — an inbox (with an "awaiting reply" count in the nav), a two-pane helpdesk, internal notes (never shown to customers), status changes, CC management, and optional Jira links with live status.
+- **Email** — outbound replies go out via Mailgun (Anymail) with RFC-5322 threading headers and per-message delivery tracking (queued / sent / delivered / bounced) via a Mailgun webhook + a reconciliation poller.
+- **Security** — a `for_customer` serializer plus admin-only endpoints guarantee Jira keys, internal notes, staff identity, and delivery details are never exposed to customers.
+
+### Real-time updates
+
+Tickets update **live over WebSockets** (Django Channels + Redis), with **client polling as an automatic fallback**:
+
+- **Transport** — the app is served over **ASGI** (`gunicorn` + `uvicorn` workers). A Channels `ProtocolTypeRouter` keeps all HTTP (docs, search, auth, static) on Django's ASGI app and adds a `websocket` protocol. WS auth reuses the portal's session identity (`SessionMiddlewareStack` + a custom `PortalUserMiddleware`), not Django auth.
+- **Nudge + refetch** — the socket carries only a tiny `{ticket changed}` signal; the client refetches through the existing REST endpoints, so the customer/admin data-gating is never re-implemented on the socket (no content ever crosses the wire). Three groups back the surfaces: `ticket-<n>` (a thread), `admins` (the inbox/badge), and `co-<company>` (a customer's list).
+- **Fallback** — WebSocket is primary; on disconnect the client reconnects with backoff and falls back to a 30s poll (visibility-gated, draft-safe) until the socket returns, then does a catch-up fetch. Requires `REDIS_URL` in production (falls back to an in-memory channel layer locally / when unset — fine for a single process).
+- **Unread indicator** — the customer ticket list shows a per-row **unread dot + highlight** for tickets with a staff reply they haven't opened yet (tracked per user via a `TicketRead` model; cleared when the thread is opened).
 
 ## Quick start
 
@@ -172,9 +186,14 @@ celery -A citemed beat --loglevel=info
 | `/api/auth/verify/?token=...` | GET | Verify magic link, set session |
 | `/api/auth/me/` | GET | Current user info |
 | `/api/auth/logout/` | POST | End session |
-| `/api/tickets/` | GET/POST | List or create support tickets |
-| `/api/tickets/request-types/` | GET | Available JSM request types |
-| `/api/tickets/<id>/` | GET | Ticket detail |
+| `/api/tickets/` | GET/POST | List (with per-ticket `unread`) or create the customer's tickets |
+| `/api/tickets/<number>/` | GET | Ticket detail (also marks it read) |
+| `/api/tickets/<number>/messages/` | POST | Customer reply |
+| `/api/admin/tickets/*` | GET/POST | Staff helpdesk: inbox, list, detail, reply/notes, status, CC, Jira, resend (admin-only) |
+| `/api/webhooks/mailgun/` | POST | Mailgun delivery-event webhook |
+| `ws://…/ws/tickets/<number>/` | WS | Live thread updates (customer or staff) |
+| `ws://…/ws/admin/tickets/` | WS | Live inbox/badge updates (staff) |
+| `ws://…/ws/customer/tickets/` | WS | Live customer ticket-list updates |
 
 ## Project structure
 
@@ -189,14 +208,20 @@ portal/               Main application
     client.py          Confluence REST API client (wraps trinity-atlassian-cli)
     transformer.py     Confluence storage XML → clean HTML
     sync.py            Orchestrates full/incremental space sync
-  jsm/
-    client.py          Jira Service Management API client
   views/
     auth.py            Magic-link login/logout/session
     docs.py            Doc tree, page detail, search
-    tickets.py         Ticket CRUD (JSM integration)
-  models.py            DocPage, DocImage, PortalUser, MagicLinkToken
-  tasks.py             Celery tasks for background sync
+    tickets.py         Customer ticket API (list/create/detail/reply, unread, mark-read)
+    tickets_admin.py   Staff helpdesk API (inbox, reply/notes, status, CC, Jira, resend)
+  consumers.py         WebSocket consumers (ticket / admin-inbox / customer-list)
+  routing.py           WebSocket URL routes
+  ws_auth.py           Channels middleware → resolves the portal session identity
+  realtime.py          notify_ticket() — fans "changed" nudges to Channels groups
+  ticket_notify.py     Outbound email (Anymail/Mailgun) + delivery tracking
+  webhook_handlers.py  Mailgun delivery-event handling
+  jira_client.py       Read-only Jira status for linked tickets
+  models.py            DocPage, DocImage, PortalUser, MagicLinkToken,
+                       Ticket, TicketMessage, TicketActivity, TicketRead, JiraTicketLink
 
 frontend/             Vue 3 SPA
   src/
@@ -204,9 +229,13 @@ frontend/             Vue 3 SPA
       auth/            Login, magic link sent, verify, auth gate
       docs/            Page renderer, table of contents, search
       layout/          App shell, sidebar tree, search bar, breadcrumbs
-      tickets/         Ticket form, list, detail
+      support/         Ticket list, thread, admin two-pane helpdesk (unread dot)
+    lib/
+      usePolling.js        Visibility-gated polling (fallback + composable)
+      useTicketChannel.js  WebSocket client (reconnect/backoff, catch-up)
+      useThreadScroll.js   At-bottom auto-scroll + "new messages" pill
     stores/            Pinia stores (auth, docs, tickets)
-    views/             Route-level views
+    views/             Route-level views (SupportView, ManageTicketsView, …)
     assets/            CSS (Tailwind v4 + Confluence content styles)
 ```
 
@@ -228,12 +257,21 @@ See `.env.example` for the complete list. Key groups:
 
 ## Deployment
 
-The `Procfile` runs three processes (for Heroku/Render/etc.):
+Production runs on **Dokku** (Hetzner). The `Procfile` serves the app over **ASGI** so WebSockets and HTTP share one web process:
 
 ```
-web: gunicorn citemed.wsgi --log-file -
-worker: celery -A citemed worker --loglevel=info
-beat: celery -A citemed beat --loglevel=info
+release: python manage.py migrate --noinput
+web: gunicorn citemed.asgi:application -k uvicorn.workers.UvicornWorker --workers 2 --timeout 120 --log-file - --access-logfile -
 ```
 
-Build the frontend first: `cd frontend && npm run build`
+Migrations run automatically in the `release` phase. Build the frontend first: `cd frontend && npm run build`.
+
+**Redis (for real-time):** WebSocket broadcasts need a Redis channel layer to reach clients across workers. Provision it once on the host, then `REDIS_URL` is injected automatically:
+
+```bash
+dokku plugin:install https://github.com/dokku/dokku-redis.git   # one-time
+dokku redis:create citemed-realtime
+dokku redis:link  citemed-realtime citemed-docs                 # sets REDIS_URL, restarts app
+```
+
+Without `REDIS_URL` the app still boots and works (in-memory channel layer + polling fallback), but real-time won't cross workers — so provision Redis **before** or right after the first ASGI deploy. Deploy with `git push dokku main`.
