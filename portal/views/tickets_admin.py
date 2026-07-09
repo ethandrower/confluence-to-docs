@@ -10,9 +10,10 @@ from django.views.decorators.http import require_http_methods
 import re
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
-from portal import jira_client, ticket_notify
+from portal import jira_client, realtime, ticket_notify
 from portal.decorators import require_portal_admin
 from portal.models import Company, JiraTicketLink, Ticket, TicketMessage
 from portal.rate_limit import is_rate_limited
@@ -138,6 +139,8 @@ def collection(request):
         body=body, origin=TicketMessage.ORIGIN_STAFF)
     log_ticket_activity(ticket, 'created', actor=user, on_behalf=True)
     ticket_notify.notify_ticket_created(ticket, first)
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        ticket, 'created', to_ticket=False))
     return JsonResponse(_admin_dict(ticket, message_count=1))
 
 
@@ -187,6 +190,11 @@ def reply(request, number):
         ticket_notify.notify_staff_reply(t, m)
     log_ticket_activity(t, 'note_added' if is_internal else 'message_sent',
                         actor=user)
+    if is_internal:
+        transaction.on_commit(lambda: realtime.notify_ticket(
+            t, 'internal_note', to_ticket=False, to_company=False))
+    else:
+        transaction.on_commit(lambda: realtime.notify_ticket(t, 'staff_reply'))
     return JsonResponse({'ok': True,
                          'message': dict(_message_dict(m),
                                          is_internal=m.is_internal,
@@ -240,6 +248,7 @@ def set_status(request, number):
     t.save(update_fields=['status', 'updated_at'])
     log_ticket_activity(t, 'status_changed', actor=request.portal_user,
                         old=old, new=status)
+    transaction.on_commit(lambda: realtime.notify_ticket(t, 'status_changed'))
     if status in (Ticket.STATUS_RESOLVED, Ticket.STATUS_CLOSED):
         ticket_notify.notify_status(t)
     return JsonResponse({'ok': True, 'status': t.status})
@@ -296,4 +305,5 @@ def set_cc(request, number):
     t.save(update_fields=['cc_emails', 'updated_at'])
     log_ticket_activity(t, 'cc_changed', actor=request.portal_user,
                         cc_emails=t.cc_emails)
+    transaction.on_commit(lambda: realtime.notify_ticket(t, 'cc_changed'))
     return JsonResponse({'ok': True, 'cc_emails': t.cc_emails})

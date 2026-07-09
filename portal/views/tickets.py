@@ -128,7 +128,9 @@ def submit_ticket(request):
 # Support tickets (Phase 1) — customer endpoints.
 # All queries go through Ticket.for_user() (tenant chokepoint).
 # ---------------------------------------------------------------------------
-from portal import ticket_notify
+from django.db import transaction
+
+from portal import realtime, ticket_notify
 from portal.decorators import require_portal_user
 from portal.models import Ticket, TicketMessage, TicketActivity
 
@@ -262,6 +264,8 @@ def tickets_collection(request):
         body=body, origin=TicketMessage.ORIGIN_PORTAL)
     log_ticket_activity(ticket, 'created', actor=user)
     ticket_notify.notify_ticket_created(ticket, first)
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        ticket, 'created', to_ticket=False))
     return JsonResponse(_ticket_dict(ticket, message_count=1))
 
 
@@ -305,5 +309,6 @@ def ticket_reply(request, number):
     t.save(update_fields=['status', 'updated_at'])
     log_ticket_activity(t, 'message_sent', actor=user)
     ticket_notify.notify_customer_reply(t, m)
+    transaction.on_commit(lambda: realtime.notify_ticket(t, 'customer_reply'))
     return JsonResponse({'ok': True, 'message': _message_dict(m, for_customer=True),
                          'status': t.status})
