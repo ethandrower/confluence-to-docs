@@ -37,7 +37,7 @@ export function useTicketChannel(path, onNudge) {
     } catch {
       scheduleReconnect(); return
     }
-    ws.onopen = () => { connected.value = true; retry = 0 }
+    ws.onopen = () => { connected.value = true; retry = 0; onNudge({ type: 'reconnect' }) }
     ws.onmessage = (e) => {
       let payload = null
       try { payload = JSON.parse(e.data) } catch { return }
