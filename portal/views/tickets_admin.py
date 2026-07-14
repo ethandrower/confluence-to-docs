@@ -2,6 +2,8 @@
 Reuses serializer helpers from portal.views.tickets to keep one source of
 truth for the JSON shapes."""
 import json
+import logging
+import threading
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -21,6 +23,21 @@ from portal.views.tickets import (
     _clean_ccs, _message_dict, _ticket_dict, _with_message_count,
     log_ticket_activity,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _defer(fn):
+    """Run a best-effort side-effect off the request path, in a daemon thread,
+    so slow external calls (e.g. Jira) never block the admin's response. Tests
+    patch this to run synchronously. The target must not touch the DB (no
+    per-thread connection is managed here)."""
+    def _runner():
+        try:
+            fn()
+        except Exception as e:  # a background best-effort task must never crash
+            logger.warning('deferred task failed: %s', e)
+    threading.Thread(target=_runner, daemon=True).start()
 
 # Max rows the admin "All" list returns without pagination (spec §4e/§6).
 ADMIN_LIST_CAP = 200
@@ -72,6 +89,24 @@ def _refresh_jira_links(ticket):
 def _get(number):
     return Ticket.objects.select_related('company', 'created_by')\
                          .filter(number=number).first()
+
+
+def _nudge_reply_in_portal(ticket, key):
+    """On a service-desk link, drop a remote link + an INTERNAL note telling
+    agents to reply to the customer in the portal, not Jira — closing the
+    "replied in Jira, customer never saw it" footgun. Best-effort. Skipped for
+    non-service-desk projects (e.g. engineering bugs), which aren't a customer
+    reply surface, per settings.JIRA_SYNC_PROJECTS."""
+    allowed = {p.upper() for p in getattr(settings, 'JIRA_SYNC_PROJECTS', ['SUP'])}
+    if key.split('-')[0].upper() not in allowed:
+        return
+    site = (getattr(settings, 'FRONTEND_URL', '') or '').rstrip('/')
+    admin_url = f'{site}/manage/tickets/{ticket.number}'
+    jira_client.create_remote_link(
+        key, admin_url, f'{ticket.display_number} in CiteMed Support')
+    jira_client.add_comment(key, (
+        f'💬 Linked to CiteMed Support ticket {ticket.display_number}. Reply to the '
+        f'customer in the portal (not in Jira): {admin_url}'), internal=True)
 
 
 @require_http_methods(['GET'])
@@ -133,7 +168,10 @@ def collection(request):
     ticket = Ticket.objects.create(
         company=company, created_by=user, subject=subject[:512],
         category=category, cc_emails=ccs,
-        status=Ticket.STATUS_WAITING_ON_CUSTOMER)
+        # Brand-new on-behalf ticket: nothing has been asked of the customer
+        # yet, so 'open' (not 'waiting on customer', which read as misleading
+        # to testers). Staff move it to waiting_on_customer once they reply.
+        status=Ticket.STATUS_OPEN)
     first = TicketMessage.objects.create(
         ticket=ticket, author=user, author_email=user.email,
         body=body, origin=TicketMessage.ORIGIN_STAFF)
@@ -286,6 +324,9 @@ def set_jira(request, number):
                 link.save(update_fields=['cached_status', 'cached_status_category',
                                          'cached_summary', 'fetched_at'])
             log_ticket_activity(t, 'jira_linked', actor=request.portal_user, key=key)
+            # Off the request path: the nudge makes 2 Jira writes that shouldn't
+            # block the admin's "Link" click if Jira is slow.
+            _defer(lambda: _nudge_reply_in_portal(t, key))
     t.save(update_fields=['updated_at'])
     return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t)})
 

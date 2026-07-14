@@ -295,6 +295,19 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Support <noreply@example
 SERVER_EMAIL = env('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
 SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='support@citemed.com')
 
+# S1 Jira→portal comment sync: when True, a public Jira comment ingested into a
+# ticket is also emailed to the customer via the threaded reply path. Default
+# False (ingest-for-visibility only) so we never double-email while JSM is still
+# sending its own customer notifications. Flip on once JSM notifications are off.
+JIRA_SYNC_EMAIL_CUSTOMER = env.bool('JIRA_SYNC_EMAIL_CUSTOMER', default=False)
+
+# Jira projects whose comments S1 may sync into a customer thread. ONLY
+# service-desk (JSM) projects belong here: there `jsdPublic` means
+# "shown to the customer". A bug linked to an engineering project (e.g. ECD)
+# is deliberately excluded — its comments are dev/bot chatter and would leak.
+# Linking itself stays manual (admin pastes the key); this only bounds sync.
+JIRA_SYNC_PROJECTS = env.list('JIRA_SYNC_PROJECTS', default=['SUP'])
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
