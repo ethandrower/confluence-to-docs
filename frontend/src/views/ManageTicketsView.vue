@@ -38,6 +38,7 @@
             <AdminTicketDetail
               :ticket="selected"
               :loading="detailLoading"
+              :not-found="selectError"
               @back="selectedNumber = null"
               @updated="onDetailUpdated"
               @refreshed="onDetailRefreshed"
@@ -91,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import AdminTicketList from '@/components/support/AdminTicketList.vue'
 import AdminTicketDetail from '@/components/support/AdminTicketDetail.vue'
@@ -99,6 +100,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useTicketsStore } from '@/stores/tickets'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
+
+const props = defineProps({
+  // Deep-link target (route /manage/tickets/:number). When present, open that
+  // ticket directly instead of the default inbox landing.
+  number: { type: [String, Number], default: null },
+})
 
 const store = useTicketsStore()
 
@@ -114,6 +121,7 @@ const truncated = ref(false)
 const selectedNumber = ref(null)
 const selected = ref(null)
 const detailLoading = ref(false)
+const selectError = ref(false)
 
 const companies = ref([])
 async function loadCompanies(force = false) {
@@ -155,8 +163,14 @@ function openAll() {
 async function selectTicket(number) {
   selectedNumber.value = number
   detailLoading.value = true
+  selectError.value = false
   try {
     selected.value = await store.adminTicket(number)
+  } catch (e) {
+    // e.g. a deep link to a deleted/unknown ticket — surface it instead of
+    // leaving the pane on its generic "pick a ticket" placeholder.
+    selected.value = null
+    selectError.value = true
   } finally {
     detailLoading.value = false
   }
@@ -232,9 +246,24 @@ async function refresh() {
   }
 }
 
+// When deep-linked to a specific ticket, show it in the "All" list (it may not
+// be in the inbox queue, e.g. a waiting-on-customer ticket) and open it.
+function openTicketNumber(number) {
+  mode.value = 'all'
+  loadAll()
+  selectTicket(Number(number))
+}
+
 onMounted(() => {
   loadCompanies()
-  loadInbox()
+  if (props.number) openTicketNumber(props.number)
+  else loadInbox()
+})
+
+// Re-open when the deep-link changes within the SPA (e.g. an admin follows a
+// second /manage/tickets/:number link without a full reload).
+watch(() => props.number, (n) => {
+  if (n != null && Number(n) !== selectedNumber.value) openTicketNumber(n)
 })
 
 function reloadListSilent() {

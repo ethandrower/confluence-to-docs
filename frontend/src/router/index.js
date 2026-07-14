@@ -76,6 +76,16 @@ const router = createRouter({
       component: () => import('@/views/ManageTicketsView.vue'),
       name: 'manage-tickets',
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      // Deep-linkable admin ticket — lets staff open a specific ticket from a
+      // shared URL, and gives the /support customer-link admin fallback a
+      // destination (see SupportView).
+      path: '/manage/tickets/:number',
+      component: () => import('@/views/ManageTicketsView.vue'),
+      name: 'manage-ticket',
+      props: true,
+      meta: { requiresAuth: true, requiresAdmin: true },
     }
   ]
 })
@@ -87,6 +97,13 @@ router.beforeEach(async (to, from, next) => {
       await auth.fetchMe()
     }
     if (!auth.user) {
+      // Also stash the target: the magic-link email carries only the token
+      // (no ?redirect), so AuthVerify falls back to this to land the user on
+      // their intended page — e.g. a /support/:n deep link from a ticket email.
+      // Timestamped so a stale stash can't hijack an unrelated later login.
+      try {
+        localStorage.setItem('pendingRedirect', JSON.stringify({ p: to.fullPath, t: Date.now() }))
+      } catch { /* private mode */ }
       return next({ name: 'login', query: { redirect: to.fullPath } })
     }
     if (to.meta.requiresAdmin && !auth.user.is_admin) {

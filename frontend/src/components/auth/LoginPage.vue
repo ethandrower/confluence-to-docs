@@ -67,7 +67,10 @@ async function submit() {
   try {
     const result = await auth.requestMagicLink(email.value)
     if (result?.demo) {
-      // Sandbox account — signed in already, go straight to the portal.
+      // Sandbox account — signed in already, go straight to the portal. This
+      // path never hits AuthVerify, so clear the stash here so it can't leak
+      // into a later magic-link login on this browser.
+      try { localStorage.removeItem('pendingRedirect') } catch { /* private mode */ }
       router.push(router.currentRoute.value.query.redirect || '/files')
       return
     }
