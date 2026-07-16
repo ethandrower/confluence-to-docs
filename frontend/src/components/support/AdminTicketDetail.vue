@@ -2,6 +2,10 @@
   <div class="atd">
     <div v-if="loading" class="atd-loading">Loading…</div>
 
+    <div v-else-if="notFound" class="atd-placeholder">
+      <p>That ticket couldn’t be loaded — it may have been deleted, or you may not have access. Pick another from the list.</p>
+    </div>
+
     <div v-else-if="!ticket" class="atd-placeholder">
       <p>Select a ticket from the list to view the conversation.</p>
     </div>
@@ -14,7 +18,8 @@
         </button>
         <div class="atd-head-top">
           <p class="atd-number">{{ ticket.display_number }} · {{ ticket.company.name }}</p>
-          <span class="atd-status" :class="`status--${statusTone(ticket.status)}`">
+          <span class="atd-status" :class="`status--${statusTone(ticket.status)}`"
+                title="Ticket status — set in CiteMed Support and shown to the customer. Independent of any linked Jira issue.">
             <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status) }}
           </span>
         </div>
@@ -34,12 +39,13 @@
           <span class="atd-details-hint">{{ detailsHint }}</span>
         </summary>
         <div class="atd-controls">
-          <label class="ctrl"><span>Status</span>
+          <label class="ctrl"><span>Ticket status</span>
             <select v-model="statusDraft" class="ctrl-input" aria-label="Ticket status" @change="onStatusChange">
               <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
             </select>
+            <p class="ctrl-hint">Set here and shown to the customer — not pulled from Jira.</p>
           </label>
-          <div class="ctrl"><span>Jira links</span>
+          <div class="ctrl"><span>Jira (internal)</span>
             <ul v-if="ticket.jira_links && ticket.jira_links.length" class="jira-list">
               <li v-for="jl in ticket.jira_links" :key="jl.key" class="jira-item">
                 <a class="jira-key" :href="jl.url" target="_blank" rel="noopener noreferrer">{{ jl.key }} ↗</a>
@@ -54,6 +60,7 @@
               <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="e.g. ECD-123" aria-label="Add Jira key" @keydown.enter.prevent="onJira('add', jiraDraft)" />
               <button class="btn-outline sm" :disabled="jiraSaving || !jiraDraft.trim()" @click="onJira('add', jiraDraft)">{{ jiraSaving ? '…' : 'Link' }}</button>
             </div>
+            <p class="ctrl-hint">Read-only status from Jira, for internal tracking. Never shown to the customer.</p>
           </div>
           <label class="ctrl"><span>CC</span>
             <div class="ctrl-inline">
@@ -141,6 +148,7 @@ import { useThreadScroll } from '@/lib/useThreadScroll'
 const props = defineProps({
   ticket: { type: Object, default: null },
   loading: { type: Boolean, default: false },
+  notFound: { type: Boolean, default: false },
 })
 const emit = defineEmits(['back', 'updated', 'refreshed'])
 
@@ -368,6 +376,7 @@ async function onSendReply() {
 .atd-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 4px 0 20px; }
 .ctrl { display: block; }
 .ctrl > span { display: block; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; }
+.ctrl-hint { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted-foreground); }
 .ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
 .ctrl-input:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
 .ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }

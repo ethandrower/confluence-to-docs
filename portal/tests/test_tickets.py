@@ -495,6 +495,49 @@ class AdminTicketApiTests(TestCase):
         self.assertIn('client@acme.com', t.cc_emails)
         self.assertTrue(any('client@acme.com' in m.to for m in mail.outbox))
 
+    def test_on_behalf_create_status_is_open_not_waiting_on_customer(self):
+        # A brand-new on-behalf ticket must not claim we're "waiting on the
+        # customer" — nothing's been asked yet. It opens as 'open' (tester
+        # feedback: the old waiting_on_customer default read as misleading).
+        self._login()
+        r = self.client.post('/api/admin/tickets/', data=json.dumps({
+            'company_id': self.acme.id, 'subject': 'For you',
+            'body': 'Opened on your behalf',
+        }), content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        t = Ticket.objects.get(number=r.json()['number'])
+        self.assertEqual(t.status, Ticket.STATUS_OPEN)
+
+    @patch('portal.views.tickets_admin._defer', side_effect=lambda fn: fn())
+    @patch('portal.views.tickets_admin.jira_client.create_remote_link')
+    @patch('portal.views.tickets_admin.jira_client.add_comment')
+    @patch('portal.views.tickets_admin.jira_client.fetch_issue', return_value=None)
+    def test_linking_servicedesk_issue_posts_reply_in_portal_nudge(self, mfetch, mcomment, mlink, mdefer):
+        self._login()
+        with override_settings(JIRA_SYNC_PROJECTS=['SUP']):
+            r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                                 data=json.dumps({'action': 'add', 'key': 'SUP-5'}),
+                                 content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        # Internal backlink note + a remote link on the service-desk issue.
+        self.assertIs(mcomment.call_args.kwargs.get('internal'), True)
+        mlink.assert_called_once()
+
+    @patch('portal.views.tickets_admin._defer', side_effect=lambda fn: fn())
+    @patch('portal.views.tickets_admin.jira_client.create_remote_link')
+    @patch('portal.views.tickets_admin.jira_client.add_comment')
+    @patch('portal.views.tickets_admin.jira_client.fetch_issue', return_value=None)
+    def test_linking_engineering_issue_posts_no_nudge(self, mfetch, mcomment, mlink, mdefer):
+        # An ECD bug isn't a customer-reply surface — no "reply in the portal" note.
+        self._login()
+        with override_settings(JIRA_SYNC_PROJECTS=['SUP']):
+            r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
+                                 data=json.dumps({'action': 'add', 'key': 'ECD-5'}),
+                                 content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        mcomment.assert_not_called()
+        mlink.assert_not_called()
+
     def test_status_resolved_emails_customer(self):
         TicketMessage.objects.create(ticket=self.t, author=self.staff,
                                      body='hi', origin='staff')

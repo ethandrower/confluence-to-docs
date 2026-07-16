@@ -41,9 +41,24 @@ onMounted(async () => {
     // Reject anything but a strictly internal path (must start with "/"
     // and not "//", which browsers treat as protocol-relative external).
     // Prevents using the verify URL as an open-redirect to attacker pages.
+    const isInternal = (p) => typeof p === 'string' && p.startsWith('/') && !p.startsWith('//')
+    // Prefer an explicit ?redirect; otherwise fall back to the path stashed at
+    // the auth gate (the magic-link email doesn't carry ?redirect), so a
+    // deep link like /support/:n survives the login round-trip. The stash is
+    // consumed once and only if fresh (<30 min), so an abandoned attempt can't
+    // hijack a later, unrelated login on the same browser.
+    let stashed = null
+    try {
+      const raw = localStorage.getItem('pendingRedirect')
+      localStorage.removeItem('pendingRedirect')
+      if (raw) {
+        const o = JSON.parse(raw)
+        if (o && isInternal(o.p) && Date.now() - (o.t || 0) < 30 * 60 * 1000) stashed = o.p
+      }
+    } catch { /* private mode / bad JSON */ }
     const raw = route.query.redirect
-    const safe = typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//')
-    router.push(safe ? raw : '/docs')
+    const target = isInternal(raw) ? raw : (stashed || '/docs')
+    router.push(target)
   } catch (e) {
     loading.value = false
     error.value = e.response?.data?.error || 'This link has expired or already been used.'

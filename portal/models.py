@@ -453,10 +453,22 @@ class TicketMessage(models.Model):
     # Phase-2 email-threading plumbing, populated on outbound sends now.
     email_message_id = models.CharField(max_length=256, blank=True)
     reply_token = models.CharField(max_length=64, blank=True, db_index=True)
+    # Jira comment id this message was ingested from (S1 Jira→portal sync).
+    # Globally unique per Jira; used to dedupe so a comment syncs at most once.
+    jira_comment_id = models.CharField(max_length=32, blank=True, default='',
+                                       db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['created_at']
+        constraints = [
+            # A Jira comment syncs at most once per ticket (S1 dedup). Partial
+            # constraint so the empty default on non-Jira messages is exempt.
+            models.UniqueConstraint(
+                fields=['ticket', 'jira_comment_id'],
+                condition=~models.Q(jira_comment_id=''),
+                name='uniq_jira_comment_per_ticket'),
+        ]
 
 
 class TicketActivity(models.Model):

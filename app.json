@@ -67,6 +67,11 @@
       "comment": "Backstop for the Mailgun delivery webhook — reconciles any events it missed (ECD-2248).",
       "command": "python manage.py poll_mailgun_events --hours 1",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "comment": "Pull public service-desk Jira comments into linked portal tickets so replies typed in Jira reach the customer (S1, ECD-2246). Every minute; for ~30s near-real-time run 'sync_jira_comments --loop --interval 30' as a worker instead.",
+      "command": "python manage.py sync_jira_comments",
+      "schedule": "* * * * *"
     }
   ]
 }

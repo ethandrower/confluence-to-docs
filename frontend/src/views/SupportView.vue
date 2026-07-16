@@ -59,6 +59,7 @@ import TicketList from '@/components/support/TicketList.vue'
 import TicketThread from '@/components/support/TicketThread.vue'
 import NewTicketForm from '@/components/support/NewTicketForm.vue'
 import { useTicketsStore } from '@/stores/tickets'
+import { useAuthStore } from '@/stores/auth'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
 
@@ -68,13 +69,21 @@ const props = defineProps({
 
 const router = useRouter()
 const store = useTicketsStore()
+const auth = useAuthStore()
 const showForm = ref(false)
 
 const isFirstRun = computed(() => !store.tickets.length)
 
-function load() {
+async function load() {
   if (props.number) {
-    store.fetchTicket(props.number)
+    await store.fetchTicket(props.number)
+    // The customer thread is tenant-scoped to the viewer's own company, so a
+    // staff member who opens a customer-facing ticket link (e.g. while testing
+    // with their own address) gets a miss here. Send admins to the admin view
+    // of that ticket instead of a dead "not found".
+    if (!store.current && auth.user?.is_admin) {
+      router.replace({ name: 'manage-ticket', params: { number: props.number } })
+    }
   } else {
     store.fetchTickets()
   }

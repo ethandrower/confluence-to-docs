@@ -33,6 +33,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     await axios.post('/api/auth/logout/')
     user.value = null
+    // Drop any stashed deep-link target so it can't carry into a later login.
+    try { localStorage.removeItem('pendingRedirect') } catch { /* private mode */ }
   }
 
   return { user, loading, fetchMe, requestMagicLink, verifyToken, logout }
