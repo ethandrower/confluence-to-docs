@@ -44,6 +44,32 @@ ADMIN_LIST_CAP = 200
 # Re-fetch a linked Jira issue's status at most this often.
 JIRA_CACHE_SECONDS = 60
 JIRA_KEY_RE = re.compile(r'^[A-Z][A-Z0-9]+-\d+$')
+_JIRA_BROWSE_RE = re.compile(r'/browse/([A-Za-z][A-Za-z0-9]+-\d+)', re.I)
+
+
+def _extract_jira_key(raw):
+    """Normalize a pasted Jira reference to a KEY. Accepts what agents actually
+    paste: a bare key (SUP-374), a classic browse URL (.../browse/SUP-374?...),
+    or a JSM agent/portal URL where the key is a path segment
+    (.../servicedesk/projects/SUP/.../SUP-374). A search/list URL, where the key
+    only appears in the query string, is intentionally NOT matched — it's not a
+    single issue. Anything unrecognized is returned as-is for JIRA_KEY_RE to
+    reject downstream."""
+    raw = (raw or '').strip()
+    if not raw:
+        return ''
+    if JIRA_KEY_RE.match(raw.upper()):
+        return raw.upper()
+    m = _JIRA_BROWSE_RE.search(raw)
+    if m:
+        return m.group(1).upper()
+    # Last key-shaped PATH segment; drop query/hash so we never lift a token out
+    # of a ?jql=… search URL.
+    path = raw.split('?', 1)[0].split('#', 1)[0]
+    for seg in reversed(path.split('/')):
+        if JIRA_KEY_RE.match(seg.strip().upper()):
+            return seg.strip().upper()
+    return raw.upper()
 
 
 def _admin_dict(t, message_count=None):
@@ -306,13 +332,15 @@ def set_jira(request, number):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid request body'}, status=400)
     action = data.get('action', 'add')
-    key = (data.get('key') or '').strip().upper()
+    key = _extract_jira_key(data.get('key'))
     if action == 'remove':
         JiraTicketLink.objects.filter(ticket=t, key=key).delete()
         log_ticket_activity(t, 'jira_unlinked', actor=request.portal_user, key=key)
     else:
         if not JIRA_KEY_RE.match(key):
-            return JsonResponse({'error': 'Invalid Jira key (e.g. ECD-123)'}, status=400)
+            return JsonResponse(
+                {'error': 'Enter a Jira key (e.g. SUP-374) or paste a Jira issue URL'},
+                status=400)
         link, created = JiraTicketLink.objects.get_or_create(ticket=t, key=key)
         if created:
             data_ = jira_client.fetch_issue(key)  # populate status immediately
