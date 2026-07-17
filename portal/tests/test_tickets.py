@@ -433,6 +433,30 @@ class CustomerTicketApiTests(TestCase):
         self.assertEqual(len(one.captured_queries), len(many.captured_queries))
 
 
+class ExtractJiraKeyTest(TestCase):
+    def test_accepts_the_forms_agents_actually_paste(self):
+        from portal.views.tickets_admin import _extract_jira_key as ek
+        # bare key (any case) + classic browse URL with query/hash
+        self.assertEqual(ek('SUP-374'), 'SUP-374')
+        self.assertEqual(ek('sup-374'), 'SUP-374')
+        self.assertEqual(ek('https://citemed.atlassian.net/browse/SUP-374'), 'SUP-374')
+        self.assertEqual(ek('https://citemed.atlassian.net/browse/SUP-374?focusedCommentId=1'), 'SUP-374')
+        # JSM agent-view URL — key is a path segment, no /browse/
+        self.assertEqual(
+            ek('https://citemed.atlassian.net/jira/servicedesk/projects/SUP/queues/custom/1/SUP-374'),
+            'SUP-374')
+
+    def test_rejects_non_issue_references(self):
+        from portal.views.tickets_admin import _extract_jira_key as ek
+        from portal.views.tickets_admin import JIRA_KEY_RE
+        # a search/list URL only has the key in the query string → NOT a single
+        # issue → must not be accepted as a link
+        out = ek('https://citemed.atlassian.net/jira/servicedesk/projects/SUP/list?jql=key%3DSUP-374')
+        self.assertFalse(JIRA_KEY_RE.match(out))
+        # free text stays and is rejected downstream
+        self.assertFalse(JIRA_KEY_RE.match(ek('some note about the bug')))
+
+
 class AdminTicketApiTests(TestCase):
     def setUp(self):
         self.acme, self.cust = make_co_user()
@@ -522,6 +546,21 @@ class AdminTicketApiTests(TestCase):
         # Internal backlink note + a remote link on the service-desk issue.
         self.assertIs(mcomment.call_args.kwargs.get('internal'), True)
         mlink.assert_called_once()
+
+    @patch('portal.views.tickets_admin._defer', lambda fn: None)
+    @patch('portal.views.tickets_admin.jira_client.fetch_issue', return_value=None)
+    def test_linking_accepts_pasted_jira_url(self, mfetch):
+        # Users paste the full browse URL, not the bare key — extract the key
+        # instead of rejecting it as "Invalid Jira key" (tester feedback).
+        self._login()
+        r = self.client.post(
+            f'/api/admin/tickets/{self.t.number}/jira/',
+            data=json.dumps({'action': 'add',
+                             'key': 'https://citemed.atlassian.net/browse/SUP-374?foo=1'}),
+            content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        from portal.models import JiraTicketLink
+        self.assertTrue(JiraTicketLink.objects.filter(ticket=self.t, key='SUP-374').exists())
 
     @patch('portal.views.tickets_admin._defer', side_effect=lambda fn: fn())
     @patch('portal.views.tickets_admin.jira_client.create_remote_link')

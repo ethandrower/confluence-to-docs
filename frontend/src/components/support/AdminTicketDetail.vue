@@ -57,7 +57,7 @@
               </li>
             </ul>
             <div class="ctrl-inline">
-              <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="e.g. ECD-123" aria-label="Add Jira key" @keydown.enter.prevent="onJira('add', jiraDraft)" />
+              <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="SUP-374 or paste a Jira URL" aria-label="Add Jira key or URL" @keydown.enter.prevent="onJira('add', jiraDraft)" />
               <button class="btn-outline sm" :disabled="jiraSaving || !jiraDraft.trim()" @click="onJira('add', jiraDraft)">{{ jiraSaving ? '…' : 'Link' }}</button>
             </div>
             <p class="ctrl-hint">Read-only status from Jira, for internal tracking. Never shown to the customer.</p>
