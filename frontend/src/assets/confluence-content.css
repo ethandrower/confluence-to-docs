@@ -1,6 +1,6 @@
 /*
  * Prose rendering for Confluence content.
- * Source Sans 3 for reading body, Archivo (var(--font-ui)) for structural
+ * Source Sans 3 for reading body, the UI font (var(--font-ui)) for structural
  * headings. Theme-aware via prose variables (light + dark).
  */
 
