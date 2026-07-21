@@ -18,10 +18,7 @@
         </button>
         <div class="atd-head-top">
           <p class="atd-number">{{ ticket.display_number }} · {{ ticket.company.name }}</p>
-          <span class="atd-status" :class="`status--${statusTone(ticket.status, 'staff')}`"
-                title="Ticket status — set in CiteMed Support and shown to the customer. Independent of any linked Jira issue.">
-            <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status, 'staff') }}
-          </span>
+          <StatusMenu :status="ticket.status" :disabled="statusSaving" @change="onStatusChange" />
         </div>
         <h1 ref="subjectHeadingEl" tabindex="-1" class="atd-subject-h">{{ ticket.subject }}</h1>
       </header>
@@ -39,12 +36,6 @@
           <span class="atd-details-hint">{{ detailsHint }}</span>
         </summary>
         <div class="atd-controls">
-          <label class="ctrl"><span>Ticket status</span>
-            <select v-model="statusDraft" class="ctrl-input" aria-label="Ticket status" @change="onStatusChange">
-              <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ statusLabel(s, 'staff') }}</option>
-            </select>
-            <p class="ctrl-hint">Set here and shown to the customer — not pulled from Jira.</p>
-          </label>
           <div class="ctrl"><span>Jira (internal)</span>
             <ul v-if="ticket.jira_links && ticket.jira_links.length" class="jira-list">
               <li v-for="jl in ticket.jira_links" :key="jl.key" class="jira-item">
@@ -120,9 +111,10 @@ import { ref, watch, computed, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 import MessageThread from '@/components/support/MessageThread.vue'
+import StatusMenu from '@/components/support/StatusMenu.vue'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
-import { statusLabel, statusTone, STATUS_KEYS, fullDate } from '@/lib/ticketStatus'
+import { statusLabel, statusTone, fullDate } from '@/lib/ticketStatus'
 
 const props = defineProps({
   ticket: { type: Object, default: null },
@@ -159,7 +151,6 @@ const detailsHint = computed(() => {
   return bits.join(' · ')
 })
 
-const statusDraft = ref('')
 const jiraDraft = ref('')
 const ccDraft = ref([])
 const jiraSaving = ref(false)
@@ -245,7 +236,6 @@ async function onResend(m) {
 
 function syncDrafts(t) {
   if (!t) return
-  statusDraft.value = t.status
   jiraDraft.value = ''
   ccDraft.value = [...(t.cc_emails || [])]
   replyBody.value = ''
@@ -264,15 +254,20 @@ watch(() => props.ticket?.number, (n, old) => {
   }
 })
 
-async function onStatusChange() {
-  if (!props.ticket) return
+const statusSaving = ref(false)
+async function onStatusChange(key) {
+  if (!props.ticket || key === props.ticket.status) return
+  const prev = props.ticket.status
+  statusSaving.value = true
   actionError.value = ''
+  emit('updated', { status: key })        // optimistic: header chip + list row update immediately
   try {
-    await store.adminSetStatus(props.ticket.number, statusDraft.value)
-    emit('updated', { status: statusDraft.value })
+    await store.adminSetStatus(props.ticket.number, key)
   } catch (e) {
     actionError.value = e.message || 'Could not update status.'
-    statusDraft.value = props.ticket.status // revert the dropdown to server truth
+    emit('updated', { status: prev })      // revert to server truth
+  } finally {
+    statusSaving.value = false
   }
 }
 
@@ -322,7 +317,6 @@ async function onSendReply() {
     replyInternal.value = false
     pending.value = []
     emit('updated', { message: res.message, status: res.status })
-    statusDraft.value = res.status
     nextTick(() => threadRef.value?.scrollToBottom(true))
   } catch (e) {
     pending.value = []
@@ -352,12 +346,6 @@ function onComposerKeydown(e) {
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
 .atd-subject-h { font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 4px 0 0; }
-.atd-status { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 650; white-space: nowrap; padding: 4px 11px; border-radius: 999px; }
-.atd-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.status--success { color: var(--success); background: color-mix(in srgb, var(--success) 13%, transparent); }
-.status--warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); }
-.status--info { color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent); }
-.status--muted { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 13%, transparent); }
 
 .atd-action-error { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 28px; font-size: 0.82rem; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-bottom: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); flex-shrink: 0; }
 .atd-action-error-x { margin-left: auto; flex-shrink: 0; border: none; background: none; color: var(--destructive); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px; }
