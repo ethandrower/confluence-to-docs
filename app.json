@@ -69,6 +69,11 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "comment": "Option A: create + link a Jira issue for open unlinked tickets via the API (ECD-2246). No-op unless JIRA_AUTO_CREATE is set.",
+      "command": "python manage.py provision_jira_issues",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "comment": "Pull public service-desk Jira comments into linked portal tickets so replies typed in Jira reach the customer (S1, ECD-2246). Every minute; for ~30s near-real-time run 'sync_jira_comments --loop --interval 30' as a worker instead.",
       "command": "python manage.py sync_jira_comments",
       "schedule": "* * * * *"

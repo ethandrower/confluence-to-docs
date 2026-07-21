@@ -106,3 +106,54 @@ def sync_ticket_comments(ticket, *, email_customer=None):
     logger.info('jira_sync: appended %s comment(s) to %s',
                 len(created), ticket.display_number)
     return len(created)
+
+
+def provision_ticket_issue(ticket):
+    """Option A: CREATE a Jira issue for `ticket` via the API and link it, so
+    the portal gets the key back and S1 sync works — no fragile email intake,
+    no duplicate. Gated by settings.JIRA_AUTO_CREATE; idempotent (skips an
+    already-linked ticket); best-effort (a Jira failure leaves it unlinked,
+    retried next cron). Returns the new Jira key or None.
+
+    Runs from the provision_jira_issues cron, never the ticket-create request
+    path — the create/link/backlink calls shouldn't add latency there."""
+    from django.utils import timezone
+    from portal.models import JiraTicketLink
+    from portal.views.tickets import log_ticket_activity
+
+    if not getattr(settings, 'JIRA_AUTO_CREATE', False):
+        return None
+    if ticket.jira_links.exists():
+        return None
+
+    project = getattr(settings, 'JIRA_TICKET_PROJECT', 'SUP')
+    issue_type = getattr(settings, 'JIRA_TICKET_ISSUE_TYPE_ID', '10103')
+    first = ticket.messages.order_by('created_at').first()
+    site = (getattr(settings, 'FRONTEND_URL', '') or '').rstrip('/')
+    admin_url = f'{site}/manage/tickets/{ticket.number}'
+    summary = f'[{ticket.display_number}] {ticket.subject}'
+    body = (f'Portal ticket {ticket.display_number} — {ticket.company.name}\n\n'
+            f'{first.body if first else ""}\n\n'
+            f'Reply to the customer in the portal (not in Jira): {admin_url}')
+
+    key = jira_client.create_issue(project, summary, body, issue_type)
+    if not key:
+        return None
+
+    link, _ = JiraTicketLink.objects.get_or_create(ticket=ticket, key=key)
+    data = jira_client.fetch_issue(key)
+    if data:
+        link.cached_status = data['status'][:64]
+        link.cached_status_category = data['status_category'][:32]
+        link.cached_summary = data['summary'][:512]
+        link.fetched_at = timezone.now()
+        link.save(update_fields=['cached_status', 'cached_status_category',
+                                 'cached_summary', 'fetched_at'])
+    jira_client.create_remote_link(
+        key, admin_url, f'{ticket.display_number} in CiteMed Support')
+    jira_client.add_comment(key, (
+        f'💬 Linked to CiteMed Support ticket {ticket.display_number}. Reply to '
+        f'the customer in the portal (not in Jira): {admin_url}'), internal=True)
+    log_ticket_activity(ticket, 'jira_linked', actor=None, key=key, auto=True)
+    logger.info('jira_provision: %s created + linked %s', ticket.display_number, key)
+    return key

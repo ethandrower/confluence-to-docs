@@ -165,7 +165,11 @@ def notify_ticket_created(ticket, first_message):
         cta_url=f'{_site()}/support/{ticket.number}',
         track=True,
     )
-    _notify_support_new(ticket, first_message)
+    # When the portal creates the Jira issue itself (Option A), do NOT email the
+    # JSM intake — that would create a duplicate issue. The portal admin + the
+    # realtime nav badge already surface new tickets to staff.
+    if not getattr(settings, 'JIRA_AUTO_CREATE', False):
+        _notify_support_new(ticket, first_message)
 
 
 def _notify_support_new(ticket, first_message):
