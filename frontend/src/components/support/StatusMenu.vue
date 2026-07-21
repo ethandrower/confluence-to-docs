@@ -67,7 +67,7 @@ export default { name: 'StatusMenu' }
 -->
 <style>
 /* Menu */
-.sm-menu { min-width: 200px; max-width: calc(100vw - 24px); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 10px 30px color-mix(in srgb, var(--foreground) 14%, transparent); padding: 5px; z-index: 50; }
+.sm-menu { min-width: 176px; max-width: min(232px, calc(100vw - 24px)); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 10px 30px color-mix(in srgb, var(--foreground) 14%, transparent); padding: 5px; z-index: 50; }
 .sm-item { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--foreground); cursor: pointer; outline: none; }
 .sm-item[data-highlighted], .sm-item:hover { background: var(--accent); }
 .sm-item--on { background: color-mix(in srgb, var(--primary) 7%, transparent); }
