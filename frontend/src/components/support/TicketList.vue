@@ -9,8 +9,8 @@
           </span>
           <span class="tl-subject">{{ t.subject }}</span>
           <span v-if="t.unread" class="sr-only">Unread new reply</span>
-          <span class="tl-status" :class="`status--${statusTone(t.status)}`">
-            <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status) }}
+          <span class="tl-status" :class="`status--${statusTone(t.status, 'customer')}`">
+            <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status, 'customer') }}
           </span>
           <span class="tl-updated">{{ relDate(t.updated_at) }}</span>
           <span class="tl-count">{{ t.message_count }} message{{ t.message_count === 1 ? '' : 's' }}</span>
@@ -25,35 +25,12 @@
 </template>
 
 <script setup>
+import { statusLabel, statusTone, relDate } from '@/lib/ticketStatus'
+
 defineProps({
   tickets: { type: Array, required: true },
   isFirstRun: { type: Boolean, default: false },
 })
-
-const STATUS_LABELS = {
-  waiting_on_support: 'Awaiting reply',
-  waiting_on_customer: 'Action needed',
-  resolved: 'Resolved',
-  closed: 'Closed',
-  open: 'Open',
-}
-const STATUS_TONES = {
-  waiting_on_support: 'info',
-  waiting_on_customer: 'warning',
-  resolved: 'success',
-  closed: 'muted',
-  open: 'info',
-}
-function statusLabel(s) { return STATUS_LABELS[s] || s }
-function statusTone(s) { return STATUS_TONES[s] || 'muted' }
-
-function relDate(d) {
-  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000)
-  if (days <= 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return `${days} days ago`
-  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
 </script>
 
 <style scoped>

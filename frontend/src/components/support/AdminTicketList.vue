@@ -25,7 +25,7 @@
       </select>
       <select :value="filterStatus" class="atl-select" aria-label="Filter by status" @change="$emit('update:filterStatus', $event.target.value)">
         <option value="">All statuses</option>
-        <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
+        <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ statusLabel(s, 'staff') }}</option>
       </select>
     </div>
 
@@ -43,13 +43,13 @@
           >
             <span class="atl-row-line">
               <span class="atl-ref">{{ t.display_number }} · {{ t.company.name }}</span>
-              <span class="atl-status" :class="`status--${statusTone(t.status)}`">
-                <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status) }}
+              <span class="atl-status" :class="`status--${statusTone(t.status, 'staff')}`">
+                <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status, 'staff') }}
               </span>
             </span>
             <span class="atl-row-line">
               <span class="atl-subject">{{ t.subject }}</span>
-              <span class="atl-updated">{{ relDate(t.updated_at) }}</span>
+              <span class="atl-updated">{{ relDate(t.updated_at, { short: true }) }}</span>
             </span>
           </button>
         </li>
@@ -65,6 +65,8 @@
 </template>
 
 <script setup>
+import { statusLabel, statusTone, relDate, STATUS_KEYS } from '@/lib/ticketStatus'
+
 defineProps({
   mode: { type: String, required: true },
   tickets: { type: Array, required: true },
@@ -78,32 +80,6 @@ defineProps({
   filterStatus: { type: String, default: '' },
 })
 defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompany', 'update:filterStatus'])
-
-const STATUS_LABELS = {
-  waiting_on_support: 'Needs reply',
-  waiting_on_customer: 'Waiting on customer',
-  resolved: 'Resolved',
-  closed: 'Closed',
-  open: 'Open',
-}
-const STATUS_TONES = {
-  waiting_on_support: 'warning',
-  waiting_on_customer: 'info',
-  resolved: 'success',
-  closed: 'muted',
-  open: 'info',
-}
-const STATUS_KEYS = ['open', 'waiting_on_support', 'waiting_on_customer', 'resolved', 'closed']
-function statusLabel(s) { return STATUS_LABELS[s] || s }
-function statusTone(s) { return STATUS_TONES[s] || 'muted' }
-
-function relDate(d) {
-  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000)
-  if (days <= 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return `${days}d ago`
-  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
 </script>
 
 <style scoped>
