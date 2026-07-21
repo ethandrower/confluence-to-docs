@@ -296,6 +296,15 @@ def ticket_detail(request, number):
         return JsonResponse({'error': 'Not found'}, status=404)
     # Intentional read-tracking side-effect on GET: opening a thread marks it
     # read for this user (drives the customer list's unread flag). Not a bug.
+    # Capture the prior last_read_at BEFORE advancing it, so the frontend can
+    # draw a persistent "New" divider above replies that arrived since the
+    # customer's previous visit (null on first-ever open).
+    prior = (TicketRead.objects
+             .filter(user=request.portal_user, ticket=t)
+             .values_list('last_read_at', flat=True)
+             .first())
+    prev_read_at = prior.isoformat() if prior else None
+
     TicketRead.objects.update_or_create(
         user=request.portal_user, ticket=t,
         defaults={'last_read_at': timezone.now()})
@@ -303,6 +312,7 @@ def ticket_detail(request, number):
     data = _ticket_dict(t, message_count=msgs.count())
     data['cc_emails'] = t.cc_emails
     data['messages'] = [_message_dict(m, for_customer=True) for m in msgs]
+    data['prev_read_at'] = prev_read_at
     return JsonResponse(data)
 
 

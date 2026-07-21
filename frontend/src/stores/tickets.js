@@ -47,6 +47,8 @@ export const useTicketsStore = defineStore('tickets', () => {
     if (!silent) error.value = ''
     try {
       const data = await api(`/tickets/${number}/`)
+      // data.prev_read_at (pre-open last_read_at, or null on first-ever open)
+      // rides along here unwhitelisted — the thread uses it for the "New" divider.
       if (seq === ticketReqSeq) current.value = data
     } catch (e) {
       if (seq === ticketReqSeq && !silent) {

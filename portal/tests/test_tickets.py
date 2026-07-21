@@ -1,10 +1,12 @@
 import json
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.core import mail
+from django.utils import timezone
 
-from portal.models import Company, PortalUser, Ticket, TicketMessage
+from portal.models import Company, PortalUser, Ticket, TicketMessage, TicketRead
 
 
 def make_co_user(name='Acme', email='a@acme.com', role='customer'):
@@ -431,6 +433,50 @@ class CustomerTicketApiTests(TestCase):
             self.client.get('/api/tickets/')
         # Query count must not grow with the number of tickets.
         self.assertEqual(len(one.captured_queries), len(many.captured_queries))
+
+
+class PrevReadAtTests(TestCase):
+    """ticket_detail must return the read state as it was BEFORE this GET
+    advances it, so the customer thread can draw a persistent "New" divider
+    above replies that arrived since the previous visit."""
+
+    def setUp(self):
+        self.acme, self.cust = make_co_user()
+        self.t = Ticket.objects.create(company=self.acme, created_by=self.cust, subject='S')
+        TicketMessage.objects.create(ticket=self.t, body='hi', origin='portal',
+                                     author_email=self.cust.email)
+
+    def _login(self):
+        s = self.client.session
+        s['portal_user_id'] = self.cust.id
+        s.save()
+
+    def _url(self):
+        return f'/api/tickets/{self.t.number}/'
+
+    def test_first_open_returns_null_then_advances(self):
+        self._login()
+        r1 = self.client.get(self._url())
+        self.assertEqual(r1.status_code, 200)
+        self.assertIsNone(r1.json().get('prev_read_at'))  # never read before
+        self.assertTrue(TicketRead.objects.filter(user=self.cust, ticket=self.t).exists())
+
+    def test_second_open_returns_first_open_time_not_now(self):
+        self._login()
+        self.client.get(self._url())
+        read = TicketRead.objects.get(user=self.cust, ticket=self.t)
+        # Backdate so the returned value is distinguishable from "now".
+        read.last_read_at = timezone.now() - timedelta(hours=1)
+        read.save(update_fields=['last_read_at'])
+
+        r2 = self.client.get(self._url())
+        prev = r2.json().get('prev_read_at')
+        self.assertIsNotNone(prev)
+        self.assertLess(prev, timezone.now().isoformat())
+
+        # The read row is still advanced to now despite prev_read_at being backdated.
+        read.refresh_from_db()
+        self.assertGreater(read.last_read_at, timezone.now() - timedelta(minutes=1))
 
 
 class ExtractJiraKeyTest(TestCase):
