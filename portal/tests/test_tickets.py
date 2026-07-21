@@ -468,11 +468,17 @@ class PrevReadAtTests(TestCase):
         # Backdate so the returned value is distinguishable from "now".
         read.last_read_at = timezone.now() - timedelta(hours=1)
         read.save(update_fields=['last_read_at'])
+        # Re-read the stored value from the DB (not the in-memory object) so the
+        # comparison below is against exactly what a fresh query would return.
+        backdated = TicketRead.objects.get(user=self.cust, ticket=self.t).last_read_at
 
         r2 = self.client.get(self._url())
         prev = r2.json().get('prev_read_at')
-        self.assertIsNotNone(prev)
-        self.assertLess(prev, timezone.now().isoformat())
+        # Must equal the PRIOR (backdated) value, not "now at request time". A
+        # buggy implementation that captures prev_read_at AFTER advancing the
+        # read row would return ~now here, which `assertLess(prev, now)` alone
+        # cannot distinguish from the correct backdated value.
+        self.assertEqual(prev, backdated.isoformat())
 
         # The read row is still advanced to now despite prev_read_at being backdated.
         read.refresh_from_db()
