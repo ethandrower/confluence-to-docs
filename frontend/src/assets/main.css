@@ -75,7 +75,6 @@
   --bubble-mine-link: #cfe0ff;
   --bubble-theirs: color-mix(in srgb, var(--info) 12%, var(--card));
   --bubble-theirs-foreground: var(--card-foreground);
-  --bubble-theirs-border: color-mix(in srgb, var(--info) 25%, var(--border));
 }
 
 /* ── Dark theme (opt-in via .dark on <html>) ─────────────────────────── */
@@ -107,7 +106,6 @@
   --bubble-mine-link: #bcd6ff;
   --bubble-theirs: color-mix(in srgb, var(--info) 16%, var(--card));
   --bubble-theirs-foreground: var(--card-foreground);
-  --bubble-theirs-border: color-mix(in srgb, var(--info) 28%, var(--border));
   --border: #343C49;
   --border-subtle: #2D3442;
   --divider: #4A5160;             /* Grey 8-ish — stronger rule on dark */

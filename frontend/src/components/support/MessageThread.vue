@@ -99,9 +99,11 @@ export default { name: 'MessageThread' }
 .mt-name { font-size: 0.8rem; font-weight: 600; color: var(--foreground); }
 .mt-time { font-size: 0.72rem; color: var(--muted-foreground); }
 
-.mt-bub { border-radius: 16px; padding: 9px 13px; font-size: 0.9rem; line-height: 1.55; margin-bottom: 3px; background: var(--bubble-theirs); color: var(--bubble-theirs-foreground); border: 1px solid var(--bubble-theirs-border); border-bottom-left-radius: 5px; }
-.mt-group--mine .mt-bub { background: var(--bubble-mine); color: var(--bubble-mine-foreground); border-color: transparent; border-bottom-left-radius: 16px; border-bottom-right-radius: 5px; margin-left: auto; }
-.mt-group--internal .mt-bub { background: color-mix(in srgb, var(--warning) 10%, var(--card)); color: var(--foreground); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); border-left: 3px solid var(--warning); }
+/* Option B — true chat bubbles: no borders, tinted fills only. */
+.mt-bub { border-radius: 16px; padding: 9px 13px; font-size: 0.9rem; line-height: 1.55; margin-bottom: 3px; background: var(--bubble-theirs); color: var(--bubble-theirs-foreground); border: none; border-bottom-left-radius: 5px; }
+.mt-group--mine .mt-bub { background: var(--bubble-mine); color: var(--bubble-mine-foreground); border-bottom-left-radius: 16px; border-bottom-right-radius: 5px; margin-left: auto; }
+/* Internal notes keep only a semantic left accent, not a full border. */
+.mt-group--internal .mt-bub { background: color-mix(in srgb, var(--warning) 10%, var(--card)); color: var(--foreground); border-left: 3px solid var(--warning); }
 .mt-bub--pending { opacity: 0.6; }
 .mt-bub--fresh { animation: mt-flash 1.2s ease; }
 @keyframes mt-flash { from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 35%, transparent); } to { box-shadow: 0 0 0 0 transparent; } }
