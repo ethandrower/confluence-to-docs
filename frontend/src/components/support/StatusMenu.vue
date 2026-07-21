@@ -57,7 +57,15 @@ export default { name: 'StatusMenu' }
 .sm-chip.status--warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); }
 .sm-chip.status--info { color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent); }
 .sm-chip.status--muted { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 13%, transparent); }
+</style>
 
+<!--
+  Not scoped: Reka UI teleports DropdownMenuContent to <body>, so the teleported
+  menu never carries this component's data-v-HASH attribute and scoped styles
+  (compiled to `.sm-menu[data-v-HASH]`) would never match. A plain, non-scoped
+  block reaches the portalled content regardless.
+-->
+<style>
 /* Menu */
 .sm-menu { min-width: 240px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 10px 30px color-mix(in srgb, var(--foreground) 14%, transparent); padding: 5px; z-index: 50; }
 .sm-item { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--foreground); cursor: pointer; outline: none; }
