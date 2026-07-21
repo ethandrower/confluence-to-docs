@@ -90,9 +90,9 @@
             <SheetContent side="right" class="atd-activity-sheet">
               <SheetHeader><SheetTitle>Activity</SheetTitle></SheetHeader>
               <ul class="atd-activity-list">
-                <li v-for="(a, i) in ticket.activity" :key="i">
-                  <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
-                  <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
+                <li v-for="(a, i) in ticket.activity" :key="i" class="atd-act">
+                  <span class="atd-act-time">{{ fullDate(a.created_at) }}</span>
+                  <span class="atd-act-body">{{ activityLabel(a) }}<span v-if="a.actor" class="atd-act-actor"> · {{ a.actor }}</span></span>
                 </li>
               </ul>
             </SheetContent>
@@ -446,7 +446,14 @@ function onComposerKeydown(e) {
 
 /* Activity drawer (teleported sheet content) */
 .atd-activity-sheet { padding: 20px; gap: 12px; }
-.atd-activity-sheet .atd-activity-list { list-style: none; margin: 0; padding: 8px 4px; display: grid; gap: 8px; overflow-y: auto; }
-.atd-activity-sheet .atd-activity-list li { font-size: 0.82rem; color: var(--foreground); }
-.atd-activity-sheet .dim { color: var(--muted-foreground); }
+.atd-activity-sheet .atd-activity-list { list-style: none; margin: 0; padding: 6px 2px 2px; display: flex; flex-direction: column; overflow-y: auto; }
+/* Vertical timeline: a node dot per entry, connected by a line down the left. */
+.atd-activity-sheet .atd-act { position: relative; padding: 0 0 18px 22px; }
+.atd-activity-sheet .atd-act::before { content: ''; position: absolute; left: 0; top: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent); }
+.atd-activity-sheet .atd-act::after { content: ''; position: absolute; left: 4px; top: 14px; bottom: -1px; width: 1.5px; background: var(--border); }
+.atd-activity-sheet .atd-act:last-child { padding-bottom: 2px; }
+.atd-activity-sheet .atd-act:last-child::after { display: none; }
+.atd-activity-sheet .atd-act-time { display: block; font-size: 0.72rem; color: var(--muted-foreground); margin-bottom: 2px; }
+.atd-activity-sheet .atd-act-body { display: block; font-size: 0.85rem; line-height: 1.4; color: var(--foreground); }
+.atd-activity-sheet .atd-act-actor { color: var(--muted-foreground); }
 </style>
