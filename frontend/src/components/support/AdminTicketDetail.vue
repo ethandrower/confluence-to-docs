@@ -74,38 +74,13 @@
       </details>
 
       <!-- Conversation -->
-      <div class="atd-scroll-wrap">
-      <ol ref="containerRef" class="atd-thread" role="list" @scroll="checkAtBottom">
-        <li v-for="m in ticket.messages" :key="m.id" class="msg" :class="{ 'msg--staff': m.is_staff, 'msg--internal': m.is_internal }">
-          <div class="msg-head">
-            <span v-if="m.is_internal" class="msg-badge msg-badge--internal">Internal</span>
-            <span v-else-if="m.is_staff" class="msg-badge">CiteMed</span>
-            <span v-if="m.origin === 'email'" class="msg-badge msg-badge--email">via email</span>
-            <span class="msg-author">{{ m.author_name }}</span>
-            <span class="msg-time">{{ fullDate(m.created_at) }}</span>
-          </div>
-          <p class="msg-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="msg-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
-          <div v-if="m.is_staff && (m.delivery_status === 'delivered' || m.delivery_status === 'sent')" class="msg-delivery msg-delivery--ok" aria-live="polite">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-            {{ m.delivery_status === 'delivered' ? 'Delivered' : 'Sent' }}
-          </div>
-          <div v-else-if="m.is_staff && (m.delivery_status === 'failed' || m.delivery_status === 'bounced')" class="msg-delivery msg-delivery--fail" aria-live="polite">
-            <span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
-              {{ m.delivery_status === 'bounced' ? 'Bounced' : 'Not delivered' }}<span v-if="m.delivery_detail" class="msg-delivery-detail"> · {{ m.delivery_detail }}</span>
-            </span>
-            <button class="msg-retry" :disabled="resendingId === m.id" @click="onResend(m)">
-              {{ resendingId === m.id ? 'Retrying…' : 'Retry' }}
-            </button>
-          </div>
-        </li>
-        <li v-if="!ticket.messages.length" class="msg-empty">No messages yet.</li>
-      </ol>
-      <button v-if="showNewPill" type="button" class="atd-newpill" @click="scrollToBottom(true)">
-        New messages ↓
-      </button>
-      <span class="sr-only" role="status" aria-live="polite">{{ showNewPill ? 'New messages below' : '' }}</span>
-      </div>
+      <MessageThread
+        ref="threadRef"
+        :messages="renderMessages"
+        perspective="admin"
+        :fresh-ids="freshIds"
+        @resend="onResend"
+      />
 
       <details class="activity-feed">
         <summary>Activity ({{ ticket.activity.length }})</summary>
@@ -120,16 +95,19 @@
       <!-- Docked composer -->
       <form class="composer" @submit.prevent="onSendReply">
         <label for="admin-reply-body">Reply to {{ ticket.display_number }}</label>
-        <textarea id="admin-reply-body" v-model="replyBody" class="composer-textarea" rows="3" placeholder="Write a reply…" @focus="replyFocused = true" @blur="replyFocused = false" />
+        <textarea id="admin-reply-body" v-model="replyBody" class="composer-textarea" rows="3" placeholder="Write a reply…" @focus="replyFocused = true" @blur="replyFocused = false" @keydown="onComposerKeydown" />
         <p v-if="replyError" class="form-error" role="alert">{{ replyError }}</p>
         <div class="composer-actions">
           <label class="internal-toggle">
             <input type="checkbox" v-model="replyInternal" />
             <span>Internal note (not sent to customer)</span>
           </label>
-          <button type="submit" class="btn-primary" :class="replyInternal && 'btn-primary--internal'" :disabled="sending || !replyBody.trim()">
-            {{ sending ? 'Sending…' : (replyInternal ? 'Add internal note' : 'Send reply') }}
-          </button>
+          <div class="composer-send">
+            <span class="composer-hint">⌘↵ to send</span>
+            <button type="submit" class="btn-primary" :class="replyInternal && 'btn-primary--internal'" :disabled="sending || !replyBody.trim()">
+              {{ sending ? 'Sending…' : (replyInternal ? 'Add internal note' : 'Send reply') }}
+            </button>
+          </div>
         </div>
       </form>
     </template>
@@ -139,11 +117,10 @@
 <script setup>
 import { ref, watch, computed, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
-import { linkify } from '@/lib/linkify'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
+import MessageThread from '@/components/support/MessageThread.vue'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
-import { useThreadScroll } from '@/lib/useThreadScroll'
 import { statusLabel, statusTone, STATUS_KEYS, fullDate } from '@/lib/ticketStatus'
 
 const props = defineProps({
@@ -196,14 +173,28 @@ const resendingId = ref(null)
 // believing it stuck.
 const actionError = ref('')
 
-const { containerRef, showNewPill, checkAtBottom, scrollToBottom, resetToBottom } =
-  useThreadScroll(() => props.ticket?.messages?.length ?? 0)
+const threadRef = ref(null)
+const pending = ref([])   // optimistic staff messages not yet confirmed
+const freshIds = ref(new Set())
+const renderMessages = computed(() => (props.ticket ? [...props.ticket.messages, ...pending.value] : []))
 
 const replyFocused = ref(false)
 const isComposing = computed(() => replyFocused.value || replyBody.value.trim() !== '')
 
-// Reset scroll to newest when a different ticket is opened.
-watch(() => props.ticket?.number, () => resetToBottom())
+// Mark messages that appear after the operator opened the ticket (arrived-while-viewing highlight).
+watch(() => props.ticket?.messages?.length, (n, old) => {
+  if (props.ticket && old != null && n > old) {
+    const known = new Set(props.ticket.messages.slice(0, old).map(m => m.id))
+    props.ticket.messages.forEach(m => { if (!known.has(m.id) && !m.is_staff) freshIds.value.add(m.id) })
+  }
+})
+
+// Reset scroll to newest (and clear per-ticket state) when a different ticket is opened.
+watch(() => props.ticket?.number, () => {
+  pending.value = []
+  freshIds.value = new Set()
+  nextTick(() => threadRef.value?.resetToBottom())
+})
 
 async function refreshFromServer() {
   if (!props.ticket || isComposing.value) return
@@ -301,20 +292,30 @@ async function onSaveCc() {
 async function onSendReply() {
   const text = replyBody.value.trim()
   if (!text || !props.ticket) return
+  if (sending.value) return
   sending.value = true
   replyError.value = ''
+  const temp = { id: `temp-${Date.now()}`, body: text, is_staff: true, is_internal: replyInternal.value, origin: 'staff', author_name: 'You', created_at: new Date().toISOString(), pending: true }
+  pending.value = [temp]
+  nextTick(() => threadRef.value?.scrollToBottom(true))
   try {
     const res = await store.adminReply(props.ticket.number, text, replyInternal.value)
     replyBody.value = ''
     replyInternal.value = false
+    pending.value = []
     emit('updated', { message: res.message, status: res.status })
     statusDraft.value = res.status
-    nextTick(() => scrollToBottom(true))
+    nextTick(() => threadRef.value?.scrollToBottom(true))
   } catch (e) {
+    pending.value = []
     replyError.value = e.message || 'Failed to send. Please try again.'
   } finally {
     sending.value = false
   }
+}
+
+function onComposerKeydown(e) {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSendReply() }
 }
 </script>
 
@@ -382,46 +383,6 @@ async function onSendReply() {
 .btn-outline.sm { padding: 0 12px; height: 38px; }
 .btn-outline:disabled { opacity: 0.6; cursor: default; }
 
-/* Conversation — the hero. A subtle canvas so the pane reads as an
-   intentional workspace, not a blank void when a thread is short. */
-.atd-scroll-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
-.atd-thread { list-style: none; margin: 0; padding: 24px 28px; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 14px; align-content: start; background: color-mix(in srgb, var(--muted) 55%, var(--background)); }
-.atd-newpill {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 6px;
-  font: inherit; font-size: 0.78rem; font-weight: 600;
-  color: var(--primary-foreground); background: var(--primary);
-  border: none; border-radius: 999px; padding: 6px 14px; cursor: pointer;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--foreground) 18%, transparent);
-}
-.atd-newpill:hover { filter: brightness(0.95); }
-.atd-newpill:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 14px 16px; max-width: min(82%, 640px); box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent); }
-/* Chat alignment: customer on the left, CiteMed/staff (incl. internal notes) on the right. */
-.msg--staff, .msg--internal { margin-left: auto; }
-.msg--staff { background: color-mix(in srgb, var(--info) 7%, var(--card)); border-color: color-mix(in srgb, var(--info) 25%, var(--border)); }
-.msg--internal { background: color-mix(in srgb, var(--warning) 8%, var(--card)); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); border-left: 3px solid var(--warning); }
-.msg-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
-.msg-badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; color: var(--info); background: color-mix(in srgb, var(--info) 16%, transparent); }
-.msg-badge--internal { color: var(--warning); background: color-mix(in srgb, var(--warning) 18%, transparent); }
-.msg-badge--email { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
-.msg-author { font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
-.msg-time { font-size: 0.76rem; color: var(--muted-foreground); margin-left: auto; }
-.msg-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.msg-link { color: var(--brand-accent); text-decoration: underline; }
-.msg-link:hover { text-decoration: none; }
-.msg-delivery { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; }
-.msg-delivery svg { width: 12px; height: 12px; flex-shrink: 0; vertical-align: -1px; margin-right: 3px; }
-.msg-delivery--ok { color: var(--muted-foreground); }
-.msg-delivery--fail { color: var(--destructive); }
-.msg-delivery--fail > span { display: inline-flex; align-items: center; min-width: 0; }
-.msg-delivery-detail { font-weight: 400; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.msg-retry { flex-shrink: 0; font: inherit; font-size: 0.72rem; font-weight: 600; color: var(--destructive); background: none; border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent); border-radius: var(--radius-sm); padding: 2px 9px; cursor: pointer; transition: background 0.15s; }
-.msg-retry:hover:not(:disabled) { background: color-mix(in srgb, var(--destructive) 10%, transparent); }
-.msg-retry:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.msg-retry:disabled { opacity: 0.6; cursor: default; }
-.msg-empty { text-align: center; color: var(--muted-foreground); font-size: 0.88rem; padding: 24px 0; list-style: none; }
-
 /* Activity feed */
 .activity-feed { flex-shrink: 0; border-top: 1px solid var(--border); padding: 12px 28px; }
 .activity-feed summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; color: var(--muted-foreground); }
@@ -439,6 +400,8 @@ async function onSendReply() {
 .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .internal-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--foreground); cursor: pointer; }
 .internal-toggle input { accent-color: var(--warning); width: 16px; height: 16px; cursor: pointer; }
+.composer-send { display: flex; align-items: center; gap: 10px; }
+.composer-hint { font-size: 0.72rem; color: var(--muted-foreground); }
 .btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s, background 0.15s, border-color 0.15s; }
 .btn-primary:hover { filter: brightness(0.94); }
 .btn-primary:disabled { opacity: 0.6; }
