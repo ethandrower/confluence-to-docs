@@ -319,6 +319,10 @@ JIRA_TICKET_ISSUE_TYPE_ID = env('JIRA_TICKET_ISSUE_TYPE_ID', default='10103')
 # Which ticket categories auto-create a Jira issue. Default 'bug' only (per
 # founder: the link is for bug tickets); an empty list means all categories.
 JIRA_AUTO_CREATE_CATEGORIES = env.list('JIRA_AUTO_CREATE_CATEGORIES', default=['bug'])
+# Optional cutoff (YYYY-MM-DD): only auto-create for tickets created on/after
+# this date. Empty = no cutoff (also backfills existing open bug tickets). Set
+# it to the enablement date to make auto-create strictly "new tickets only".
+JIRA_AUTO_CREATE_SINCE = env('JIRA_AUTO_CREATE_SINCE', default='')
 
 LOGGING = {
     'version': 1,
