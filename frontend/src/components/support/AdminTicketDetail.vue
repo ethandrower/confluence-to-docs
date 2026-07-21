@@ -29,40 +29,44 @@
       </p>
 
       <!-- Controls strip (collapsed by default) -->
-      <details class="atd-details">
-        <summary>
+      <PopoverRoot>
+        <PopoverTrigger class="atd-details-trigger" aria-label="Ticket details — Jira and CC">
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
           <span>Details</span>
           <span class="atd-details-hint">{{ detailsHint }}</span>
-        </summary>
-        <div class="atd-controls">
-          <div class="ctrl"><span>Jira (internal)</span>
-            <ul v-if="ticket.jira_links && ticket.jira_links.length" class="jira-list">
-              <li v-for="jl in ticket.jira_links" :key="jl.key" class="jira-item">
-                <a class="jira-key" :href="jl.url" target="_blank" rel="noopener noreferrer">{{ jl.key }} ↗</a>
-                <span v-if="jl.status" class="jira-status" :class="`jira-status--${jl.status_category || 'new'}`">{{ jl.status }}</span>
-                <span v-else class="jira-status jira-status--muted">status unavailable</span>
-                <button class="jira-remove" :aria-label="`Unlink ${jl.key}`" :disabled="jiraSaving" @click="onJira('remove', jl.key)">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-                </button>
-              </li>
-            </ul>
-            <div class="ctrl-inline">
-              <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="SUP-374 or paste a Jira URL" aria-label="Add Jira key or URL" @keydown.enter.prevent="onJira('add', jiraDraft)" />
-              <button class="btn-outline sm" :disabled="jiraSaving || !jiraDraft.trim()" @click="onJira('add', jiraDraft)">{{ jiraSaving ? '…' : 'Link' }}</button>
-            </div>
-            <p class="ctrl-hint">Read-only status from Jira, for internal tracking. Never shown to the customer.</p>
-          </div>
-          <label class="ctrl"><span>CC</span>
-            <div class="ctrl-inline">
-              <div class="ctrl-inline-grow">
-                <EmailChipsInput v-model="ccDraft" aria-label="CC email addresses" />
+        </PopoverTrigger>
+        <PopoverPortal>
+          <PopoverContent class="atd-details-pop" align="start" :side-offset="6">
+            <div class="atd-controls">
+              <div class="ctrl"><span>Jira (internal)</span>
+                <ul v-if="ticket.jira_links && ticket.jira_links.length" class="jira-list">
+                  <li v-for="jl in ticket.jira_links" :key="jl.key" class="jira-item">
+                    <a class="jira-key" :href="jl.url" target="_blank" rel="noopener noreferrer">{{ jl.key }} ↗</a>
+                    <span v-if="jl.status" class="jira-status" :class="`jira-status--${jl.status_category || 'new'}`">{{ jl.status }}</span>
+                    <span v-else class="jira-status jira-status--muted">status unavailable</span>
+                    <button class="jira-remove" :aria-label="`Unlink ${jl.key}`" :disabled="jiraSaving" @click="onJira('remove', jl.key)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                    </button>
+                  </li>
+                </ul>
+                <div class="ctrl-inline">
+                  <input v-model="jiraDraft" class="ctrl-input" type="text" placeholder="SUP-374 or paste a Jira URL" aria-label="Add Jira key or URL" @keydown.enter.prevent="onJira('add', jiraDraft)" />
+                  <button class="btn-outline sm" :disabled="jiraSaving || !jiraDraft.trim()" @click="onJira('add', jiraDraft)">{{ jiraSaving ? '…' : 'Link' }}</button>
+                </div>
+                <p class="ctrl-hint">Read-only status from Jira, for internal tracking. Never shown to the customer.</p>
               </div>
-              <button class="btn-outline sm" :disabled="ccSaving" @click="onSaveCc">{{ ccSaving ? 'Saving…' : 'Save' }}</button>
+              <label class="ctrl"><span>CC</span>
+                <div class="ctrl-inline">
+                  <div class="ctrl-inline-grow">
+                    <EmailChipsInput v-model="ccDraft" aria-label="CC email addresses" />
+                  </div>
+                  <button class="btn-outline sm" :disabled="ccSaving" @click="onSaveCc">{{ ccSaving ? 'Saving…' : 'Save' }}</button>
+                </div>
+              </label>
             </div>
-          </label>
-        </div>
-      </details>
+          </PopoverContent>
+        </PopoverPortal>
+      </PopoverRoot>
 
       <!-- Conversation -->
       <MessageThread
@@ -93,21 +97,31 @@
         </div>
       </form>
 
-      <details class="activity-feed">
-        <summary>Activity ({{ ticket.activity.length }})</summary>
-        <ul>
-          <li v-for="(a, i) in ticket.activity" :key="i">
-            <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
-            <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
-          </li>
-        </ul>
-      </details>
+      <div class="atd-activity-bar">
+        <Sheet>
+          <SheetTrigger class="atd-activity-trigger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>
+            Activity ({{ ticket.activity.length }})
+          </SheetTrigger>
+          <SheetContent side="right" class="atd-activity-sheet">
+            <SheetHeader><SheetTitle>Activity</SheetTitle></SheetHeader>
+            <ul class="atd-activity-list">
+              <li v-for="(a, i) in ticket.activity" :key="i">
+                <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
+                <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
+              </li>
+            </ul>
+          </SheetContent>
+        </Sheet>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup>
 import { ref, watch, computed, nextTick } from 'vue'
+import { PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent } from 'reka-ui'
+import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useTicketsStore } from '@/stores/tickets'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 import MessageThread from '@/components/support/MessageThread.vue'
@@ -350,52 +364,22 @@ function onComposerKeydown(e) {
 .atd-action-error { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 28px; font-size: 0.82rem; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-bottom: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); flex-shrink: 0; }
 .atd-action-error-x { margin-left: auto; flex-shrink: 0; border: none; background: none; color: var(--destructive); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px; }
 
-/* Details / controls (collapsed by default) */
-.atd-details { flex-shrink: 0; border-bottom: 1px solid var(--border); padding: 0 28px; }
-.atd-details summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding: 13px 0; list-style: none; }
-.atd-details summary::-webkit-details-marker { display: none; }
-.atd-details summary:hover { color: var(--foreground); }
-.atd-details .chev { width: 13px; height: 13px; flex-shrink: 0; transition: transform 0.18s ease; }
-.atd-details[open] .chev { transform: rotate(90deg); }
-.atd-details-hint { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; color: var(--muted-foreground); }
-.atd-details[open] .atd-details-hint { display: none; }
-.atd-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 4px 0 20px; }
-.ctrl { display: block; }
-.ctrl > span { display: block; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; }
-.ctrl-hint { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted-foreground); }
-.ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
-.ctrl-input:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
-.ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }
-.ctrl-inline .ctrl-input { flex: 1 1 auto; min-width: 0; }
-.ctrl-inline-grow { flex: 1 1 auto; min-width: 0; }
-.jira-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
-.jira-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.jira-key { flex-shrink: 0; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--brand-accent, var(--primary)); text-decoration: none; }
-.jira-key:hover { text-decoration: underline; }
-.jira-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.jira-status--new { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
-.jira-status--indeterminate { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
-.jira-status--done { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); }
-.jira-status--muted { color: var(--muted-foreground); background: none; font-weight: 400; font-style: italic; }
-.jira-remove { margin-left: auto; flex-shrink: 0; display: inline-grid; place-items: center; width: 22px; height: 22px; border: none; background: none; color: var(--muted-foreground); border-radius: var(--radius-sm); cursor: pointer; }
-.jira-remove svg { width: 12px; height: 12px; }
-.jira-remove:hover { background: color-mix(in srgb, var(--destructive) 12%, transparent); color: var(--destructive); }
-.jira-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-.jira-remove:disabled { opacity: 0.5; cursor: default; }
+/* Details trigger (collapsed by default; opens a floating popover so the
+   conversation/composer below never reflows). */
+.atd-details-trigger { display: flex; align-items: center; gap: 8px; width: 100%; cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding: 13px 28px; border: none; border-bottom: 1px solid var(--border); background: none; flex-shrink: 0; text-align: left; }
+.atd-details-trigger:hover { color: var(--foreground); }
+.atd-details-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.atd-details-trigger .chev { width: 13px; height: 13px; flex-shrink: 0; transition: transform 0.18s ease; }
+.atd-details-trigger[data-state="open"] .chev { transform: rotate(90deg); }
+.atd-details-trigger .atd-details-hint { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; color: var(--muted-foreground); }
 
-.btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
-.btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
-.btn-outline:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.btn-outline.sm { padding: 0 12px; height: 38px; }
-.btn-outline:disabled { opacity: 0.6; cursor: default; }
-
-/* Activity feed */
-.activity-feed { flex-shrink: 0; border-top: 1px solid var(--border); padding: 12px 28px; background: color-mix(in srgb, var(--muted) 40%, var(--card)); }
-.activity-feed summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; color: var(--muted-foreground); }
-.activity-feed summary:hover { color: var(--foreground); }
-.activity-feed ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; max-height: 20vh; overflow-y: auto; }
-.activity-feed li { font-size: 0.78rem; color: var(--foreground); }
-.dim { color: var(--muted-foreground); }
+/* Activity bar (footer strip; opens a slide-out drawer so the conversation/
+   composer above never reflows). */
+.atd-activity-bar { flex-shrink: 0; border-top: 1px solid var(--border); padding: 12px 28px; background: color-mix(in srgb, var(--muted) 40%, var(--card)); }
+.atd-activity-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: var(--muted-foreground); background: none; border: none; padding: 0; }
+.atd-activity-trigger:hover { color: var(--foreground); }
+.atd-activity-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.atd-activity-trigger svg { width: 14px; height: 14px; flex-shrink: 0; }
 
 /* Docked composer */
 .composer { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--border); padding: 18px 28px 22px; flex-shrink: 0; background: var(--card); }
@@ -419,4 +403,51 @@ function onComposerKeydown(e) {
 @media (max-width: 860px) {
   .atd-back { display: inline-flex; }
 }
+</style>
+
+<!--
+  Not scoped: Reka teleports PopoverContent and the sheet's DialogContent to
+  <body>, so the teleported content never carries this component's
+  data-v-HASH attribute and scoped styles would never match. A plain,
+  non-scoped block reaches the portalled content regardless — every selector
+  below is nested under a unique wrapper class (.atd-details-pop /
+  .atd-activity-sheet) to avoid leaking globally, mirroring StatusMenu.vue.
+-->
+<style>
+.atd-details-pop { width: 320px; max-width: calc(100vw - 24px); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 10px 30px color-mix(in srgb, var(--foreground) 14%, transparent); padding: 16px; z-index: 50; }
+.atd-details-pop .atd-controls { display: grid; gap: 16px; }
+.atd-details-pop .ctrl { display: block; }
+.atd-details-pop .ctrl > span { display: block; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; }
+.atd-details-pop .ctrl-hint { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted-foreground); }
+.atd-details-pop .ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
+.atd-details-pop .ctrl-input:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
+.atd-details-pop .ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }
+.atd-details-pop .ctrl-inline .ctrl-input { flex: 1 1 auto; min-width: 0; }
+.atd-details-pop .ctrl-inline-grow { flex: 1 1 auto; min-width: 0; }
+.atd-details-pop .jira-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.atd-details-pop .jira-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.atd-details-pop .jira-key { flex-shrink: 0; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--brand-accent, var(--primary)); text-decoration: none; }
+.atd-details-pop .jira-key:hover { text-decoration: underline; }
+.atd-details-pop .jira-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.atd-details-pop .jira-status--new { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
+.atd-details-pop .jira-status--indeterminate { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.atd-details-pop .jira-status--done { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); }
+.atd-details-pop .jira-status--muted { color: var(--muted-foreground); background: none; font-weight: 400; font-style: italic; }
+.atd-details-pop .jira-remove { margin-left: auto; flex-shrink: 0; display: inline-grid; place-items: center; width: 22px; height: 22px; border: none; background: none; color: var(--muted-foreground); border-radius: var(--radius-sm); cursor: pointer; }
+.atd-details-pop .jira-remove svg { width: 12px; height: 12px; }
+.atd-details-pop .jira-remove:hover { background: color-mix(in srgb, var(--destructive) 12%, transparent); color: var(--destructive); }
+.atd-details-pop .jira-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.atd-details-pop .jira-remove:disabled { opacity: 0.5; cursor: default; }
+
+.atd-details-pop .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
+.atd-details-pop .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
+.atd-details-pop .btn-outline:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.atd-details-pop .btn-outline.sm { padding: 0 12px; height: 38px; }
+.atd-details-pop .btn-outline:disabled { opacity: 0.6; cursor: default; }
+
+/* Activity drawer (teleported sheet content) */
+.atd-activity-sheet { padding: 20px; gap: 12px; }
+.atd-activity-sheet .atd-activity-list { list-style: none; margin: 0; padding: 8px 4px; display: grid; gap: 8px; overflow-y: auto; }
+.atd-activity-sheet .atd-activity-list li { font-size: 0.82rem; color: var(--foreground); }
+.atd-activity-sheet .dim { color: var(--muted-foreground); }
 </style>

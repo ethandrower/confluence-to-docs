@@ -67,8 +67,8 @@ export default { name: 'StatusMenu' }
 -->
 <style>
 /* Menu */
-.sm-menu { min-width: 240px; max-width: calc(100vw - 24px); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 10px 30px color-mix(in srgb, var(--foreground) 14%, transparent); padding: 5px; z-index: 50; }
-.sm-item { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--foreground); cursor: pointer; outline: none; }
+.sm-menu { min-width: 200px; max-width: calc(100vw - 24px); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 10px 30px color-mix(in srgb, var(--foreground) 14%, transparent); padding: 5px; z-index: 50; }
+.sm-item { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--foreground); cursor: pointer; outline: none; }
 .sm-item[data-highlighted], .sm-item:hover { background: var(--accent); }
 .sm-item--on { background: color-mix(in srgb, var(--primary) 7%, transparent); }
 .sm-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
@@ -78,5 +78,5 @@ export default { name: 'StatusMenu' }
 .sm-dot.status--muted { color: var(--muted-foreground); }
 .sm-label { flex: 1 1 auto; }
 .sm-ck { width: 14px; height: 14px; color: var(--primary); flex-shrink: 0; }
-.sm-hint { margin: 4px 4px 2px; padding: 8px 6px 4px; border-top: 1px solid var(--border); font-size: 0.72rem; line-height: 1.45; color: var(--muted-foreground); }
+.sm-hint { margin: 4px 4px 2px; padding: 7px 6px 3px; border-top: 1px solid var(--border); font-size: 0.72rem; line-height: 1.45; color: var(--muted-foreground); }
 </style>
