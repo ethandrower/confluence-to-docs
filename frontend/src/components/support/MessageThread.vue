@@ -75,10 +75,12 @@ export default { name: 'MessageThread' }
 
 <style scoped>
 .mt-scroll-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
-/* Bottom-anchored: justify-content flex-end keeps short threads resting above the composer. */
-.mt-thread { list-style: none; margin: 0; padding: 20px 16px; display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-height: 0; overflow-y: auto; justify-content: flex-end; background: color-mix(in srgb, var(--muted) 45%, var(--background)); }
-.mt-thread > .mt-item:first-child { margin-top: auto; } /* push content down when short */
-.mt-item { display: contents; }
+/* Bottom-anchored via `margin-top:auto` on the first item (not `justify-content:
+   flex-end`, which can make the overflow top unreachable). Each item stays a real
+   <li> flex-column so the <ol role="list"> keeps its list/listitem semantics. */
+.mt-thread { list-style: none; margin: 0; padding: 20px 16px; display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-height: 0; overflow-y: auto; background: color-mix(in srgb, var(--muted) 45%, var(--background)); }
+.mt-thread > .mt-item:first-child { margin-top: auto; } /* push content down when short; collapses to 0 when overflowing */
+.mt-item { display: flex; flex-direction: column; }
 
 .mt-day, .mt-new { display: flex; align-items: center; gap: 10px; margin: 10px 2px 8px; font-size: 11px; font-weight: 600; }
 .mt-day { color: var(--muted-foreground); }
