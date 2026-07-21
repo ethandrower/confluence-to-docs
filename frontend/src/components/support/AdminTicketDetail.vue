@@ -85,15 +85,16 @@
           <Sheet>
             <SheetTrigger class="atd-activity-trigger">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>
-              Activity ({{ ticket.activity.length }})
+              Activity ({{ auditEvents.length }})
             </SheetTrigger>
             <SheetContent side="right" class="atd-activity-sheet">
               <SheetHeader><SheetTitle>Activity</SheetTitle></SheetHeader>
               <ul class="atd-activity-list">
-                <li v-for="(a, i) in ticket.activity" :key="i" class="atd-act">
+                <li v-for="(a, i) in auditEvents" :key="i" class="atd-act">
                   <span class="atd-act-time">{{ fullDate(a.created_at) }}</span>
-                  <span class="atd-act-body">{{ activityLabel(a) }}<span v-if="a.actor" class="atd-act-actor"> · {{ a.actor }}</span></span>
+                  <span class="atd-act-body">{{ activityLabel(a) }}</span>
                 </li>
+                <li v-if="!auditEvents.length" class="atd-act-empty">No status changes or links yet.</li>
               </ul>
             </SheetContent>
           </Sheet>
@@ -138,19 +139,29 @@ const emit = defineEmits(['back', 'updated', 'refreshed'])
 
 const store = useTicketsStore()
 
-const ACTIVITY_LABELS = {
-  created: 'Ticket created', message_sent: 'Reply sent', note_added: 'Internal note added',
-  status_changed: 'Status changed', jira_linked: 'Jira linked', jira_unlinked: 'Jira unlinked',
-  cc_changed: 'CC list updated',
-}
+// Activity is a state-change AUDIT, not a second copy of the conversation:
+// replies and internal notes live in the thread, so they're excluded here.
+// What remains is what you can't see by reading the messages.
+const AUDIT_ACTIONS = new Set(['created', 'status_changed', 'jira_linked', 'jira_unlinked', 'cc_changed'])
+const auditEvents = computed(() => (props.ticket?.activity || []).filter((a) => AUDIT_ACTIONS.has(a.action)))
+
 function activityLabel(a) {
+  if (a.action === 'created') {
+    return a.actor ? `Ticket opened by ${a.actor}` : 'Ticket opened'
+  }
   if (a.action === 'status_changed' && a.detail) {
     return `Status: ${statusLabel(a.detail.old, 'staff')} → ${statusLabel(a.detail.new, 'staff')}`
   }
-  if ((a.action === 'jira_linked' || a.action === 'jira_unlinked') && a.detail?.key) {
-    return `${a.action === 'jira_linked' ? 'Jira linked' : 'Jira unlinked'}: ${a.detail.key}`
+  if (a.action === 'jira_linked') {
+    return a.detail?.key ? `Linked Jira ${a.detail.key}` : 'Jira linked'
   }
-  return ACTIVITY_LABELS[a.action] || a.action
+  if (a.action === 'jira_unlinked') {
+    return a.detail?.key ? `Unlinked Jira ${a.detail.key}` : 'Jira unlinked'
+  }
+  if (a.action === 'cc_changed') {
+    return 'CC recipients updated'
+  }
+  return a.action
 }
 
 const detailsHint = computed(() => {
@@ -455,5 +466,5 @@ function onComposerKeydown(e) {
 .atd-activity-sheet .atd-act:last-child::after { display: none; }
 .atd-activity-sheet .atd-act-time { display: block; font-size: 0.72rem; color: var(--muted-foreground); margin-bottom: 2px; }
 .atd-activity-sheet .atd-act-body { display: block; font-size: 0.85rem; line-height: 1.4; color: var(--foreground); }
-.atd-activity-sheet .atd-act-actor { color: var(--muted-foreground); }
+.atd-activity-sheet .atd-act-empty { color: var(--muted-foreground); font-size: 0.85rem; padding: 4px 2px; }
 </style>

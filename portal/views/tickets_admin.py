@@ -221,7 +221,7 @@ def detail(request, number):
                      for m in msgs]
     d['activity'] = [{
         'action': a.action, 'detail': a.detail,
-        'actor': a.actor.email if a.actor else '',
+        'actor': (a.actor.name or a.actor.email) if a.actor else '',
         'created_at': a.created_at.isoformat(),
     } for a in t.activity.all()[:50]]
     d['jira_links'] = _refresh_jira_links(t)
