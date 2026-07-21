@@ -19,9 +19,9 @@
   --sidebar-width: 320px;
   --content-max-width: 768px; /* ~78ch in Source Sans 3 — optimal regulatory-prose measure */
 
-  /* Font stacks — Archivo is the CiteMed brand typeface (UI + headings);
+  /* Font stacks — Inter is the UI typeface (nav, headings, buttons, tables);
      Source Sans 3 stays for long-form doc body (humanist = more readable). */
-  --font-ui: 'Archivo Variable', 'Archivo', system-ui, -apple-system, sans-serif;
+  --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
   --font-reading: 'Source Sans 3 Variable', 'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif;
 
   /* ── CiteMed brand palette (light, default) ──────────────────────────
@@ -143,7 +143,7 @@ body {
   background: var(--background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.006em; /* Archivo reads slightly tighter, per brand scale */
+  letter-spacing: -0.006em; /* subtle negative tracking for Inter at UI sizes */
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -159,7 +159,7 @@ button { font: inherit; cursor: pointer; }
 }
 
 @theme inline {
-  --font-sans: 'Archivo Variable', 'Archivo', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
   --color-brand-accent: var(--brand-accent);
   --font-mono: 'Menlo', 'Monaco', 'Consolas', ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 2px);
