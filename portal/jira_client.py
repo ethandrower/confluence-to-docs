@@ -96,6 +96,34 @@ def _text_to_adf(text):
     return {'type': 'doc', 'version': 1, 'content': paragraphs}
 
 
+def create_issue(project, summary, body_text, issue_type_id):
+    """Create a Jira issue and return its key, or None. Best-effort (never
+    raises). This is Option A: the portal creates the issue via the API so it
+    gets the key back and links immediately — reliable, no email dependency."""
+    domain, auth = _creds()
+    if not (domain and project and summary and issue_type_id):
+        return None
+    try:
+        r = requests.post(
+            f'https://{domain}/rest/api/3/issue',
+            json={'fields': {
+                'project': {'key': project},
+                'issuetype': {'id': str(issue_type_id)},
+                'summary': summary[:255],
+                'description': _text_to_adf(body_text),
+            }},
+            auth=auth, headers={'Accept': 'application/json',
+                                'Content-Type': 'application/json'}, timeout=TIMEOUT)
+        if r.status_code not in (200, 201):
+            logger.warning('jira create in %s → HTTP %s: %s',
+                           project, r.status_code, r.text[:300])
+            return None
+        return (r.json() or {}).get('key') or None
+    except Exception as e:
+        logger.warning('jira create in %s failed: %s', project, e)
+        return None
+
+
 def add_comment(key, text, internal=False):
     """Add a comment to an issue. Returns True on success. Best-effort.
 

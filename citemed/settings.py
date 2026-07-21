@@ -308,6 +308,15 @@ JIRA_SYNC_EMAIL_CUSTOMER = env.bool('JIRA_SYNC_EMAIL_CUSTOMER', default=False)
 # Linking itself stays manual (admin pastes the key); this only bounds sync.
 JIRA_SYNC_PROJECTS = env.list('JIRA_SYNC_PROJECTS', default=['SUP'])
 
+# Option A — portal creates + links the Jira issue via the API (reliable,
+# auto-linked) instead of the fragile email intake. When JIRA_AUTO_CREATE is on
+# the portal must NOT also email the JSM intake (would duplicate), so
+# notify_ticket_created suppresses that email. Default off. Creates in
+# JIRA_TICKET_PROJECT as issue type JIRA_TICKET_ISSUE_TYPE_ID (SUP "Task").
+JIRA_AUTO_CREATE = env.bool('JIRA_AUTO_CREATE', default=False)
+JIRA_TICKET_PROJECT = env('JIRA_TICKET_PROJECT', default='SUP')
+JIRA_TICKET_ISSUE_TYPE_ID = env('JIRA_TICKET_ISSUE_TYPE_ID', default='10103')
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
