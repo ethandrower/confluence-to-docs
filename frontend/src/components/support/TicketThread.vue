@@ -140,46 +140,6 @@ export default { name: 'TicketThread' }
 .status--info { color: var(--info); }
 .status--muted { color: var(--muted-foreground); }
 
-.tt-scroll-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
-.tt-messages { list-style: none; margin: 0; padding: 1rem 0; display: grid; gap: 0.75rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; }
-.tt-newpill {
-  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 6px;
-  font: inherit; font-size: 0.78rem; font-weight: 600;
-  color: var(--primary-foreground); background: var(--primary);
-  border: none; border-radius: 999px; padding: 6px 14px; cursor: pointer;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--foreground) 18%, transparent);
-}
-.tt-newpill:hover { filter: brightness(0.95); }
-.tt-newpill:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.tt-msg {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--card);
-  padding: 0.85rem 1rem;
-  max-width: min(85%, 560px);
-}
-/* Chat alignment from the customer's POV: their own messages right, CiteMed
-   staff left (mirror of the admin pane, which is customer-left / staff-right). */
-.tt-msg--mine { justify-self: end; }
-.tt-msg--staff {
-  justify-self: start;
-  background: color-mix(in srgb, var(--info) 7%, var(--card));
-  border-color: color-mix(in srgb, var(--info) 25%, var(--border));
-}
-.tt-msg-head { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
-.tt-badge {
-  font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  padding: 0.1rem 0.45rem; border-radius: 999px;
-  color: var(--info); background: color-mix(in srgb, var(--info) 16%, transparent);
-}
-.tt-badge--email { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
-.tt-author { font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
-.tt-time { font-size: 0.76rem; color: var(--muted-foreground); margin-left: auto; }
-.tt-body { font-size: 0.9rem; line-height: 1.6; color: var(--foreground); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tt-link { color: var(--brand-accent); text-decoration: underline; }
-.tt-link:hover { text-decoration: none; }
-
 .tt-reopen-note {
   flex-shrink: 0;
   font-size: 0.85rem; color: var(--warning); margin: 0;
