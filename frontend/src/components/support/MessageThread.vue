@@ -30,7 +30,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
                 {{ m.delivery_status === 'bounced' ? 'Bounced' : 'Not delivered' }}<span v-if="m.delivery_detail" class="mt-delivery-detail"> · {{ m.delivery_detail }}</span>
               </span>
-              <button class="mt-retry" :disabled="m.pending" @click="$emit('resend', m)">Retry</button>
+              <button class="mt-retry" :disabled="m.pending || props.resendingId === m.id" @click="$emit('resend', m)">{{ props.resendingId === m.id ? 'Retrying…' : 'Retry' }}</button>
             </div>
             <span v-if="m.pending" class="mt-pending">Sending…</span>
           </div>
@@ -55,6 +55,7 @@ const props = defineProps({
   perspective: { type: String, required: true },
   lastReadAt: { type: String, default: null },
   freshIds: { type: Object, default: null },
+  resendingId: { type: [String, Number], default: null },
 })
 defineEmits(['resend'])
 

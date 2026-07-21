@@ -79,6 +79,7 @@
         :messages="renderMessages"
         perspective="admin"
         :fresh-ids="freshIds"
+        :resending-id="resendingId"
         @resend="onResend"
       />
 
