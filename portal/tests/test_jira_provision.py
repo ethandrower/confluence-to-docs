@@ -58,7 +58,7 @@ class ProvisionTicketIssueTest(TestCase):
             email='c@acme.com', company=self.co, role=PortalUser.ROLE_CUSTOMER)
         self.t = Ticket.objects.create(
             company=self.co, created_by=self.cust, subject='Need help',
-            status=Ticket.STATUS_WAITING_ON_SUPPORT)
+            category='bug', status=Ticket.STATUS_WAITING_ON_SUPPORT)
         TicketMessage.objects.create(
             ticket=self.t, author=self.cust, author_email='c@acme.com',
             body='the problem', origin=TicketMessage.ORIGIN_PORTAL)
@@ -76,6 +76,17 @@ class ProvisionTicketIssueTest(TestCase):
         mcreate.assert_called_once()
         # backlink note on the created issue is INTERNAL (never customer-visible)
         self.assertIs(mcomment.call_args.kwargs.get('internal'), True)
+
+    @mock.patch('portal.jira_sync.jira_client.create_issue', return_value='SUP-502')
+    def test_skips_non_bug_category(self, mcreate):
+        # Default scope is bugs only — a question/feature ticket must not create.
+        self.t.category = 'question'
+        self.t.save(update_fields=['category'])
+        with self.settings(JIRA_AUTO_CREATE=True, JIRA_TICKET_PROJECT='SUP',
+                           JIRA_TICKET_ISSUE_TYPE_ID='10103',
+                           JIRA_AUTO_CREATE_CATEGORIES=['bug']):
+            self.assertIsNone(jira_sync.provision_ticket_issue(self.t))
+        mcreate.assert_not_called()
 
     @mock.patch('portal.jira_sync.jira_client.create_issue')
     def test_gated_off_by_default(self, mcreate):
