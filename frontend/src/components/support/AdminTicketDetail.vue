@@ -114,7 +114,7 @@ import MessageThread from '@/components/support/MessageThread.vue'
 import StatusMenu from '@/components/support/StatusMenu.vue'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
-import { statusLabel, statusTone, fullDate } from '@/lib/ticketStatus'
+import { statusLabel, fullDate } from '@/lib/ticketStatus'
 
 const props = defineProps({
   ticket: { type: Object, default: null },
