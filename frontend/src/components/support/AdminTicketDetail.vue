@@ -18,9 +18,9 @@
         </button>
         <div class="atd-head-top">
           <p class="atd-number">{{ ticket.display_number }} · {{ ticket.company.name }}</p>
-          <span class="atd-status" :class="`status--${statusTone(ticket.status)}`"
+          <span class="atd-status" :class="`status--${statusTone(ticket.status, 'staff')}`"
                 title="Ticket status — set in CiteMed Support and shown to the customer. Independent of any linked Jira issue.">
-            <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status) }}
+            <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status, 'staff') }}
           </span>
         </div>
         <h1 ref="subjectHeadingEl" tabindex="-1" class="atd-subject-h">{{ ticket.subject }}</h1>
@@ -41,7 +41,7 @@
         <div class="atd-controls">
           <label class="ctrl"><span>Ticket status</span>
             <select v-model="statusDraft" class="ctrl-input" aria-label="Ticket status" @change="onStatusChange">
-              <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
+              <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ statusLabel(s, 'staff') }}</option>
             </select>
             <p class="ctrl-hint">Set here and shown to the customer — not pulled from Jira.</p>
           </label>
@@ -82,7 +82,7 @@
             <span v-else-if="m.is_staff" class="msg-badge">CiteMed</span>
             <span v-if="m.origin === 'email'" class="msg-badge msg-badge--email">via email</span>
             <span class="msg-author">{{ m.author_name }}</span>
-            <span class="msg-time">{{ fmtWhen(m.created_at) }}</span>
+            <span class="msg-time">{{ fullDate(m.created_at) }}</span>
           </div>
           <p class="msg-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="msg-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
           <div v-if="m.is_staff && (m.delivery_status === 'delivered' || m.delivery_status === 'sent')" class="msg-delivery msg-delivery--ok" aria-live="polite">
@@ -111,7 +111,7 @@
         <summary>Activity ({{ ticket.activity.length }})</summary>
         <ul>
           <li v-for="(a, i) in ticket.activity" :key="i">
-            <span class="dim">{{ fmtWhen(a.created_at) }}</span> — {{ activityLabel(a) }}
+            <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
             <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
           </li>
         </ul>
@@ -144,6 +144,7 @@ import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
 import { useThreadScroll } from '@/lib/useThreadScroll'
+import { statusLabel, statusTone, STATUS_KEYS, fullDate } from '@/lib/ticketStatus'
 
 const props = defineProps({
   ticket: { type: Object, default: null },
@@ -154,24 +155,6 @@ const emit = defineEmits(['back', 'updated', 'refreshed'])
 
 const store = useTicketsStore()
 
-const STATUS_LABELS = {
-  waiting_on_support: 'Needs reply',
-  waiting_on_customer: 'Waiting on customer',
-  resolved: 'Resolved',
-  closed: 'Closed',
-  open: 'Open',
-}
-const STATUS_TONES = {
-  waiting_on_support: 'warning',
-  waiting_on_customer: 'info',
-  resolved: 'success',
-  closed: 'muted',
-  open: 'info',
-}
-const STATUS_KEYS = ['open', 'waiting_on_support', 'waiting_on_customer', 'resolved', 'closed']
-function statusLabel(s) { return STATUS_LABELS[s] || s }
-function statusTone(s) { return STATUS_TONES[s] || 'muted' }
-
 const ACTIVITY_LABELS = {
   created: 'Ticket created', message_sent: 'Reply sent', note_added: 'Internal note added',
   status_changed: 'Status changed', jira_linked: 'Jira linked', jira_unlinked: 'Jira unlinked',
@@ -179,16 +162,12 @@ const ACTIVITY_LABELS = {
 }
 function activityLabel(a) {
   if (a.action === 'status_changed' && a.detail) {
-    return `Status: ${statusLabel(a.detail.old)} → ${statusLabel(a.detail.new)}`
+    return `Status: ${statusLabel(a.detail.old, 'staff')} → ${statusLabel(a.detail.new, 'staff')}`
   }
   if ((a.action === 'jira_linked' || a.action === 'jira_unlinked') && a.detail?.key) {
     return `${a.action === 'jira_linked' ? 'Jira linked' : 'Jira unlinked'}: ${a.detail.key}`
   }
   return ACTIVITY_LABELS[a.action] || a.action
-}
-
-function fmtWhen(d) {
-  return new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 const detailsHint = computed(() => {

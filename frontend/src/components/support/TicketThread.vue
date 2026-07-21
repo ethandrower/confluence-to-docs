@@ -5,8 +5,8 @@
         <p class="tt-number">{{ ticket.display_number }}</p>
         <h1>{{ ticket.subject }}</h1>
       </div>
-      <span class="tt-status" :class="`status--${statusTone(ticket.status)}`">
-        <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status) }}
+      <span class="tt-status" :class="`status--${statusTone(ticket.status, 'customer')}`">
+        <span class="dot" aria-hidden="true" /> {{ statusLabel(ticket.status, 'customer') }}
       </span>
     </header>
 
@@ -29,7 +29,7 @@
     </div>
 
     <p v-if="isClosed" class="tt-reopen-note">
-      This ticket is {{ statusLabel(ticket.status).toLowerCase() }} — replying will reopen it.
+      This ticket is {{ statusLabel(ticket.status, 'customer').toLowerCase() }} — replying will reopen it.
     </p>
 
     <form class="tt-reply" @submit.prevent="submit">
@@ -60,6 +60,7 @@ import { linkify } from '@/lib/linkify'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
 import { useThreadScroll } from '@/lib/useThreadScroll'
+import { statusLabel, statusTone, fullDate } from '@/lib/ticketStatus'
 
 const props = defineProps({
   ticket: { type: Object, required: true },
@@ -89,29 +90,6 @@ usePolling(() => store.fetchTicket(props.ticket.number, { silent: true }), {
 })
 
 const isClosed = computed(() => props.ticket.status === 'resolved' || props.ticket.status === 'closed')
-
-const STATUS_LABELS = {
-  waiting_on_support: 'Awaiting reply',
-  waiting_on_customer: 'Action needed',
-  resolved: 'Resolved',
-  closed: 'Closed',
-  open: 'Open',
-}
-const STATUS_TONES = {
-  waiting_on_support: 'info',
-  waiting_on_customer: 'warning',
-  resolved: 'success',
-  closed: 'muted',
-  open: 'info',
-}
-function statusLabel(s) { return STATUS_LABELS[s] || s }
-function statusTone(s) { return STATUS_TONES[s] || 'muted' }
-
-function fullDate(d) {
-  return new Date(d).toLocaleString(undefined, {
-    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-  })
-}
 
 async function submit() {
   const text = body.value.trim()
