@@ -123,6 +123,10 @@ def provision_ticket_issue(ticket):
 
     if not getattr(settings, 'JIRA_AUTO_CREATE', False):
         return None
+    # Scope to the configured categories (default: bugs only).
+    cats = getattr(settings, 'JIRA_AUTO_CREATE_CATEGORIES', ['bug'])
+    if cats and ticket.category not in cats:
+        return None
     if ticket.jira_links.exists():
         return None
 

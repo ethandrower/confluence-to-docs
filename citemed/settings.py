@@ -316,6 +316,9 @@ JIRA_SYNC_PROJECTS = env.list('JIRA_SYNC_PROJECTS', default=['SUP'])
 JIRA_AUTO_CREATE = env.bool('JIRA_AUTO_CREATE', default=False)
 JIRA_TICKET_PROJECT = env('JIRA_TICKET_PROJECT', default='SUP')
 JIRA_TICKET_ISSUE_TYPE_ID = env('JIRA_TICKET_ISSUE_TYPE_ID', default='10103')
+# Which ticket categories auto-create a Jira issue. Default 'bug' only (per
+# founder: the link is for bug tickets); an empty list means all categories.
+JIRA_AUTO_CREATE_CATEGORIES = env.list('JIRA_AUTO_CREATE_CATEGORIES', default=['bug'])
 
 LOGGING = {
     'version': 1,
