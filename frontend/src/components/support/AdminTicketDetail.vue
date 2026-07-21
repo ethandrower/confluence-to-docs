@@ -80,7 +80,24 @@
 
       <!-- Docked composer -->
       <form class="composer" @submit.prevent="onSendReply">
-        <label for="admin-reply-body">Reply to {{ ticket.display_number }}</label>
+        <div class="composer-labelrow">
+          <label for="admin-reply-body">Reply to {{ ticket.display_number }}</label>
+          <Sheet>
+            <SheetTrigger class="atd-activity-trigger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>
+              Activity ({{ ticket.activity.length }})
+            </SheetTrigger>
+            <SheetContent side="right" class="atd-activity-sheet">
+              <SheetHeader><SheetTitle>Activity</SheetTitle></SheetHeader>
+              <ul class="atd-activity-list">
+                <li v-for="(a, i) in ticket.activity" :key="i">
+                  <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
+                  <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
+                </li>
+              </ul>
+            </SheetContent>
+          </Sheet>
+        </div>
         <textarea id="admin-reply-body" v-model="replyBody" class="composer-textarea" rows="3" placeholder="Write a reply…" @focus="replyFocused = true" @blur="replyFocused = false" @keydown="onComposerKeydown" />
         <p v-if="replyError" class="form-error" role="alert">{{ replyError }}</p>
         <div class="composer-actions">
@@ -96,24 +113,6 @@
           </div>
         </div>
       </form>
-
-      <div class="atd-activity-bar">
-        <Sheet>
-          <SheetTrigger class="atd-activity-trigger">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>
-            Activity ({{ ticket.activity.length }})
-          </SheetTrigger>
-          <SheetContent side="right" class="atd-activity-sheet">
-            <SheetHeader><SheetTitle>Activity</SheetTitle></SheetHeader>
-            <ul class="atd-activity-list">
-              <li v-for="(a, i) in ticket.activity" :key="i">
-                <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
-                <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
-              </li>
-            </ul>
-          </SheetContent>
-        </Sheet>
-      </div>
     </template>
   </div>
 </template>
@@ -352,21 +351,21 @@ function onComposerKeydown(e) {
 .atd-placeholder { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; color: var(--muted-foreground); font-size: 0.95rem; text-align: center; padding: 48px 24px; }
 
 /* Header */
-.atd-head { display: flex; flex-direction: column; gap: 10px; padding: 20px 28px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.atd-head { display: flex; flex-direction: column; gap: 6px; padding: 13px 28px 11px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .atd-back { display: none; align-items: center; gap: 6px; align-self: flex-start; color: var(--muted-foreground); font-size: 13px; font-weight: 550; padding: 4px 8px 4px 4px; border-radius: var(--radius-sm); cursor: pointer; }
 .atd-back svg { width: 15px; height: 15px; }
 .atd-back:hover { color: var(--foreground); background: var(--muted); }
 .atd-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
-.atd-subject-h { font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 4px 0 0; }
+.atd-subject-h { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
 
 .atd-action-error { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 28px; font-size: 0.82rem; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-bottom: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); flex-shrink: 0; }
 .atd-action-error-x { margin-left: auto; flex-shrink: 0; border: none; background: none; color: var(--destructive); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px; }
 
 /* Details trigger (collapsed by default; opens a floating popover so the
    conversation/composer below never reflows). */
-.atd-details-trigger { display: flex; align-items: center; gap: 8px; width: 100%; cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding: 13px 28px; border: none; border-bottom: 1px solid var(--border); background: none; flex-shrink: 0; text-align: left; }
+.atd-details-trigger { display: flex; align-items: center; gap: 8px; width: 100%; cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding: 9px 28px; border: none; border-bottom: 1px solid var(--border); background: none; flex-shrink: 0; text-align: left; }
 .atd-details-trigger:hover { color: var(--foreground); }
 .atd-details-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .atd-details-trigger .chev { width: 13px; height: 13px; flex-shrink: 0; transition: transform 0.18s ease; }
@@ -375,16 +374,16 @@ function onComposerKeydown(e) {
 
 /* Activity bar (footer strip; opens a slide-out drawer so the conversation/
    composer above never reflows). */
-.atd-activity-bar { flex-shrink: 0; border-top: 1px solid var(--border); padding: 12px 28px; background: color-mix(in srgb, var(--muted) 40%, var(--card)); }
+.composer-labelrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-activity-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: var(--muted-foreground); background: none; border: none; padding: 0; }
 .atd-activity-trigger:hover { color: var(--foreground); }
 .atd-activity-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-activity-trigger svg { width: 14px; height: 14px; flex-shrink: 0; }
 
 /* Docked composer */
-.composer { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--border); padding: 18px 28px 22px; flex-shrink: 0; background: var(--card); }
+.composer { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding: 11px 28px 12px; flex-shrink: 0; background: var(--card); }
 .composer label[for="admin-reply-body"] { font-size: 0.82rem; font-weight: 550; color: var(--foreground); }
-.composer-textarea { padding: 0.65rem 0.8rem; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 0.9rem; font-family: inherit; color: var(--foreground); background: var(--background); resize: vertical; min-height: 76px; line-height: 1.5; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.composer-textarea { padding: 0.6rem 0.8rem; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 0.9rem; font-family: inherit; color: var(--foreground); background: var(--background); resize: vertical; min-height: 58px; line-height: 1.5; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
 .composer-textarea:focus-visible { border-color: var(--brand-accent, var(--primary)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent, var(--primary)) 15%, transparent); }
 .form-error { color: var(--destructive); font-size: 0.85rem; margin: 0; }
 .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
