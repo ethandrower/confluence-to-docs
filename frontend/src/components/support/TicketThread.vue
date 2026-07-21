@@ -14,7 +14,7 @@
       ref="threadRef"
       :messages="renderMessages"
       perspective="customer"
-      :last-read-at="ticket.prev_read_at || null"
+      :last-read-at="lastReadAt"
     />
 
     <p v-if="isClosed" class="tt-reopen-note">
@@ -65,11 +65,22 @@ const threadRef = ref(null)
 const pending = ref([])   // optimistic messages not yet confirmed
 const renderMessages = computed(() => [...props.ticket.messages, ...pending.value])
 
+const lastReadAt = ref(null)   // frozen prior read-time for the currently open ticket
+
 const textareaFocused = ref(false)
 const isTyping = computed(() => textareaFocused.value || body.value.trim() !== '')
 
 // Jump to newest when navigating to a different ticket in the same component.
-watch(() => props.ticket.number, () => { pending.value = []; nextTick(() => threadRef.value?.resetToBottom()) })
+// Also capture prev_read_at once per ticket open — every GET /api/tickets/:n/
+// advances the backend's last_read_at, so the reactive prop value keeps
+// creeping toward "now" on later silent refetches (realtime nudges, polling
+// fallback). Freezing it here keeps the "New" divider anchored to the read
+// time as of open, not the most recent refetch.
+watch(() => props.ticket.number, () => {
+  pending.value = []
+  lastReadAt.value = props.ticket.prev_read_at || null
+  nextTick(() => threadRef.value?.resetToBottom())
+}, { immediate: true })
 
 const { connected } = useTicketChannel(
   () => `/ws/tickets/${props.ticket.number}/`,
