@@ -100,6 +100,7 @@ function onKeydown(e) {
 async function submit() {
   const text = body.value.trim()
   if (!text) return
+  if (sending.value) return
   sending.value = true
   serverError.value = ''
   const temp = { id: `temp-${Date.now()}`, body: text, is_staff: false, is_internal: false, origin: 'portal', author_name: 'You', created_at: new Date().toISOString(), pending: true }
