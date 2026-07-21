@@ -183,33 +183,34 @@ const replyFocused = ref(false)
 const isComposing = computed(() => replyFocused.value || replyBody.value.trim() !== '')
 
 // Mark messages that appear after the operator opened the ticket (arrived-while-viewing highlight).
-// `freshForNumber` tracks which ticket the previous message count ("old" below)
-// belongs to. Vue does not guarantee this watch runs after the ticket-switch
-// reset watch below on the same reactive flush, so on a ticket switch this
-// callback can otherwise fire with `old` still holding the previously-open
-// ticket's message count — comparing it against the newly-opened ticket's
-// count would wrongly flag that ticket's pre-existing customer messages as
-// "fresh" before the reset watch has a chance to clear them. Guarding on the
-// ticket number (rather than relying on watcher order) makes this robust: if
-// the number changed since we last saw it, just resync the tracked number
-// and skip marking anything fresh this round.
-let freshForNumber = null
-watch(() => props.ticket?.messages?.length, (n, old) => {
-  const currentNumber = props.ticket?.number ?? null
-  if (currentNumber !== freshForNumber) {
-    freshForNumber = currentNumber
+// `freshBaseline` holds the message ids known at the moment the current ticket
+// was opened; `freshForNumber` records which ticket number that baseline
+// belongs to. This single watcher self-detects a ticket switch by comparing
+// the ticket number to the number its own baseline belongs to — independent
+// of watcher registration order, and correct even when two consecutively
+// opened tickets happen to share a message count (a length-based watch would
+// miss that switch entirely, since the count never changes).
+let freshBaseline = new Set()   // message ids known at the moment this ticket was opened
+let freshForNumber = null       // which ticket number freshBaseline belongs to
+watch(() => props.ticket?.messages, (msgs) => {
+  const num = props.ticket?.number ?? null
+  if (num !== freshForNumber) {
+    // ticket changed (or first load): re-baseline, mark nothing fresh
+    freshForNumber = num
+    freshBaseline = new Set((msgs || []).map((m) => m.id))
+    freshIds.value = new Set()
     return
   }
-  if (props.ticket && old != null && n > old) {
-    const known = new Set(props.ticket.messages.slice(0, old).map(m => m.id))
-    props.ticket.messages.forEach(m => { if (!known.has(m.id) && !m.is_staff) freshIds.value.add(m.id) })
+  // same ticket still open: any message id not in the baseline is a new arrival
+  for (const m of msgs || []) {
+    if (!freshBaseline.has(m.id) && !m.is_staff) freshIds.value.add(m.id)
+    freshBaseline.add(m.id)
   }
-})
+}, { immediate: true })
 
 // Reset scroll to newest (and clear per-ticket state) when a different ticket is opened.
 watch(() => props.ticket?.number, () => {
   pending.value = []
-  freshIds.value = new Set()
   nextTick(() => threadRef.value?.resetToBottom())
 })
 
