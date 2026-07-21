@@ -127,6 +127,14 @@ def provision_ticket_issue(ticket):
     cats = getattr(settings, 'JIRA_AUTO_CREATE_CATEGORIES', ['bug'])
     if cats and ticket.category not in cats:
         return None
+    # Optional "new tickets only" cutoff: don't backfill tickets created before
+    # the configured date.
+    since = getattr(settings, 'JIRA_AUTO_CREATE_SINCE', '')
+    if since:
+        from django.utils.dateparse import parse_date
+        cutoff = parse_date(since)
+        if cutoff and ticket.created_at.date() < cutoff:
+            return None
     if ticket.jira_links.exists():
         return None
 

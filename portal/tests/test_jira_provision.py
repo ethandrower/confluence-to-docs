@@ -88,6 +88,28 @@ class ProvisionTicketIssueTest(TestCase):
             self.assertIsNone(jira_sync.provision_ticket_issue(self.t))
         mcreate.assert_not_called()
 
+    @mock.patch('portal.jira_sync.jira_client.create_issue', return_value='SUP-503')
+    def test_skips_ticket_created_before_cutoff(self, mcreate):
+        # "New tickets only": a bug ticket older than JIRA_AUTO_CREATE_SINCE is
+        # not backfilled.
+        with self.settings(JIRA_AUTO_CREATE=True, JIRA_TICKET_PROJECT='SUP',
+                           JIRA_TICKET_ISSUE_TYPE_ID='10103',
+                           JIRA_AUTO_CREATE_CATEGORIES=['bug'],
+                           JIRA_AUTO_CREATE_SINCE='2099-01-01'):
+            self.assertIsNone(jira_sync.provision_ticket_issue(self.t))
+        mcreate.assert_not_called()
+
+    @mock.patch('portal.jira_sync.jira_client.create_remote_link', return_value=True)
+    @mock.patch('portal.jira_sync.jira_client.add_comment', return_value=True)
+    @mock.patch('portal.jira_sync.jira_client.fetch_issue', return_value=None)
+    @mock.patch('portal.jira_sync.jira_client.create_issue', return_value='SUP-504')
+    def test_creates_ticket_on_or_after_cutoff(self, mcreate, mfetch, mcomment, mlink):
+        with self.settings(JIRA_AUTO_CREATE=True, JIRA_TICKET_PROJECT='SUP',
+                           JIRA_TICKET_ISSUE_TYPE_ID='10103',
+                           JIRA_AUTO_CREATE_CATEGORIES=['bug'],
+                           JIRA_AUTO_CREATE_SINCE='2000-01-01'):
+            self.assertEqual(jira_sync.provision_ticket_issue(self.t), 'SUP-504')
+
     @mock.patch('portal.jira_sync.jira_client.create_issue')
     def test_gated_off_by_default(self, mcreate):
         with self.settings(JIRA_AUTO_CREATE=False):
