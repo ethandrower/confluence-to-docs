@@ -10,23 +10,12 @@
       </span>
     </header>
 
-    <div class="tt-scroll-wrap">
-      <ol ref="containerRef" class="tt-messages" role="list" @scroll="checkAtBottom">
-        <li v-for="m in ticket.messages" :key="m.id" class="tt-msg" :class="{ 'tt-msg--staff': m.is_staff, 'tt-msg--mine': !m.is_staff }">
-          <div class="tt-msg-head">
-            <span v-if="m.is_staff" class="tt-badge">CiteMed</span>
-            <span v-if="m.origin === 'email'" class="tt-badge tt-badge--email">via email</span>
-            <span class="tt-author">{{ m.author_name }}</span>
-            <span class="tt-time">{{ fullDate(m.created_at) }}</span>
-          </div>
-          <p class="tt-body"><template v-for="(seg, i) in linkify(m.body)" :key="i"><a v-if="seg.type === 'link'" :href="seg.value" target="_blank" rel="noopener nofollow ugc" class="tt-link">{{ seg.value }}</a><template v-else>{{ seg.value }}</template></template></p>
-        </li>
-      </ol>
-      <button v-if="showNewPill" type="button" class="tt-newpill" @click="scrollToBottom(true)">
-        New messages ↓
-      </button>
-      <span class="sr-only" role="status" aria-live="polite">{{ showNewPill ? 'New messages below' : '' }}</span>
-    </div>
+    <MessageThread
+      ref="threadRef"
+      :messages="renderMessages"
+      perspective="customer"
+      :last-read-at="ticket.prev_read_at || null"
+    />
 
     <p v-if="isClosed" class="tt-reopen-note">
       This ticket is {{ statusLabel(ticket.status, 'customer').toLowerCase() }} — replying will reopen it.
@@ -42,9 +31,11 @@
         placeholder="Write your reply…"
         @focus="textareaFocused = true"
         @blur="textareaFocused = false"
+        @keydown="onKeydown"
       />
       <p v-if="serverError" class="tt-error" role="alert">{{ serverError }}</p>
       <div class="tt-reply-actions">
+        <span class="tt-hint">⌘↵ to send</span>
         <button type="submit" class="btn-primary" :disabled="sending || !body.trim()">
           {{ sending ? 'Sending…' : 'Send' }}
         </button>
@@ -56,11 +47,10 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
-import { linkify } from '@/lib/linkify'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
-import { useThreadScroll } from '@/lib/useThreadScroll'
-import { statusLabel, statusTone, fullDate } from '@/lib/ticketStatus'
+import { statusLabel, statusTone } from '@/lib/ticketStatus'
+import MessageThread from '@/components/support/MessageThread.vue'
 
 const props = defineProps({
   ticket: { type: Object, required: true },
@@ -71,14 +61,15 @@ const body = ref('')
 const sending = ref(false)
 const serverError = ref('')
 
-const { containerRef, showNewPill, checkAtBottom, scrollToBottom, resetToBottom } =
-  useThreadScroll(() => props.ticket.messages.length)
+const threadRef = ref(null)
+const pending = ref([])   // optimistic messages not yet confirmed
+const renderMessages = computed(() => [...props.ticket.messages, ...pending.value])
 
 const textareaFocused = ref(false)
 const isTyping = computed(() => textareaFocused.value || body.value.trim() !== '')
 
 // Jump to newest when navigating to a different ticket in the same component.
-watch(() => props.ticket.number, () => resetToBottom())
+watch(() => props.ticket.number, () => { pending.value = []; nextTick(() => threadRef.value?.resetToBottom()) })
 
 const { connected } = useTicketChannel(
   () => `/ws/tickets/${props.ticket.number}/`,
@@ -91,16 +82,25 @@ usePolling(() => store.fetchTicket(props.ticket.number, { silent: true }), {
 
 const isClosed = computed(() => props.ticket.status === 'resolved' || props.ticket.status === 'closed')
 
+function onKeydown(e) {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() }
+}
+
 async function submit() {
   const text = body.value.trim()
   if (!text) return
   sending.value = true
   serverError.value = ''
+  const temp = { id: `temp-${Date.now()}`, body: text, is_staff: false, is_internal: false, origin: 'portal', author_name: 'You', created_at: new Date().toISOString(), pending: true }
+  pending.value = [temp]
+  nextTick(() => threadRef.value?.scrollToBottom(true))
   try {
     await store.reply(props.ticket.number, text)
     body.value = ''
-    nextTick(() => scrollToBottom(true))
+    pending.value = []            // real message now in ticket.messages
+    nextTick(() => threadRef.value?.scrollToBottom(true))
   } catch (e) {
+    pending.value = []            // remove the optimistic bubble
     serverError.value = e.message || 'Failed to send reply. Please try again.'
   } finally {
     sending.value = false
@@ -195,7 +195,8 @@ export default { name: 'TicketThread' }
 }
 .tt-textarea:focus-visible { border-color: var(--brand-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 15%, transparent); }
 .tt-error { font-size: 0.82rem; color: var(--destructive); margin: 0; }
-.tt-reply-actions { display: flex; justify-content: flex-end; }
+.tt-reply-actions { display: flex; justify-content: space-between; align-items: center; }
+.tt-hint { font-size: 0.72rem; color: var(--muted-foreground); }
 .btn-primary { background: var(--primary); color: var(--primary-foreground); border: none; border-radius: var(--radius-sm); padding: 0.5rem 1.1rem; cursor: pointer; font: inherit; font-size: 0.85rem; font-weight: 600; transition: opacity 0.15s; }
 .btn-primary:hover:not(:disabled) { opacity: 0.9; }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }

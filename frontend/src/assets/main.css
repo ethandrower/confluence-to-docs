@@ -68,6 +68,14 @@
   --sidebar-accent-foreground: #0C377B;
   --sidebar-border: #EBEEF4;
   --sidebar-ring: #3578FF;
+
+  /* Chat bubbles (ticket thread) */
+  --bubble-mine: color-mix(in srgb, var(--primary) 92%, #ffffff);   /* navy @ ~92% — the picked value */
+  --bubble-mine-foreground: #ffffff;
+  --bubble-mine-link: #cfe0ff;
+  --bubble-theirs: color-mix(in srgb, var(--info) 12%, var(--card));
+  --bubble-theirs-foreground: var(--card-foreground);
+  --bubble-theirs-border: color-mix(in srgb, var(--info) 25%, var(--border));
 }
 
 /* ── Dark theme (opt-in via .dark on <html>) ─────────────────────────── */
@@ -92,6 +100,14 @@
   --success: #4FCB87;            /* approved / received / complete */
   --warning: #E0B250;            /* in-progress / due-soon / partial */
   --info: #75B5FF;               /* in-review / open / informational */
+
+  /* Chat bubbles (ticket thread) — dark */
+  --bubble-mine: color-mix(in srgb, var(--primary) 42%, var(--card));
+  --bubble-mine-foreground: #ffffff;
+  --bubble-mine-link: #bcd6ff;
+  --bubble-theirs: color-mix(in srgb, var(--info) 16%, var(--card));
+  --bubble-theirs-foreground: var(--card-foreground);
+  --bubble-theirs-border: color-mix(in srgb, var(--info) 28%, var(--border));
   --border: #343C49;
   --border-subtle: #2D3442;
   --divider: #4A5160;             /* Grey 8-ish — stronger rule on dark */
