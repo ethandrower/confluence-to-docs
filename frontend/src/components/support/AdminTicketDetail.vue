@@ -74,16 +74,6 @@
         @resend="onResend"
       />
 
-      <details class="activity-feed">
-        <summary>Activity ({{ ticket.activity.length }})</summary>
-        <ul>
-          <li v-for="(a, i) in ticket.activity" :key="i">
-            <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
-            <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
-          </li>
-        </ul>
-      </details>
-
       <!-- Docked composer -->
       <form class="composer" @submit.prevent="onSendReply">
         <label for="admin-reply-body">Reply to {{ ticket.display_number }}</label>
@@ -102,6 +92,16 @@
           </div>
         </div>
       </form>
+
+      <details class="activity-feed">
+        <summary>Activity ({{ ticket.activity.length }})</summary>
+        <ul>
+          <li v-for="(a, i) in ticket.activity" :key="i">
+            <span class="dim">{{ fullDate(a.created_at) }}</span> — {{ activityLabel(a) }}
+            <span v-if="a.actor" class="dim">· {{ a.actor }}</span>
+          </li>
+        </ul>
+      </details>
     </template>
   </div>
 </template>
@@ -390,7 +390,7 @@ function onComposerKeydown(e) {
 .btn-outline:disabled { opacity: 0.6; cursor: default; }
 
 /* Activity feed */
-.activity-feed { flex-shrink: 0; border-top: 1px solid var(--border); padding: 12px 28px; }
+.activity-feed { flex-shrink: 0; border-top: 1px solid var(--border); padding: 12px 28px; background: color-mix(in srgb, var(--muted) 40%, var(--card)); }
 .activity-feed summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; color: var(--muted-foreground); }
 .activity-feed summary:hover { color: var(--foreground); }
 .activity-feed ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; max-height: 20vh; overflow-y: auto; }
