@@ -295,6 +295,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
+import { apiFetch } from '../../lib/http.js'
 
 const fileCompanies = ref([])
 const fileCompanyQuery = ref('')
@@ -323,7 +324,7 @@ const inboxLoading = ref(false)
 
 async function loadFileCompanies(force = false) {
   if (!force && fileCompanies.value.length) return
-  const r = await fetch('/api/admin/files/companies/', { credentials: 'include' })
+  const r = await apiFetch('/api/admin/files/companies/', { credentials: 'include' })
   if (r.ok) fileCompanies.value = (await r.json()).companies
 }
 
@@ -348,7 +349,7 @@ async function loadInbox() {
   try {
     const params = new URLSearchParams({ status: inboxStatus.value })
     if (inboxCompany.value) params.set('company', inboxCompany.value)
-    const r = await fetch(`/api/admin/files/inbox/?${params}`, { credentials: 'include' })
+    const r = await apiFetch(`/api/admin/files/inbox/?${params}`, { credentials: 'include' })
     if (r.ok) {
       const data = await r.json()
       inboxItems.value = data.items
@@ -367,7 +368,7 @@ async function reviewInbox(item, status) {
   }
   const body = { review_status: status }
   if (notes !== undefined) body.notes = notes
-  const r = await fetch(`/api/admin/files/${item.id}/review`, {
+  const r = await apiFetch(`/api/admin/files/${item.id}/review`, {
     method: 'PATCH', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -398,7 +399,7 @@ async function openComments(id, name) {
   commentsFile.value = { id, name }
   comments.value = []
   commentDraft.value = ''
-  const r = await fetch(`/api/admin/files/${id}/comments`, { credentials: 'include' })
+  const r = await apiFetch(`/api/admin/files/${id}/comments`, { credentials: 'include' })
   if (r.ok) comments.value = (await r.json()).comments
 }
 function bumpCommentCount(id) {
@@ -414,7 +415,7 @@ async function addComment() {
   if (!body || !commentsFile.value) return
   commentsAdding.value = true
   try {
-    const r = await fetch(`/api/admin/files/${commentsFile.value.id}/comments`, {
+    const r = await apiFetch(`/api/admin/files/${commentsFile.value.id}/comments`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body }),
@@ -445,7 +446,7 @@ const activityGroups = computed(() => {
 async function loadActivity() {
   const params = new URLSearchParams({ limit: '200' })
   if (activityCompany.value) params.set('company', activityCompany.value)
-  const r = await fetch(`/api/admin/files/activity/?${params}`, { credentials: 'include' })
+  const r = await apiFetch(`/api/admin/files/activity/?${params}`, { credentials: 'include' })
   if (r.ok) activityItems.value = (await r.json()).items
 }
 function openActivity() {
@@ -475,7 +476,7 @@ function closePreview() { preview.value = null }
 const checklistDraft = ref({})
 const showAdd = ref({})  // per-bucket: reveal the (optional) checklist editor
 async function setReview(f, status) {
-  const r = await fetch(`/api/admin/files/${f.id}/review`, {
+  const r = await apiFetch(`/api/admin/files/${f.id}/review`, {
     method: 'PATCH', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ review_status: status }),
@@ -485,7 +486,7 @@ async function setReview(f, status) {
 async function editNote(f) {
   const notes = prompt('Reviewer note (shown to the customer when status is In review / Needs revision):', f.review_notes || '')
   if (notes === null) return
-  const r = await fetch(`/api/admin/files/${f.id}/review`, {
+  const r = await apiFetch(`/api/admin/files/${f.id}/review`, {
     method: 'PATCH', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ notes }),
@@ -495,7 +496,7 @@ async function editNote(f) {
 async function addChecklist(b) {
   const text = (checklistDraft.value[b.id] || '').trim()
   if (!text) return
-  const r = await fetch('/api/admin/files/checklist/', {
+  const r = await apiFetch('/api/admin/files/checklist/', {
     method: 'POST', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ bucket_id: b.id, text }),
@@ -503,7 +504,7 @@ async function addChecklist(b) {
   if (r.ok) { checklistDraft.value[b.id] = ''; await selectCompany(selectedCompanyId.value) }
 }
 async function linkChecklist(item, fileId) {
-  const r = await fetch(`/api/admin/files/checklist/${item.id}/`, {
+  const r = await apiFetch(`/api/admin/files/checklist/${item.id}/`, {
     method: 'PATCH', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ linked_file_id: fileId ? Number(fileId) : null }),
@@ -511,7 +512,7 @@ async function linkChecklist(item, fileId) {
   if (r.ok) await selectCompany(selectedCompanyId.value)
 }
 async function removeChecklist(item) {
-  const r = await fetch(`/api/admin/files/checklist/${item.id}/`, { method: 'DELETE', credentials: 'include' })
+  const r = await apiFetch(`/api/admin/files/checklist/${item.id}/`, { method: 'DELETE', credentials: 'include' })
   if (r.ok) await selectCompany(selectedCompanyId.value)
 }
 function checklistPct(b) {
@@ -531,7 +532,7 @@ function dueLabel(b) {
 async function selectCompany(id) {
   preview.value = null
   selectedCompanyId.value = id
-  const r = await fetch(`/api/admin/files/companies/${id}/`, { credentials: 'include' })
+  const r = await apiFetch(`/api/admin/files/companies/${id}/`, { credentials: 'include' })
   if (r.ok) {
     const data = await r.json()
     selectedCompany.value = data.company
@@ -578,7 +579,7 @@ async function saveRequest() {
     const url = reqEditing.value
       ? `/api/admin/files/requests/${reqEditing.value.id}/`
       : '/api/admin/files/requests/'
-    const r = await fetch(url, {
+    const r = await apiFetch(url, {
       method: reqEditing.value ? 'PATCH' : 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },

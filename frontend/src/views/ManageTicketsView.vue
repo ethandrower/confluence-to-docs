@@ -100,6 +100,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useTicketsStore } from '@/stores/tickets'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
+import { apiFetch } from '../lib/http.js'
 
 const props = defineProps({
   // Deep-link target (route /manage/tickets/:number). When present, open that
@@ -126,7 +127,7 @@ const selectError = ref(false)
 const companies = ref([])
 async function loadCompanies(force = false) {
   if (!force && companies.value.length) return
-  const r = await fetch('/api/admin/files/companies/', { credentials: 'include' })
+  const r = await apiFetch('/api/admin/files/companies/', { credentials: 'include' })
   if (r.ok) companies.value = (await r.json()).companies
 }
 

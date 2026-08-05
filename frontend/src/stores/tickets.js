@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { apiFetch } from '../lib/http.js'
 
 const api = (path, opts = {}) =>
-  fetch(`/api${path}`, {
+  apiFetch(`/api${path}`, {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     ...opts,

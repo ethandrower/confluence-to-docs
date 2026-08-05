@@ -10,7 +10,6 @@ import sys
 
 from django.conf import settings
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from portal.decorators import require_portal_admin
@@ -79,7 +78,6 @@ def _parse(request):
 
 # ── Companies ──────────────────────────────────────────────────────────────
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST'])
 @require_portal_admin
 def companies(request):
@@ -102,7 +100,6 @@ def companies(request):
     return JsonResponse({'company': _company_dict(c)}, status=201)
 
 
-@csrf_exempt
 @require_http_methods(['PATCH', 'DELETE'])
 @require_portal_admin
 def company_detail(request, company_id):
@@ -135,7 +132,6 @@ def company_detail(request, company_id):
 
 # ── Users ────────────────────────────────────────────────────────────────────
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST'])
 @require_portal_admin
 def users(request):
@@ -168,7 +164,6 @@ def users(request):
     return JsonResponse({'user': _user_dict(u, supers)}, status=201)
 
 
-@csrf_exempt
 @require_http_methods(['PATCH', 'DELETE'])
 @require_portal_admin
 def user_detail(request, user_id):
@@ -223,7 +218,6 @@ def _resolve_company(company_id):
 
 # ── Sync from Confluence ─────────────────────────────────────────────────────
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def add_page(request):
@@ -270,7 +264,6 @@ def add_page(request):
     return JsonResponse({'ok': True, 'message': f'Added “{page.title}”.', 'slug': page.slug})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def sync_docs(request):

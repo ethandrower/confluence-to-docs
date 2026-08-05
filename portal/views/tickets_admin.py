@@ -6,7 +6,6 @@ import logging
 import threading
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 import re
@@ -146,7 +145,6 @@ def inbox(request):
     return JsonResponse({'tickets': items, 'awaiting_total': len(items)})
 
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST'])
 @require_portal_admin
 def collection(request):
@@ -228,7 +226,6 @@ def detail(request, number):
     return JsonResponse(d)
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def reply(request, number):
@@ -266,7 +263,6 @@ def reply(request, number):
                          'status': t.status})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def resend_message(request, number, message_id):
@@ -293,7 +289,6 @@ def resend_message(request, number, message_id):
                          'delivery_detail': m.delivery_detail})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def set_status(request, number):
@@ -318,7 +313,6 @@ def set_status(request, number):
     return JsonResponse({'ok': True, 'status': t.status})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def set_jira(request, number):
@@ -359,7 +353,6 @@ def set_jira(request, number):
     return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t)})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def set_cc(request, number):

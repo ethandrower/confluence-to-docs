@@ -8,10 +8,10 @@ elevates an anonymous session to an authenticated one must call
 """
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from portal.models import Company, MagicLinkToken, PortalUser
+from portal.models import Company, MagicLinkToken, PortalUser, Ticket
 
 
 class SessionFixationTest(TestCase):
@@ -72,3 +72,52 @@ class SessionFixationTest(TestCase):
         self.assertTrue(r.json().get('demo'))
         self.assertNotEqual(self.client.session.session_key, old)
         self.assertEqual(self.client.session.get('portal_user_id'), demo.pk)
+
+
+class CsrfEnforcementTest(TestCase):
+    """GitHub #2. Every session-authenticated, state-changing endpoint must
+    reject a request that carries no CSRF token. `@csrf_exempt` had spread to
+    ~27 endpoints — ticket creation, replies, status changes, file operations
+    and logout — all reachable cross-site with the victim's session cookie."""
+
+    def setUp(self):
+        # enforce_csrf_checks makes the test client behave like a real browser
+        # request: no token, no pass.
+        self.client = Client(enforce_csrf_checks=True)
+        self.co = Company.objects.create(name='Acme')
+        self.cust = PortalUser.objects.create(
+            email='c@acme.com', company=self.co, role=PortalUser.ROLE_CUSTOMER)
+        self.staff = PortalUser.objects.create(
+            email='s@citemed.com', role=PortalUser.ROLE_ADMIN)
+
+    def _login(self, user):
+        s = self.client.session
+        s['portal_user_id'] = user.id
+        s.save()
+
+    def test_logout_rejects_request_without_csrf_token(self):
+        self._login(self.cust)
+        r = self.client.post('/api/auth/logout/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_ticket_create_rejects_request_without_csrf_token(self):
+        self._login(self.cust)
+        r = self.client.post('/api/tickets/', data='{"subject":"x","body":"y"}',
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_admin_status_change_rejects_request_without_csrf_token(self):
+        self._login(self.staff)
+        t = Ticket.objects.create(company=self.co, subject='x')
+        r = self.client.post(f'/api/admin/tickets/{t.number}/status/',
+                             data='{"status":"resolved"}',
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_me_plants_the_csrf_cookie_for_the_spa(self):
+        # The SPA calls /auth/me/ on boot; that response is what gives the
+        # browser a token to send back. Must work even when unauthenticated,
+        # since the login POST needs it too.
+        r = self.client.get('/api/auth/me/')
+        self.assertEqual(r.status_code, 401)
+        self.assertIn('csrftoken', r.cookies)

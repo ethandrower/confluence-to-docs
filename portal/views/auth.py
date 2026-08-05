@@ -1,8 +1,8 @@
 import secrets
 from datetime import timedelta
 from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_GET
-from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
@@ -82,7 +82,6 @@ def _start_authenticated_session(request, user):
     request.session.save()
 
 
-@csrf_exempt
 @require_POST
 def request_magic_link(request):
     try:
@@ -250,6 +249,7 @@ def demo_login(request):
     return HttpResponseRedirect(request.GET.get('next') or '/files')
 
 
+@ensure_csrf_cookie
 @require_GET
 def me(request):
     user_id = request.session.get('portal_user_id')
@@ -266,7 +266,6 @@ def me(request):
     return JsonResponse({'user': _user_payload(user, request)})
 
 
-@csrf_exempt
 @require_POST
 def logout(request):
     request.session.flush()

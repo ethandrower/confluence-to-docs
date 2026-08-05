@@ -11,7 +11,6 @@ import logging
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseRedirect
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from portal import file_storage
@@ -66,7 +65,6 @@ def buckets_list(request):
 
 
 # ── Upload (presigned PUT) ────────────────────────────────────────────────
-@csrf_exempt
 @require_portal_user
 @require_http_methods(['POST'])
 def upload_init(request):
@@ -109,7 +107,6 @@ def upload_init(request):
     })
 
 
-@csrf_exempt
 @require_portal_user
 @require_http_methods(['POST'])
 def upload_complete(request):
@@ -144,7 +141,6 @@ def upload_complete(request):
 
 
 # ── Rename / soft-delete / download ───────────────────────────────────────
-@csrf_exempt
 @require_portal_user
 @require_http_methods(['PATCH', 'DELETE'])
 def file_detail(request, file_id):
