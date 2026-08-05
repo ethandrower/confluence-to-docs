@@ -166,6 +166,41 @@ def create_remote_link(key, url, title):
         return False
 
 
+def search_issues(jql, fields=None, max_results=100):
+    """Return the issues matching `jql`, following pagination. Best-effort:
+    returns [] on missing creds or any failure (never raises into a caller).
+
+    This is a JQL search, NOT the `[CS-N]`-tag matching that was removed in
+    July — nothing here infers a portal ticket from an issue summary.
+    """
+    domain, auth = _creds()
+    if not (domain and jql):
+        return []
+    issues, token = [], None
+    try:
+        while True:
+            payload = {'jql': jql, 'maxResults': max_results,
+                       'fields': fields or ['summary']}
+            if token:
+                payload['nextPageToken'] = token
+            r = requests.post(
+                f'https://{domain}/rest/api/3/search/jql', json=payload,
+                auth=auth, headers={'Accept': 'application/json',
+                                    'Content-Type': 'application/json'},
+                timeout=TIMEOUT)
+            if r.status_code != 200:
+                logger.info('jira search → HTTP %s: %s', r.status_code, r.text[:200])
+                return issues
+            data = r.json() or {}
+            issues.extend(data.get('issues') or [])
+            token = data.get('nextPageToken')
+            if not token or data.get('isLast'):
+                return issues
+    except Exception as e:  # network, timeout, JSON, anything
+        logger.warning('jira search failed: %s', e)
+        return issues
+
+
 def fetch_comments(key, max_results=100):
     """Return a ticket-linked issue's comments as
     [{'id','author','body','created','public'}], oldest first. Best-effort:
