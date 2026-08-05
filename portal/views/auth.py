@@ -65,6 +65,23 @@ MAGIC_LINK_EMAIL_MAX = 5
 MAGIC_LINK_EMAIL_WINDOW = 60 * 60
 
 
+def _start_authenticated_session(request, user):
+    """Elevate the current request to an authenticated session, safely.
+
+    `flush()` rather than `cycle_key()`: both rotate the session id (defeating
+    fixation — an id planted in the victim's browser pre-login must not stay
+    valid afterwards), but flush also drops the old session server-side and
+    starts empty. `portal_user_id` is the only key this app ever writes to a
+    session, so there is no pre-login state worth carrying across, and keeping
+    none is the safer default.
+
+    Every login path must go through here.
+    """
+    request.session.flush()
+    request.session['portal_user_id'] = user.pk
+    request.session.save()
+
+
 @csrf_exempt
 @require_POST
 def request_magic_link(request):
@@ -123,8 +140,7 @@ def request_magic_link(request):
     # Demo/sandbox accounts skip the magic link entirely — just sign them in.
     # (Restricted to is_demo sandbox users; real users always get a link.)
     if user.is_demo:
-        request.session['portal_user_id'] = user.pk
-        request.session.save()
+        _start_authenticated_session(request, user)
         return JsonResponse({'demo': True, 'user': _user_payload(user, request)})
 
     token = MagicLinkToken.objects.create(
@@ -200,8 +216,7 @@ def verify_magic_link(request):
     user.last_login = timezone.now()
     user.save(update_fields=['last_login'])
 
-    request.session['portal_user_id'] = user.pk
-    request.session.save()
+    _start_authenticated_session(request, user)
 
     return JsonResponse({'user': _user_payload(user, request)})
 
@@ -230,8 +245,7 @@ def demo_login(request):
         from django.http import Http404
         raise Http404()
 
-    request.session['portal_user_id'] = user.pk
-    request.session.save()
+    _start_authenticated_session(request, user)
     from django.http import HttpResponseRedirect
     return HttpResponseRedirect(request.GET.get('next') or '/files')
 
