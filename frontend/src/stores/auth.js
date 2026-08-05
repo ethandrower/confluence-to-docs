@@ -25,7 +25,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function verifyToken(token) {
-    const res = await axios.get('/api/auth/verify/', { params: { token } })
+    // POST, not GET: the token is a single-use credential and a query string
+    // ends up in every server access-log line. In the body it doesn't.
+    const res = await axios.post('/api/auth/verify/', { token })
     user.value = res.data.user
     return res.data
   }

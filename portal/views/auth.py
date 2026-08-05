@@ -184,9 +184,20 @@ def request_magic_link(request):
     return JsonResponse({'message': 'Magic link sent if email exists'})
 
 
-@require_GET
+@require_POST
 def verify_magic_link(request):
-    token_str = request.GET.get('token', '')
+    """Exchange a magic-link token for a session.
+
+    POST, not GET: the token is a single-use credential, and on GET it lands
+    in the query string of every gunicorn/nginx access-log line. In the body
+    it stays out of the logs. The SPA reads the token from its own URL and
+    posts it here, then strips it from the address bar so it doesn't linger
+    in history or leak via Referer.
+    """
+    try:
+        token_str = (json.loads(request.body).get('token') or '').strip()
+    except (json.JSONDecodeError, ValueError, AttributeError):
+        return JsonResponse({'error': 'Invalid request'}, status=400)
     if not token_str:
         return JsonResponse({'error': 'Token required'}, status=400)
 

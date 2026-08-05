@@ -6,6 +6,7 @@ id valid across the victim's login unless the id is rotated. Every path that
 elevates an anonymous session to an authenticated one must call
 `session.cycle_key()`.
 """
+import json
 from datetime import timedelta
 
 from django.test import Client, TestCase
@@ -36,7 +37,9 @@ class SessionFixationTest(TestCase):
     def test_magic_link_login_rotates_the_session_id(self):
         old = self._anonymous_session_key()
         token = self._token('t0ken')
-        r = self.client.get('/api/auth/verify/', {'token': token.token})
+        r = self.client.post('/api/auth/verify/',
+                             data=json.dumps({'token': token.token}),
+                             content_type='application/json')
         self.assertEqual(r.status_code, 200)
         self.assertNotEqual(self.client.session.session_key, old)
 
@@ -45,7 +48,9 @@ class SessionFixationTest(TestCase):
         # old session must not survive into the authenticated one.
         self._anonymous_session_key()
         token = self._token('t0ken2')
-        self.client.get('/api/auth/verify/', {'token': token.token})
+        self.client.post('/api/auth/verify/',
+                         data=json.dumps({'token': token.token}),
+                         content_type='application/json')
         self.assertIsNone(self.client.session.get('planted'))
         self.assertEqual(self.client.session.get('portal_user_id'), self.user.pk)
 
@@ -121,3 +126,47 @@ class CsrfEnforcementTest(TestCase):
         r = self.client.get('/api/auth/me/')
         self.assertEqual(r.status_code, 401)
         self.assertIn('csrftoken', r.cookies)
+
+
+class MagicLinkVerifyMethodTest(TestCase):
+    """GitHub #7. Verification was GET with the token in the query string, so
+    the single-use credential landed in gunicorn/nginx access logs. Moving the
+    exchange to POST keeps it in the body, out of the log line."""
+
+    def setUp(self):
+        self.co = Company.objects.create(name='Acme')
+        self.user = PortalUser.objects.create(
+            email='c@acme.com', company=self.co, role=PortalUser.ROLE_CUSTOMER)
+
+    def _token(self, value='tok'):
+        return MagicLinkToken.objects.create(
+            user=self.user, token=value,
+            expires_at=timezone.now() + timedelta(minutes=15))
+
+    def test_get_is_rejected(self):
+        t = self._token()
+        r = self.client.get('/api/auth/verify/', {'token': t.token})
+        self.assertEqual(r.status_code, 405)
+
+    def test_post_with_token_in_body_logs_the_user_in(self):
+        t = self._token()
+        r = self.client.post('/api/auth/verify/',
+                             data=json.dumps({'token': t.token}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['user']['email'], self.user.email)
+        self.assertEqual(self.client.session.get('portal_user_id'), self.user.pk)
+
+    def test_post_without_token_is_a_400(self):
+        r = self.client.post('/api/auth/verify/', data='{}',
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_token_is_single_use(self):
+        t = self._token()
+        body = json.dumps({'token': t.token})
+        self.client.post('/api/auth/verify/', data=body,
+                         content_type='application/json')
+        again = self.client.post('/api/auth/verify/', data=body,
+                                 content_type='application/json')
+        self.assertEqual(again.status_code, 401)
