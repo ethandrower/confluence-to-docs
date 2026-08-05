@@ -61,6 +61,75 @@ def _customer_recipients(ticket):
     return deduped  # dedupe case-insensitively, keep first-seen casing + order
 
 
+def _dedupe(emails):
+    seen = set()
+    out = []
+    for e in emails:
+        if not e:
+            continue
+        key = e.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(e)
+    return out
+
+
+def _all_agent_emails():
+    """Every agent, for the creation fan-out only.
+
+    A new ticket belongs to nobody yet, so everyone who could pick it up should
+    see it. Once it's assigned, follow-ups narrow to `_staff_recipients`.
+    """
+    from portal.models import PortalUser
+    return list(
+        PortalUser.objects
+        .filter(role__in=[PortalUser.ROLE_ADMIN, PortalUser.ROLE_OWNER],
+                access_enabled=True)
+        .exclude(email='')
+        .values_list('email', flat=True)
+    )
+
+
+def _staff_recipients(ticket):
+    """Staff who are ON this ticket: whoever picked it up, plus watchers.
+
+    The shared inbox is always copied so nothing can fall through the cracks
+    while a ticket is unassigned — or after, as an archive.
+
+    Watchers are internal; they never appear in any customer-facing payload.
+    """
+    emails = []
+    if ticket.assignee_id and ticket.assignee and ticket.assignee.email:
+        emails.append(ticket.assignee.email)
+    emails.extend(w.email for w in ticket.watchers.all() if w.email)
+    support = getattr(settings, 'SUPPORT_EMAIL', None)
+    if support:
+        emails.append(support)
+    return _dedupe(emails)
+
+
+def _send_staff_notice(ticket, recipients, *, heading, body):
+    """Plain internal notice — no customer threading headers, since these go to
+    staff and must not join the customer-visible email thread."""
+    recipients = _dedupe(recipients)
+    if not recipients:
+        return
+    try:
+        text = render_to_string('emails/notification.txt', {
+            'product_name': PRODUCT_NAME,
+            'heading': heading,
+            'body': body[:2000],
+            'note': '', 'cta_label': 'Open in admin',
+            'cta_url': f'{_site()}/manage/tickets/{ticket.number}',
+        })
+        msg = EmailMultiAlternatives(
+            f'[{ticket.display_number}] {ticket.subject}', text, _from(), recipients)
+        sent = msg.send()
+        logger.info('ticket_notify staff notice → %s (sent=%s)', recipients, sent)
+    except Exception as e:
+        logger.error('ticket_notify staff notice failed: %s', e)
+
+
 def _thread_headers(ticket, message):
     """Generate + persist Message-ID / reply token; chain References."""
     domain = _mail_domain()
@@ -173,23 +242,23 @@ def notify_ticket_created(ticket, first_message):
 
 
 def _notify_support_new(ticket, first_message):
+    """New ticket → every agent, plus the shared inbox.
+
+    This is the one notification that fans out widely: an unassigned ticket is
+    nobody's yet, so everyone who could pick it up needs to see it. Every later
+    notification narrows to the people actually on the ticket.
+    """
     support = getattr(settings, 'SUPPORT_EMAIL', None)
-    if not support:
-        return
-    try:
-        text = render_to_string('emails/notification.txt', {
-            'product_name': PRODUCT_NAME,
-            'heading': f'New ticket {ticket.display_number} from {ticket.company.name}',
-            'body': first_message.body[:2000],
-            'note': '', 'cta_label': 'Open in admin',
-            'cta_url': f'{_site()}/manage',
-        })
-        msg = EmailMultiAlternatives(
-            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support])
-        sent = msg.send()
-        logger.info('ticket_notify staff-new sent → %s (sent=%s)', support, sent)
-    except Exception as e:
-        logger.error('ticket_notify staff-new failed: %s', e)
+    recipients = _all_agent_emails() + ([support] if support else [])
+    # An agent opening a ticket on a customer's behalf already knows about it.
+    author = getattr(first_message, 'author', None)
+    if author and author.email:
+        recipients = [e for e in recipients if e.lower() != author.email.lower()]
+    _send_staff_notice(
+        ticket, recipients,
+        heading=f'New ticket {ticket.display_number} from {ticket.company.name}',
+        body=first_message.body,
+    )
 
 
 def notify_staff_reply(ticket, message):
@@ -207,24 +276,32 @@ def notify_staff_reply(ticket, message):
 
 
 def notify_customer_reply(ticket, message):
-    """Customer replied → nudge support inbox email."""
-    support = getattr(settings, 'SUPPORT_EMAIL', None)
-    if not support:
+    """Customer replied → the staff who are on this ticket.
+
+    Not a fan-out to every agent: once someone has picked the ticket up, the
+    follow-up is theirs and their watchers'. The shared inbox stays copied.
+    """
+    _send_staff_notice(
+        ticket, _staff_recipients(ticket),
+        heading=f'Customer reply on {ticket.display_number}',
+        body=message.body,
+    )
+
+
+def notify_assigned(ticket, actor=None):
+    """Tell an agent a ticket is now theirs — unless they claimed it themselves,
+    in which case they plainly already know."""
+    assignee = ticket.assignee
+    if not assignee or not assignee.email:
         return
-    try:
-        text = render_to_string('emails/notification.txt', {
-            'product_name': PRODUCT_NAME,
-            'heading': f'Customer reply on {ticket.display_number}',
-            'body': message.body[:2000],
-            'note': '', 'cta_label': 'Open in admin',
-            'cta_url': f'{_site()}/manage',
-        })
-        msg = EmailMultiAlternatives(
-            f'[{ticket.display_number}] {ticket.subject}', text, _from(), [support])
-        sent = msg.send()
-        logger.info('ticket_notify customer-reply sent → %s (sent=%s)', support, sent)
-    except Exception as e:
-        logger.error('ticket_notify customer-reply failed: %s', e)
+    if actor and actor.pk == assignee.pk:
+        return
+    by = (actor.name or actor.email) if actor else 'A colleague'
+    _send_staff_notice(
+        ticket, [assignee.email],
+        heading=f'{ticket.display_number} was assigned to you',
+        body=f'{by} assigned you “{ticket.subject}” for {ticket.company.name}.',
+    )
 
 
 def notify_status(ticket, message=None):

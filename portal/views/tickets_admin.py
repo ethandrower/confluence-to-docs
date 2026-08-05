@@ -72,6 +72,16 @@ def _extract_jira_key(raw):
     return raw.upper()
 
 
+def _assignee_dict(t):
+    u = t.assignee
+    return {'id': u.id, 'email': u.email, 'name': u.name} if u else None
+
+
+def _watchers_list(t):
+    return [{'id': u.id, 'email': u.email, 'name': u.name}
+            for u in t.watchers.all()]
+
+
 def _admin_dict(t, message_count=None):
     d = _ticket_dict(t, message_count=message_count)
     d.update({
@@ -86,6 +96,10 @@ def _admin_dict(t, message_count=None):
             'name': t.requester.name if t.requester else '',
             'has_portal_access': bool(t.requester and t.requester.access_enabled),
         } if (t.requester_id or t.requester_email) else None,
+        # Staff-only. These two keys must never migrate into _ticket_dict,
+        # which the customer endpoints share.
+        'assignee': _assignee_dict(t),
+        'watchers': _watchers_list(t),
     })
     return d
 
@@ -262,6 +276,16 @@ def reply(request, number):
     is_internal = bool(data.get('is_internal'))
 
     user = request.portal_user
+    # Answering an unclaimed ticket is picking it up. Doing it implicitly keeps
+    # ownership honest without asking agents to remember a second click; an
+    # explicit reassign still wins, since this only fires when nobody owns it.
+    claimed = False
+    if t.assignee_id is None:
+        t.assignee = user
+        t.save(update_fields=['assignee', 'updated_at'])
+        log_ticket_activity(t, 'assigned', actor=user,
+                            assignee=(user.name or user.email), auto=True)
+        claimed = True
     m = TicketMessage.objects.create(
         ticket=t, author=user, author_email=user.email, body=body,
         origin=TicketMessage.ORIGIN_STAFF, is_internal=is_internal)
@@ -280,7 +304,9 @@ def reply(request, number):
                          'message': dict(_message_dict(m),
                                          is_internal=m.is_internal,
                                          delivery_detail=m.delivery_detail),
-                         'status': t.status})
+                         'status': t.status,
+                         'assignee': _assignee_dict(t),
+                         'auto_claimed': claimed})
 
 
 @csrf_exempt
@@ -393,3 +419,89 @@ def set_cc(request, number):
                         cc_emails=t.cc_emails)
     transaction.on_commit(lambda: realtime.notify_ticket(t, 'cc_changed'))
     return JsonResponse({'ok': True, 'cc_emails': t.cc_emails})
+
+
+def _agents_qs():
+    """Agents eligible to own a ticket."""
+    return PortalUser.objects.filter(
+        role__in=[PortalUser.ROLE_ADMIN, PortalUser.ROLE_OWNER],
+        access_enabled=True,
+    ).order_by('name', 'email')
+
+
+@require_http_methods(['GET'])
+@require_portal_admin
+def agents(request):
+    """Assignable agents, for the assignee and watcher pickers."""
+    return JsonResponse({'agents': [
+        {'id': u.id, 'email': u.email, 'name': u.name} for u in _agents_qs()
+    ]})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+@require_portal_admin
+def set_assignee(request, number):
+    """Assign a ticket, claim it, or hand it back to the queue.
+
+    Body: {"assignee_id": <id>} to assign, {"assignee_id": null} to unassign,
+    or {"assign_to_me": true} for the one-click claim.
+    """
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+
+    actor = request.portal_user
+    if data.get('assign_to_me'):
+        assignee = actor
+    elif not data.get('assignee_id'):
+        assignee = None
+    else:
+        assignee = _agents_qs().filter(id=data.get('assignee_id')).first()
+        if not assignee:
+            # Only agents can own a ticket — assigning a customer would put a
+            # name on it belonging to someone with no admin access at all.
+            return JsonResponse({'error': 'That user is not an agent'}, status=400)
+
+    if t.assignee_id == (assignee.pk if assignee else None):
+        return JsonResponse({'ok': True, 'assignee': _assignee_dict(t)})
+
+    t.assignee = assignee
+    t.save(update_fields=['assignee', 'updated_at'])
+    log_ticket_activity(
+        t, 'assigned' if assignee else 'unassigned', actor=actor,
+        assignee=(assignee.name or assignee.email) if assignee else '')
+    if assignee:
+        _defer(lambda: ticket_notify.notify_assigned(t, actor=actor))
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        t, 'assigned', to_company=False))
+    return JsonResponse({'ok': True, 'assignee': _assignee_dict(t)})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+@require_portal_admin
+def set_watchers(request, number):
+    """Replace the internal watcher list. Staff-only — watchers are never
+    serialized to the customer, unlike cc_emails."""
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+    ids = data.get('watcher_ids')
+    if not isinstance(ids, list):
+        return JsonResponse({'error': 'watcher_ids must be a list'}, status=400)
+    chosen = list(_agents_qs().filter(id__in=ids))
+    t.watchers.set(chosen)
+    log_ticket_activity(t, 'watchers_changed', actor=request.portal_user,
+                        watchers=[u.email for u in chosen])
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        t, 'watchers_changed', to_company=False))
+    return JsonResponse({'ok': True, 'watchers': _watchers_list(t)})

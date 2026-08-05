@@ -350,6 +350,19 @@ class Ticket(models.Model):
         related_name='tickets_requested',
     )
     requester_email = models.EmailField(blank=True)
+    # The agent who picked the ticket up. Null means nobody owns it yet, which
+    # is what keeps it in the shared queue.
+    assignee = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='tickets_assigned',
+    )
+    # Staff following the ticket for follow-up. Deliberately separate from
+    # cc_emails, which is customer-facing: CC'd addresses receive the
+    # customer-worded mail and are listed back to the customer. Watchers are
+    # internal and must never be serialized to a customer.
+    watchers = models.ManyToManyField(
+        'PortalUser', blank=True, related_name='tickets_watching',
+    )
     subject = models.CharField(max_length=512)
     category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, default='question')
     status = models.CharField(max_length=32, choices=STATUS_CHOICES,

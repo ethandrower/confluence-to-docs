@@ -72,4 +72,7 @@ urlpatterns = [
     path('admin/tickets/<int:number>/status/', tickets_admin.set_status, name='admin-ticket-status'),
     path('admin/tickets/<int:number>/jira/', tickets_admin.set_jira, name='admin-ticket-jira'),
     path('admin/tickets/<int:number>/cc/', tickets_admin.set_cc, name='admin-ticket-cc'),
+    path('admin/tickets/<int:number>/assignee/', tickets_admin.set_assignee, name='admin-ticket-assignee'),
+    path('admin/tickets/<int:number>/watchers/', tickets_admin.set_watchers, name='admin-ticket-watchers'),
+    path('admin/agents/', tickets_admin.agents, name='admin-agents'),
 ]

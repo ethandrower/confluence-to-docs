@@ -181,9 +181,13 @@ function onDetailUpdated(patch) {
   if (patch.status) selected.value.status = patch.status
   if (patch.jira_links) selected.value.jira_links = patch.jira_links
   if (patch.cc_emails) selected.value.cc_emails = patch.cc_emails
+  if (patch.watchers) selected.value.watchers = patch.watchers
+  // Explicit undefined check: null is a real value here (handed back to the queue).
+  if (patch.assignee !== undefined) selected.value.assignee = patch.assignee
   if (patch.message) selected.value.messages.push(patch.message)
   const row = list.value.find((t) => t.number === selected.value.number)
   if (row && patch.status) row.status = patch.status
+  if (row && patch.assignee !== undefined) row.assignee = patch.assignee
   if (mode.value === 'inbox' && patch.status && patch.status !== 'waiting_on_support') {
     // Reply moved the ticket out of the inbox queue — refresh the count quietly.
     loadInbox()
