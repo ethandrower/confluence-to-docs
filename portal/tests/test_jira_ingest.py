@@ -213,3 +213,33 @@ class IngestCommandTest(TestCase):
     def test_dry_run_flag_is_passed_through(self, ming):
         call_command('ingest_jira_requests', '--dry-run')
         self.assertEqual(ming.call_args.kwargs, {'dry_run': True})
+
+
+class IngestRobustnessTest(TestCase):
+    """One bad issue must never cost us the rest of the batch."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='SunNuclear')
+        self.customer = PortalUser.objects.create(
+            email='ddonaho@mirion.com', role=PortalUser.ROLE_CUSTOMER,
+            company=self.company)
+
+    def test_plain_string_description_does_not_raise(self):
+        # Not every issue carries an ADF body — a v2-created issue can return a
+        # bare string, and that must not explode.
+        self.assertEqual(jira_client.adf_to_text('plain text body'),
+                         'plain text body')
+
+    def test_one_broken_issue_does_not_abort_the_pass(self):
+        bad = issue(key='SUP-1')
+        bad['fields']['description'] = 'a plain string, not ADF'
+        good = issue(key='SUP-2')
+        with self.settings(JIRA_INGEST=True):
+            with mock.patch('portal.jira_ingest.jira_client.search_issues',
+                            return_value=[bad, good]):
+                with mock.patch('portal.jira_ingest.jira_client.create_remote_link'):
+                    created = jira_ingest.ingest_requests()
+        self.assertEqual(created, 2)
+        self.assertEqual(
+            set(JiraTicketLink.objects.values_list('key', flat=True)),
+            {'SUP-1', 'SUP-2'})

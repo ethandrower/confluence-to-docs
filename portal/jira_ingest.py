@@ -13,6 +13,7 @@ selects 1 issue out of 408, with no false positives.
 import logging
 
 from django.conf import settings
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -75,21 +76,32 @@ def ingest_requests(dry_run=False):
         if not user:
             continue
 
-        created += 1
         subject = (fields.get('summary') or '(no subject)')[:512]
         if dry_run:
+            created += 1
             logger.info('jira_ingest[dry-run]: would ingest %s for %s (%s)',
                         key, user.email, subject)
             continue
 
-        ticket = Ticket.objects.create(
-            company=user.company, created_by=user, subject=subject,
-            status=Ticket.STATUS_WAITING_ON_SUPPORT)
-        body = jira_client.adf_to_text(fields.get('description')).strip()
-        TicketMessage.objects.create(
-            ticket=ticket, author=user, author_email=user.email,
-            body=body or '(no content)', origin=TicketMessage.ORIGIN_EMAIL)
-        JiraTicketLink.objects.create(ticket=ticket, key=key)
+        # Per-issue guard: an unexpected payload must cost us that one request,
+        # never the rest of the batch. The transaction keeps a half-built
+        # ticket (no message, no link) from surviving a mid-way failure.
+        try:
+            with transaction.atomic():
+                ticket = Ticket.objects.create(
+                    company=user.company, created_by=user, subject=subject,
+                    status=Ticket.STATUS_WAITING_ON_SUPPORT)
+                body = jira_client.adf_to_text(fields.get('description')).strip()
+                TicketMessage.objects.create(
+                    ticket=ticket, author=user, author_email=user.email,
+                    body=body or '(no content)',
+                    origin=TicketMessage.ORIGIN_EMAIL)
+                JiraTicketLink.objects.create(ticket=ticket, key=key)
+        except Exception as e:
+            logger.error('jira_ingest: %s failed, skipping: %s', key, e)
+            continue
+
+        created += 1
         linked.add(key)
         # No customer email: JSM already sent its own "request received"
         # auto-reply, and a portal confirmation on top would duplicate it.

@@ -55,6 +55,10 @@ def adf_to_text(node):
     """
     if not node:
         return ''
+    # Not every field is ADF — a v2-created issue can return a bare string for
+    # description. Pass it straight through rather than raising.
+    if isinstance(node, str):
+        return node
     node_type = node.get('type')
     if node_type == 'text':
         return node.get('text', '')
