@@ -15,6 +15,18 @@ import logging
 from portal.rate_limit import client_ip, is_rate_limited
 
 
+def _is_staff_email(email):
+    """True if `email` sits on one of our own STAFF_EMAIL_DOMAINS.
+
+    Matches the domain exactly — a suffix test would let `citemed.com.evil.io`
+    through, which is the whole trick this needs to not fall for.
+    """
+    domains = getattr(settings, 'STAFF_EMAIL_DOMAINS', None) or []
+    if not domains or '@' not in email:
+        return False
+    return email.rsplit('@', 1)[1].strip().lower() in domains
+
+
 def _user_payload(portal_user, request=None):
     """
     Build the `user` dict the frontend stores. Includes is_admin + admin_url
@@ -110,6 +122,21 @@ def request_magic_link(request):
                 email=email, defaults={'role': PortalUser.ROLE_ADMIN, 'access_enabled': True}
             )
             allowed = True
+    # Staff domains: our own people become agents on first sign-in rather than
+    # needing to be seeded by hand.
+    #
+    # This widens the TG-672 allowlist, so two guards keep it honest. It only
+    # fires when NO PortalUser row exists yet — an existing account that was
+    # deliberately disabled, or demoted to customer, is never silently
+    # restored or upgraded by logging in again. And the domain is read off the
+    # address the link is *sent to*, so access still requires controlling that
+    # inbox; the magic link remains the thing that proves identity.
+    if not allowed and user is None and _is_staff_email(email):
+        user = PortalUser.objects.create(
+            email=email, role=PortalUser.ROLE_ADMIN, access_enabled=True,
+        )
+        allowed = True
+        logger.info('Auto-provisioned staff agent from domain allowlist: %s', email)
     if not allowed:
         logger.info('Magic link blocked — email not on access list: %s', email)
         # Controlled-access portal: tell the person plainly rather than show a

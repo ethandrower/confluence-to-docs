@@ -52,6 +52,8 @@ services:
       ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0,web
       FRONTEND_URL: http://localhost:5174
       DEBUG: "True"
+      # Our own people become agents on first sign-in (see settings.py).
+      STAFF_EMAIL_DOMAINS: citemed.com
       # Keep image writes inside the bind mount so synced attachments survive
       # a container rebuild and are visible on the host.
       MEDIA_ROOT: /app/media

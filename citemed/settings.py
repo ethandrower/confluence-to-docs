@@ -243,6 +243,18 @@ _os.environ['ATLASSIAN_JIRA_URL'] = (
 
 # Portal
 PORTAL_MAGIC_LINK_EXPIRY_MINUTES = env.int('PORTAL_MAGIC_LINK_EXPIRY_MINUTES', default=60)
+
+# Email domains whose people are our own support staff. A first-time sign-in
+# from one of these is auto-provisioned as an agent instead of being turned
+# away by the TG-672 access allowlist, so colleagues don't each need seeding
+# by hand. Deployment policy, not code — set it in env (e.g. citemed.com),
+# and note that an empty list means "nobody", which is the safe default for
+# anyone running this portal from a fresh checkout.
+STAFF_EMAIL_DOMAINS = [
+    d.strip().lower().lstrip('@')
+    for d in env.list('STAFF_EMAIL_DOMAINS', default=[])
+    if d.strip()
+]
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
 # Which Confluence spaces this portal surfaces. Empty list = all spaces
