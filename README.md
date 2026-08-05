@@ -164,6 +164,31 @@ cd frontend && npm run dev
 
 Open `http://localhost:5174`.
 
+### Run with Docker (alternative)
+
+`docker compose up` brings up the whole stack — Postgres, Redis, the ASGI API
+and the Vite dev server — with no Python, Node or database installed on the
+host. You still need a `.env` (step 1); compose overrides `DATABASE_URL`,
+`REDIS_URL` and `ALLOWED_HOSTS` so the same file works either way.
+
+```bash
+cp .env.example .env        # fill in the Confluence values
+docker compose up           # http://localhost:5174
+
+docker compose exec web python manage.py sync_confluence
+docker compose exec web python manage.py create_test_users   # prints magic links
+```
+
+Both source trees are bind-mounted, so Django's autoreload and Vite's HMR pick
+up edits without a rebuild. Rebuild only when dependencies change:
+`docker compose build web`.
+
+This path runs **Postgres and a real Redis channel layer**, matching production
+more closely than the SQLite + in-memory default — full-text search and
+cross-worker WebSocket broadcasts behave as they do on Dokku. Postgres is
+published on host port `5433` and Redis on `6380` so they don't collide with
+anything already running locally.
+
 ### Keeping docs in sync
 
 **Manual:** `python manage.py sync_confluence` (full) or `--incremental` (changed pages only).

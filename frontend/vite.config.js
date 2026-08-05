@@ -3,6 +3,12 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
+// Where the dev server forwards /api, /media and /ws. Host-native dev talks to
+// a runserver on localhost; under docker compose the API is a separate service,
+// so VITE_PROXY_TARGET points at http://web:8001.
+const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:8001'
+const wsTarget = proxyTarget.replace(/^http/, 'ws')
+
 export default defineConfig(({ command }) => ({
   // Production (vite build): assets are served through Django's /static/ URL
   // via WhiteNoise after collectstatic. With base: '/static/' the generated
@@ -24,15 +30,15 @@ export default defineConfig(({ command }) => ({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://localhost:8001',
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/media': {
-        target: 'http://localhost:8001',
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8001',
+        target: wsTarget,
         ws: true,
         changeOrigin: true,
       }
