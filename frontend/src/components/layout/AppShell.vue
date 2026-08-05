@@ -131,6 +131,17 @@
 
         <span class="topbar-divider hidden sm:block" aria-hidden="true"></span>
 
+        <!-- Which side of the portal am I on? Without this the only clue is
+             which nav buttons happen to render, which is easy to misread when
+             agent and customer views share the same shell. -->
+        <span v-if="auth.user" class="topbar-role"
+              :class="auth.user.is_admin ? 'topbar-role--agent' : 'topbar-role--customer'"
+              :title="`Signed in as ${auth.user.email}`">
+          {{ roleLabel }}
+        </span>
+
+        <ViewAsCustomer v-if="auth.user?.is_admin" />
+
         <ThemeToggle />
 
         <button v-if="auth.user" @click="signOut" class="topbar-btn-ghost hidden sm:inline-flex" :title="auth.user.email">Sign out</button>
@@ -158,6 +169,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescri
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
 import ThemeToggle from './ThemeToggle.vue'
+import ViewAsCustomer from './ViewAsCustomer.vue'
 
 defineProps({ hideSidebar: Boolean })
 const route = useRoute()
@@ -171,6 +183,14 @@ const tickets = useTicketsStore()
 // and the user is an admin; fires immediately on mount/refocus so it still
 // loads promptly once auth.user resolves.
 const awaitingCount = ref(0)
+
+// 'Owner' is worth distinguishing from a plain agent — it's the role that can
+// grant other owners — but both are staff, so both get the agent styling.
+const roleLabel = computed(() => {
+  if (!auth.user) return ''
+  if (auth.user.is_owner) return 'Owner'
+  return auth.user.is_admin ? 'Agent' : 'Customer'
+})
 
 async function refreshAwaiting() {
   if (!auth.user?.is_admin) return
@@ -322,6 +342,31 @@ onBeforeUnmount(() => {
   transition: color 0.15s, background 0.15s;
 }
 .topbar-btn-ghost:hover { color: var(--foreground); background: var(--muted); }
+
+/* Which perspective you're signed in with. Deliberately a flat chip rather
+   than a button — it's a statement of fact, not something to click. */
+.topbar-role {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.topbar-role--agent {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+.topbar-role--customer {
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
 
 /* Vertical divider between action groups and utility controls */
 .topbar-divider {

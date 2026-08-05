@@ -8,6 +8,7 @@ urlpatterns = [
     path('admin/companies/<int:company_id>/', admin_api.company_detail, name='admin-company-detail'),
     path('admin/users/', admin_api.users, name='admin-users'),
     path('admin/users/<int:user_id>/', admin_api.user_detail, name='admin-user-detail'),
+    path('admin/demo-accounts/', admin_api.demo_accounts, name='admin-demo-accounts'),
     path('admin/sync/', admin_api.sync_docs, name='admin-sync'),
     path('admin/add-page/', admin_api.add_page, name='admin-add-page'),
 
