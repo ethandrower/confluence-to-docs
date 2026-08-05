@@ -21,6 +21,16 @@
           <StatusMenu :status="ticket.status" :disabled="statusSaving" @change="onStatusChange" />
         </div>
         <h1 ref="subjectHeadingEl" tabindex="-1" class="atd-subject-h">{{ ticket.subject }}</h1>
+        <!-- Only set on staff on-behalf tickets, where created_by is the agent
+             and this is the person the ticket is actually for. -->
+        <p v-if="ticket.requester" class="atd-requester">
+          For <strong>{{ ticket.requester.name || ticket.requester.email }}</strong>
+          <span v-if="ticket.requester.name" class="atd-requester-email">{{ ticket.requester.email }}</span>
+          <span v-if="!ticket.requester.has_portal_access" class="atd-requester-warn"
+                title="No portal account — they only see this thread by email">
+            email only
+          </span>
+        </p>
       </header>
 
       <p v-if="actionError" class="atd-action-error" role="alert">
@@ -370,6 +380,12 @@ function onComposerKeydown(e) {
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
 .atd-subject-h { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
+
+/* Who an on-behalf ticket is for. */
+.atd-requester { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; font-size: 0.82rem; color: var(--muted-foreground); }
+.atd-requester strong { font-weight: 600; color: var(--foreground); }
+.atd-requester-email { color: var(--muted-foreground); }
+.atd-requester-warn { padding: 1px 7px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, transparent); border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent); }
 
 .atd-action-error { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 28px; font-size: 0.82rem; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-bottom: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); flex-shrink: 0; }
 .atd-action-error-x { margin-left: auto; flex-shrink: 0; border: none; background: none; color: var(--destructive); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px; }

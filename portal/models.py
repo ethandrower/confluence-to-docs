@@ -340,6 +340,16 @@ class Ticket(models.Model):
         'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='tickets_created',
     )
+    # Who the ticket is FOR, as opposed to `created_by` (who opened it). The
+    # two differ only on the staff on-behalf path, where created_by is the
+    # agent. Nullable because a customer opening their own ticket doesn't need
+    # it, and because staff can name someone with no portal account at all —
+    # see requester_email, which is recorded either way.
+    requester = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='tickets_requested',
+    )
+    requester_email = models.EmailField(blank=True)
     subject = models.CharField(max_length=512)
     category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, default='question')
     status = models.CharField(max_length=32, choices=STATUS_CHOICES,
@@ -393,11 +403,26 @@ class Ticket(models.Model):
     @classmethod
     def for_user(cls, user):
         """Tenant-isolation chokepoint — customer endpoints must query through
-        here, never `objects` directly (same rule as SharedFile.for_user)."""
-        company_id = getattr(user, 'company_id', None)
-        if not company_id:
+        here, never `objects` directly (same rule as SharedFile.for_user).
+
+        Two ways in: the ticket belongs to your company, or it was opened
+        specifically for you. The second exists so a staff on-behalf ticket
+        reaches the person it names even when they sit outside the company it
+        was filed under — without it, being the requester grants nothing and
+        the customer can only ever follow the thread by email.
+
+        It stays a tenant boundary: the match is on this exact user's primary
+        key, so it widens access by precisely the tickets naming them and
+        nothing else.
+        """
+        if user is None or getattr(user, 'pk', None) is None:
             return cls.objects.none()
-        return cls.objects.filter(company_id=company_id)
+        company_id = getattr(user, 'company_id', None)
+        if company_id:
+            return cls.objects.filter(
+                models.Q(company_id=company_id) | models.Q(requester_id=user.pk)
+            )
+        return cls.objects.filter(requester_id=user.pk)
 
 
 class TicketRead(models.Model):

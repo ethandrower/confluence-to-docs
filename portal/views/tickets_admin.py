@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from portal import jira_client, realtime, ticket_notify
 from portal.decorators import require_portal_admin
-from portal.models import Company, JiraTicketLink, Ticket, TicketMessage
+from portal.models import Company, JiraTicketLink, PortalUser, Ticket, TicketMessage
 from portal.rate_limit import is_rate_limited
 from portal.views.tickets import (
     _clean_ccs, _message_dict, _ticket_dict, _with_message_count,
@@ -78,6 +78,14 @@ def _admin_dict(t, message_count=None):
         'company': {'id': t.company_id, 'name': t.company.name},
         'cc_emails': t.cc_emails,
         'created_by_email': t.created_by.email if t.created_by else '',
+        # Who it's for. `has_portal_access` is the bit staff need: false means
+        # this person only ever sees the thread by email, so a reply that says
+        # "see the portal" would be telling them to go somewhere they can't.
+        'requester': {
+            'email': t.requester_email or (t.requester.email if t.requester else ''),
+            'name': t.requester.name if t.requester else '',
+            'has_portal_access': bool(t.requester and t.requester.access_enabled),
+        } if (t.requester_id or t.requester_email) else None,
     })
     return d
 
@@ -190,9 +198,18 @@ def collection(request):
     if category not in dict(Ticket.CATEGORY_CHOICES):
         category = 'other'
 
+    # Resolve the named customer to a real account where one exists, so the
+    # ticket reaches them in the portal and not just by email. When it doesn't,
+    # the address is still recorded and the response says so — an agent who
+    # types an address with no account should find that out at create time,
+    # not from a customer who never saw the thread.
+    requester = (PortalUser.objects.filter(email__iexact=customer_email).first()
+                 if customer_email else None)
+
     user = request.portal_user
     ticket = Ticket.objects.create(
         company=company, created_by=user, subject=subject[:512],
+        requester=requester, requester_email=customer_email,
         category=category, cc_emails=ccs,
         # Brand-new on-behalf ticket: nothing has been asked of the customer
         # yet, so 'open' (not 'waiting on customer', which read as misleading
