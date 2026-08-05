@@ -421,6 +421,76 @@ def set_cc(request, number):
     return JsonResponse({'ok': True, 'cc_emails': t.cc_emails})
 
 
+@require_http_methods(['GET'])
+@require_portal_admin
+def escalation_options(request, number):
+    """What the escalate form needs: targets, issue types, priorities, and the
+    pre-composed description the agent can edit before filing."""
+    from portal import escalation
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    projects = escalation.allowed_projects()
+    project = request.GET.get('project') or (projects[0] if projects else '')
+    opts = escalation.escalation_options(project) if project else {
+        'issue_types': [], 'priorities': []}
+    return JsonResponse({
+        'projects': projects,
+        'project': project,
+        'issue_types': opts.get('issue_types', []),
+        'priorities': opts.get('priorities', []),
+        'summary': f'[{t.display_number}] {t.subject}'[:255],
+        'description': escalation.compose_description(t, _portal_ticket_url(t)),
+        'already_linked': [l.key for l in t.jira_links.all()],
+    })
+
+
+def _portal_ticket_url(ticket):
+    base = getattr(settings, 'FRONTEND_URL', '').rstrip('/')
+    return f'{base}/manage/tickets/{ticket.number}' if base else ''
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+@require_portal_admin
+def escalate(request, number):
+    """Escalate this ticket into a real Jira issue (agent-initiated)."""
+    from portal import escalation
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+
+    project = (data.get('project') or '').strip()
+    issue_type_id = (data.get('issue_type_id') or '').strip()
+    summary = (data.get('summary') or '').strip()
+    description = (data.get('description') or '').strip()
+    if not (project and issue_type_id and summary and description):
+        return JsonResponse(
+            {'error': 'project, issue_type_id, summary and description are required'},
+            status=400)
+
+    result = escalation.escalate(
+        t, project=project, issue_type_id=issue_type_id, summary=summary,
+        description=description, priority_id=data.get('priority_id') or None,
+        actor=request.portal_user, portal_url=_portal_ticket_url(t))
+
+    if not result.get('key'):
+        return JsonResponse({'error': result.get('error') or 'Escalation failed'},
+                            status=502)
+
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        t, 'escalated', to_company=False))
+    return JsonResponse({'ok': True, 'key': result['key'],
+                         'epic_key': result.get('epic_key'),
+                         'sprint_id': result.get('sprint_id'),
+                         'warnings': result.get('warnings', []),
+                         'jira_links': _refresh_jira_links(t)})
+
+
 def _agents_qs():
     """Agents eligible to own a ticket."""
     return PortalUser.objects.filter(

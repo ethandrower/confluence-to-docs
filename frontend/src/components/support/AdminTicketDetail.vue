@@ -32,6 +32,7 @@
             <button v-if="ticket.assignee?.id !== auth.user?.id" type="button"
                     class="btn-outline sm" :disabled="assigneeSaving"
                     @click="claim">Assign to me</button>
+            <EscalateDialog :ticket="ticket" @escalated="onEscalated" />
             <StatusMenu :status="ticket.status" :disabled="statusSaving" @change="onStatusChange" />
           </div>
         </div>
@@ -169,6 +170,7 @@ import { useAuthStore } from '@/stores/auth'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 import MessageThread from '@/components/support/MessageThread.vue'
 import StatusMenu from '@/components/support/StatusMenu.vue'
+import EscalateDialog from '@/components/support/EscalateDialog.vue'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
 import { statusLabel, fullDate } from '@/lib/ticketStatus'
@@ -351,6 +353,12 @@ async function setAssignee(payload) {
   } finally {
     assigneeSaving.value = false
   }
+}
+
+// The new Jira link carries live status, so surface it straight away rather
+// than waiting for the next poll.
+function onEscalated(res) {
+  if (res?.jira_links) emit('updated', { jira_links: res.jira_links })
 }
 
 const claim = () => setAssignee({ assign_to_me: true })

@@ -325,6 +325,12 @@ JIRA_SYNC_PROJECTS = env.list('JIRA_SYNC_PROJECTS', default=['SUP'])
 # the portal must NOT also email the JSM intake (would duplicate), so
 # notify_ticket_created suppresses that email. Default off. Creates in
 # JIRA_TICKET_PROJECT as issue type JIRA_TICKET_ISSUE_TYPE_ID (SUP "Task").
+# Agent-initiated escalation (distinct from the JIRA_AUTO_CREATE cron below):
+# which projects a support agent may escalate a ticket into, and the epic issue
+# type used when the "Support Escalations" epic has to be created.
+JIRA_ESCALATION_PROJECTS = env.list('JIRA_ESCALATION_PROJECTS', default=['ECD', 'AI'])
+JIRA_EPIC_ISSUE_TYPE_ID = env('JIRA_EPIC_ISSUE_TYPE_ID', default='10000')
+
 JIRA_AUTO_CREATE = env.bool('JIRA_AUTO_CREATE', default=False)
 JIRA_TICKET_PROJECT = env('JIRA_TICKET_PROJECT', default='SUP')
 JIRA_TICKET_ISSUE_TYPE_ID = env('JIRA_TICKET_ISSUE_TYPE_ID', default='10103')

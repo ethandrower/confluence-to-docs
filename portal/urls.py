@@ -75,4 +75,6 @@ urlpatterns = [
     path('admin/tickets/<int:number>/assignee/', tickets_admin.set_assignee, name='admin-ticket-assignee'),
     path('admin/tickets/<int:number>/watchers/', tickets_admin.set_watchers, name='admin-ticket-watchers'),
     path('admin/agents/', tickets_admin.agents, name='admin-agents'),
+    path('admin/tickets/<int:number>/escalate/options/', tickets_admin.escalation_options, name='admin-ticket-escalate-options'),
+    path('admin/tickets/<int:number>/escalate/', tickets_admin.escalate, name='admin-ticket-escalate'),
 ]

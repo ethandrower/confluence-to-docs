@@ -133,6 +133,17 @@ export const useTicketsStore = defineStore('tickets', () => {
     return api('/admin/agents/')
   }
 
+  async function adminEscalateOptions(number, project) {
+    const q = project ? `?project=${encodeURIComponent(project)}` : ''
+    return api(`/admin/tickets/${number}/escalate/options/${q}`)
+  }
+
+  async function adminEscalate(number, payload) {
+    return api(`/admin/tickets/${number}/escalate/`, {
+      method: 'POST', body: JSON.stringify(payload),
+    })
+  }
+
   // payload is {assign_to_me: true} to claim, or {assignee_id: <id>|null}.
   async function adminSetAssignee(number, payload) {
     return api(`/admin/tickets/${number}/assignee/`, {
@@ -150,5 +161,6 @@ export const useTicketsStore = defineStore('tickets', () => {
     tickets, current, loading, error, fetchTickets, fetchTicket, createTicket, reply,
     adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminJiraLink, adminSetCc, adminCreate,
     adminResend, adminAgents, adminSetAssignee, adminSetWatchers,
+    adminEscalateOptions, adminEscalate,
   }
 })
