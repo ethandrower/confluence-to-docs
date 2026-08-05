@@ -538,6 +538,30 @@ class AdminTicketApiTests(TestCase):
         self.assertEqual(nums, [self.t.number, t2.number])
         self.assertEqual(r.json()['awaiting_total'], 2)
 
+    def test_inbox_includes_open_on_behalf_tickets(self):
+        """An on-behalf ticket is created 'open' (tickets_admin.collection), but
+        nobody has replied to the customer yet — it IS waiting on a CiteMed
+        reply, which is what the Inbox promises. Excluding it hides a live
+        ticket from the queue, the nav badge and the dashboard count."""
+        on_behalf = Ticket.objects.create(
+            company=self.acme, created_by=self.staff, subject='Raised for customer',
+            status=Ticket.STATUS_OPEN)
+        self._login()
+        r = self.client.get('/api/admin/tickets/inbox/')
+        nums = [x['number'] for x in r.json()['tickets']]
+        self.assertIn(on_behalf.number, nums)
+        self.assertEqual(r.json()['awaiting_total'], 2)
+
+    def test_inbox_still_excludes_tickets_not_awaiting_us(self):
+        for st in (Ticket.STATUS_WAITING_ON_CUSTOMER, Ticket.STATUS_RESOLVED,
+                   Ticket.STATUS_CLOSED):
+            Ticket.objects.create(company=self.acme, created_by=self.cust,
+                                  subject=st, status=st)
+        self._login()
+        r = self.client.get('/api/admin/tickets/inbox/')
+        self.assertEqual([x['number'] for x in r.json()['tickets']],
+                         [self.t.number])
+
     def test_staff_reply_flips_status_and_emails_customer(self):
         self._login()
         r = self.client.post(f'/api/admin/tickets/{self.t.number}/messages/',
