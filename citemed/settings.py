@@ -350,6 +350,14 @@ JIRA_AUTO_CREATE_CATEGORIES = env.list('JIRA_AUTO_CREATE_CATEGORIES', default=['
 # it to the enablement date to make auto-create strictly "new tickets only".
 JIRA_AUTO_CREATE_SINCE = env('JIRA_AUTO_CREATE_SINCE', default='')
 
+# SLA first-response targets (EC-SOP-07 §4.1) — see portal/sla.py.
+# The doc measures business hours in the CLIENT's time zone and excludes public
+# holidays. We model neither: one company-wide zone, and no holiday calendar.
+# That makes the indicator an internal triage aid, not a contractual measure.
+SLA_TIMEZONE = env('SLA_TIMEZONE', default='America/New_York')
+SLA_BUSINESS_OPEN_HOUR = env.int('SLA_BUSINESS_OPEN_HOUR', default=9)
+SLA_BUSINESS_CLOSE_HOUR = env.int('SLA_BUSINESS_CLOSE_HOUR', default=18)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

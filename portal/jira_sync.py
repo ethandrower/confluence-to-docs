@@ -20,7 +20,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 # Imported at module scope so tests can patch portal.jira_sync.<name>.
-from portal import jira_client, realtime, ticket_notify
+from portal import jira_client, realtime, sla, ticket_notify
 
 
 def sync_ticket_comments(ticket, *, email_customer=None):
@@ -77,6 +77,9 @@ def sync_ticket_comments(ticket, *, email_customer=None):
                 continue  # another pass ingested this comment first
             log_ticket_activity(ticket, 'message_sent', actor=None,
                                 source='jira', jira_key=link.key)
+            # A reply typed in Jira reaches the customer just the same, so it
+            # stops the first-response clock exactly like a portal reply.
+            sla.record_first_response(ticket, msg)
             created.append(msg)
             # Only email replies authored AFTER we linked the issue. Comments
             # older than the link are historical backfill (JSM already emailed

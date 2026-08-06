@@ -380,6 +380,10 @@ class Ticket(models.Model):
                               default=STATUS_WAITING_ON_SUPPORT)
     priority = models.CharField(max_length=16, choices=PRIORITY_CHOICES,
                                 default=PRIORITY_STANDARD)
+    # When we first replied to the customer — drives the SLA first-response
+    # indicator (portal/sla.py). Denormalised rather than derived, because the
+    # admin list needs it per row and deriving it would be a query per ticket.
+    first_response_at = models.DateTimeField(null=True, blank=True)
     cc_emails = models.JSONField(default=list, blank=True)
     # Internal Jira references live in JiraTicketLink (admin-only, never
     # serialized to customers). Was a single `jira_key` CharField — migrated

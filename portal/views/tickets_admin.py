@@ -14,7 +14,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from portal import jira_client, realtime, ticket_notify
+from portal import jira_client, realtime, sla, ticket_notify
 from portal.decorators import require_portal_admin
 from portal.models import Company, JiraTicketLink, Ticket, TicketMessage
 from portal.rate_limit import is_rate_limited
@@ -80,6 +80,11 @@ def _admin_dict(t, message_count=None):
         # Staff-only: deliberately not added to _ticket_dict, which is what the
         # customer endpoints return.
         'priority': t.priority,
+        'sla': {
+            'target': sla.target_label(t.priority),
+            'responded': bool(t.first_response_at),
+            'breached': sla.is_breached(t),
+        },
     })
     return d
 
@@ -271,6 +276,7 @@ def reply(request, number):
     if not is_internal:
         t.status = Ticket.STATUS_WAITING_ON_CUSTOMER
         t.save(update_fields=['status', 'updated_at'])
+        sla.record_first_response(t, m)
         ticket_notify.notify_staff_reply(t, m)
     log_ticket_activity(t, 'note_added' if is_internal else 'message_sent',
                         actor=user)
