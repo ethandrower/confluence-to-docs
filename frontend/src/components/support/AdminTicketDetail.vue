@@ -425,6 +425,9 @@ async function onJira(action, key) {
     const res = await store.adminJiraLink(props.ticket.number, action, key)
     if (action === 'add') jiraDraft.value = ''
     emit('updated', { jira_links: res.jira_links })
+    // The link was recorded but Jira couldn't confirm it — worth saying, since
+    // the status chip will read "unavailable" for reasons that aren't the key.
+    if (res.warning) actionError.value = res.warning
   } catch (e) {
     actionError.value = e.message || 'Could not update Jira links.'
   } finally {

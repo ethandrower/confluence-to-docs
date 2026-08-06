@@ -44,6 +44,44 @@ def fetch_issue(key):
         return None
 
 
+def verify_issue(key):
+    """Does this issue exist? Returns ('ok', data) | ('missing', None) |
+    ('unreachable', None).
+
+    `fetch_issue` collapses every failure to None, which is right for a
+    best-effort status refresh but wrong when deciding whether to accept a key
+    an agent typed: "that issue doesn't exist" and "Jira didn't answer" want
+    opposite handling. Only an unambiguous 404 counts as missing — a 403, an
+    outage or broken credentials all report unreachable, so a Jira problem
+    never blocks an agent from recording a link they know is right.
+    """
+    domain, auth = _creds()
+    if not (domain and key):
+        return 'unreachable', None
+    try:
+        r = requests.get(
+            f'https://{domain}/rest/api/3/issue/{key}',
+            params={'fields': 'status,summary'}, auth=auth,
+            headers={'Accept': 'application/json'}, timeout=TIMEOUT,
+        )
+        if r.status_code == 404:
+            return 'missing', None
+        if r.status_code != 200:
+            logger.info('jira verify %s → HTTP %s', key, r.status_code)
+            return 'unreachable', None
+        fields = (r.json() or {}).get('fields', {}) or {}
+        status = fields.get('status') or {}
+        category = status.get('statusCategory') or {}
+        return 'ok', {
+            'status': status.get('name', ''),
+            'status_category': category.get('key', ''),
+            'summary': fields.get('summary', ''),
+        }
+    except Exception as e:
+        logger.warning('jira verify %s failed: %s', key, e)
+        return 'unreachable', None
+
+
 def adf_to_text(node):
     """Flatten an Atlassian Document Format value to plain text.
 

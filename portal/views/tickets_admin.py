@@ -376,6 +376,7 @@ def set_jira(request, number):
         return JsonResponse({'error': 'Invalid request body'}, status=400)
     action = data.get('action', 'add')
     key = _extract_jira_key(data.get('key'))
+    warning = ''
     if action == 'remove':
         JiraTicketLink.objects.filter(ticket=t, key=key).delete()
         log_ticket_activity(t, 'jira_unlinked', actor=request.portal_user, key=key)
@@ -384,9 +385,22 @@ def set_jira(request, number):
             return JsonResponse(
                 {'error': 'Enter a Jira key (e.g. SUP-374) or paste a Jira issue URL'},
                 status=400)
+        # Confirm the issue is real before recording the link. A mistyped key
+        # matches the format fine and would otherwise link silently, leaving a
+        # permanent "status unavailable" the agent can't tell apart from Jira
+        # being down. Only a definite 404 rejects — an outage or a permissions
+        # error still lets the link through, with a warning.
+        state, data_ = jira_client.verify_issue(key)
+        if state == 'missing':
+            return JsonResponse(
+                {'error': f"{key} doesn't exist in Jira, or you don't have "
+                          "access to it. Check the key and try again."},
+                status=400)
+        warning = ('' if state == 'ok' else
+                   f'Linked {key}, but Jira could not be reached to confirm it '
+                   'or read its status.')
         link, created = JiraTicketLink.objects.get_or_create(ticket=t, key=key)
         if created:
-            data_ = jira_client.fetch_issue(key)  # populate status immediately
             if data_:
                 link.cached_status = data_['status'][:64]
                 link.cached_status_category = data_['status_category'][:32]
@@ -399,7 +413,8 @@ def set_jira(request, number):
             # block the admin's "Link" click if Jira is slow.
             _defer(lambda: _nudge_reply_in_portal(t, key))
     t.save(update_fields=['updated_at'])
-    return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t)})
+    return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t),
+                         'warning': warning})
 
 
 @csrf_exempt

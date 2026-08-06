@@ -584,11 +584,12 @@ class AdminTicketApiTests(TestCase):
         t = Ticket.objects.get(number=r.json()['number'])
         self.assertEqual(t.status, Ticket.STATUS_OPEN)
 
+    @patch('portal.jira_client.verify_issue', return_value=('ok', None))
     @patch('portal.views.tickets_admin._defer', side_effect=lambda fn: fn())
     @patch('portal.views.tickets_admin.jira_client.create_remote_link')
     @patch('portal.views.tickets_admin.jira_client.add_comment')
     @patch('portal.views.tickets_admin.jira_client.fetch_issue', return_value=None)
-    def test_linking_servicedesk_issue_posts_reply_in_portal_nudge(self, mfetch, mcomment, mlink, mdefer):
+    def test_linking_servicedesk_issue_posts_reply_in_portal_nudge(self, mfetch, mcomment, mlink, mdefer, mverify):
         self._login()
         with override_settings(JIRA_SYNC_PROJECTS=['SUP']):
             r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
@@ -599,9 +600,10 @@ class AdminTicketApiTests(TestCase):
         self.assertIs(mcomment.call_args.kwargs.get('internal'), True)
         mlink.assert_called_once()
 
+    @patch('portal.jira_client.verify_issue', return_value=('ok', None))
     @patch('portal.views.tickets_admin._defer', lambda fn: None)
     @patch('portal.views.tickets_admin.jira_client.fetch_issue', return_value=None)
-    def test_linking_accepts_pasted_jira_url(self, mfetch):
+    def test_linking_accepts_pasted_jira_url(self, mfetch, mverify):
         # Users paste the full browse URL, not the bare key — extract the key
         # instead of rejecting it as "Invalid Jira key" (tester feedback).
         self._login()
@@ -615,10 +617,11 @@ class AdminTicketApiTests(TestCase):
         self.assertTrue(JiraTicketLink.objects.filter(ticket=self.t, key='SUP-374').exists())
 
     @patch('portal.views.tickets_admin._defer', side_effect=lambda fn: fn())
+    @patch('portal.jira_client.verify_issue', return_value=('ok', None))
     @patch('portal.views.tickets_admin.jira_client.create_remote_link')
     @patch('portal.views.tickets_admin.jira_client.add_comment')
     @patch('portal.views.tickets_admin.jira_client.fetch_issue', return_value=None)
-    def test_linking_engineering_issue_posts_no_nudge(self, mfetch, mcomment, mlink, mdefer):
+    def test_linking_engineering_issue_posts_no_nudge(self, mfetch, mcomment, mlink, mdefer, mverify):
         # An ECD bug isn't a customer-reply surface — no "reply in the portal" note.
         self._login()
         with override_settings(JIRA_SYNC_PROJECTS=['SUP']):
@@ -731,10 +734,14 @@ class AdminTicketApiTests(TestCase):
         raw = json.dumps(r.json())
         self.assertIn('Priscilla Murphy', raw)
 
+    @patch('portal.jira_client.verify_issue')
     @patch('portal.jira_client.fetch_issue')
-    def test_jira_link_add_shows_live_status_in_admin_detail(self, fetch):
-        fetch.return_value = {'status': 'In Progress',
-                              'status_category': 'indeterminate', 'summary': 'Fix sync'}
+    def test_jira_link_add_shows_live_status_in_admin_detail(self, fetch, verify):
+        issue = {'status': 'In Progress',
+                 'status_category': 'indeterminate', 'summary': 'Fix sync'}
+        fetch.return_value = issue
+        # The link path verifies the key exists and reuses that same fetch.
+        verify.return_value = ('ok', issue)
         self._login()
         r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
                              data=json.dumps({'action': 'add', 'key': 'ECD-42'}),
@@ -762,9 +769,11 @@ class AdminTicketApiTests(TestCase):
                              content_type='application/json')
         self.assertEqual(r.status_code, 400)
 
+    @patch('portal.jira_client.verify_issue', return_value=('unreachable', None))
     @patch('portal.jira_client.fetch_issue', return_value=None)
-    def test_jira_status_unavailable_degrades_gracefully(self, _fetch):
-        # API failure must not 500; link is created, status just blank.
+    def test_jira_status_unavailable_degrades_gracefully(self, _fetch, _verify):
+        # API failure must not 500; link is created, status just blank. An
+        # unreachable Jira must never block linking — only a definite 404 does.
         self._login()
         r = self.client.post(f'/api/admin/tickets/{self.t.number}/jira/',
                              data=json.dumps({'action': 'add', 'key': 'ECD-7'}),
