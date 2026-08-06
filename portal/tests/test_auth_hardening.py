@@ -170,3 +170,56 @@ class MagicLinkVerifyMethodTest(TestCase):
         again = self.client.post('/api/auth/verify/', data=body,
                                  content_type='application/json')
         self.assertEqual(again.status_code, 401)
+
+
+class EveryUnsafeEndpointRequiresCsrfTest(TestCase):
+    """Sampling three endpoints proves little — @csrf_exempt could be added
+    back to any view, or a new unsafe endpoint could ship without one.
+
+    This walks the URLconf, finds every portal view that accepts an unsafe
+    method, and asserts each rejects a tokenless request. CsrfViewMiddleware
+    runs before the view, so a 403 lands regardless of whether the object id
+    exists or the user is authorised — which is exactly what we want to assert.
+    """
+
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        co = Company.objects.create(name='Acme')
+        user = PortalUser.objects.create(
+            email='c@acme.com', company=co, role=PortalUser.ROLE_CUSTOMER)
+        s = self.client.session
+        s['portal_user_id'] = user.id
+        s.save()
+
+    def _unsafe_endpoints(self):
+        import inspect
+        import re as _re
+        from portal import urls as purls
+        for p in purls.urlpatterns:
+            cb = p.callback
+            if not getattr(cb, '__module__', '').startswith('portal.views'):
+                continue
+            try:
+                src = inspect.getsource(cb)
+            except OSError:  # pragma: no cover
+                continue
+            methods = [m for m in ('POST', 'PATCH', 'DELETE', 'PUT')
+                       if f"'{m}'" in src]
+            if not methods:
+                continue
+            path = '/api/' + _re.sub(r'<[^:]+:[^>]+>', '1', str(p.pattern))
+            yield path, methods, cb.__name__
+
+    def test_every_unsafe_endpoint_rejects_a_tokenless_request(self):
+        checked, failures = 0, []
+        for path, methods, name in self._unsafe_endpoints():
+            for method in methods:
+                r = getattr(self.client, method.lower())(
+                    path, data='{}', content_type='application/json')
+                checked += 1
+                if r.status_code != 403:
+                    failures.append(f'{method} {path} ({name}) → {r.status_code}')
+        self.assertEqual(failures, [], f'endpoints not CSRF-protected: {failures}')
+        # Guard the guard: if the discovery ever stops finding endpoints this
+        # test would vacuously pass.
+        self.assertGreaterEqual(checked, 24)
