@@ -353,6 +353,20 @@ class Ticket(models.Model):
         (PRIORITY_CSM_DIRECT, 'CSM Direct'),
     ]
 
+    # Triage rank, lower = attend to first. Ordered by the first-response
+    # commitments in EC-SOP-07 §4.1: URGENT is the only same-business-day
+    # promise; High (1 business day) and CSM Direct (within 24 hours) are
+    # effectively next-day, with High ahead because it denotes a platform
+    # error blocking work rather than an account conversation; Standard
+    # (1–2 business days) is the loosest. The High/CSM Direct order is the
+    # one judgement call here — the doc doesn't rank them against each other.
+    PRIORITY_RANK = {
+        PRIORITY_URGENT: 0,
+        PRIORITY_HIGH: 1,
+        PRIORITY_CSM_DIRECT: 2,
+        PRIORITY_STANDARD: 3,
+    }
+
     # null=True so save() can assign it pre-INSERT; unique=True guards races.
     number = models.PositiveIntegerField(unique=True, editable=False, null=True, blank=True)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tickets')

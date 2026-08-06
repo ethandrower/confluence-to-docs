@@ -27,6 +27,7 @@
               :companies="companies"
               v-model:filter-company="allCompany"
               v-model:filter-status="allStatus"
+              v-model:filter-priority="allPriority"
               @open-inbox="openInbox"
               @open-all="openAll"
               @refresh="refresh"
@@ -116,6 +117,7 @@ const listLoading = ref(false)
 const inboxTotal = ref(0)
 const allCompany = ref('')
 const allStatus = ref('')
+const allPriority = ref('')
 const refreshing = ref(false)
 const truncated = ref(false)
 
@@ -145,7 +147,7 @@ async function loadInbox({ silent = false } = {}) {
 async function loadAll({ silent = false } = {}) {
   if (!silent) listLoading.value = true
   try {
-    const data = await store.adminList({ company: allCompany.value, status: allStatus.value })
+    const data = await store.adminList({ company: allCompany.value, status: allStatus.value, priority: allPriority.value })
     list.value = data.tickets
     truncated.value = !!data.truncated
   } finally {
@@ -265,6 +267,13 @@ onMounted(() => {
 // second /manage/tickets/:number link without a full reload).
 watch(() => props.number, (n) => {
   if (n != null && Number(n) !== selectedNumber.value) openTicketNumber(n)
+})
+
+// Filtering is server-side, and nothing re-fetched when a filter changed — so
+// picking one appeared to do nothing until the 30s poll came round or someone
+// hit Refresh. Applies to company and status as well as the new priority.
+watch([allCompany, allStatus, allPriority], () => {
+  if (mode.value === 'all') loadAll()
 })
 
 function reloadListSilent() {

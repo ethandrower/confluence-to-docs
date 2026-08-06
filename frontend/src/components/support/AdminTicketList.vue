@@ -15,7 +15,7 @@
     </div>
 
     <p class="atl-hint">
-      {{ mode === 'inbox' ? 'Waiting on a CiteMed reply, oldest first.' : 'Every ticket, most recently updated first.' }}
+      {{ mode === 'inbox' ? 'Waiting on a CiteMed reply — highest priority first, then longest waiting.' : 'Every ticket, most recently updated first.' }}
     </p>
 
     <div v-if="mode === 'all'" class="atl-filters">
@@ -26,6 +26,10 @@
       <select :value="filterStatus" class="atl-select" aria-label="Filter by status" @change="$emit('update:filterStatus', $event.target.value)">
         <option value="">All statuses</option>
         <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ statusLabel(s, 'staff') }}</option>
+      </select>
+      <select :value="filterPriority" class="atl-select" aria-label="Filter by priority" @change="$emit('update:filterPriority', $event.target.value)">
+        <option value="">All priorities</option>
+        <option v-for="p in PRIORITY_KEYS" :key="p" :value="p">{{ priorityLabel(p) }}</option>
       </select>
     </div>
 
@@ -71,7 +75,7 @@
 </template>
 
 <script setup>
-import { statusLabel, statusTone, priorityLabel, priorityTone, relDate, STATUS_KEYS } from '@/lib/ticketStatus'
+import { statusLabel, statusTone, priorityLabel, priorityTone, relDate, STATUS_KEYS, PRIORITY_KEYS } from '@/lib/ticketStatus'
 
 defineProps({
   mode: { type: String, required: true },
@@ -84,8 +88,9 @@ defineProps({
   companies: { type: Array, default: () => [] },
   filterCompany: { type: [String, Number], default: '' },
   filterStatus: { type: String, default: '' },
+  filterPriority: { type: String, default: '' },
 })
-defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompany', 'update:filterStatus'])
+defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompany', 'update:filterStatus', 'update:filterPriority'])
 </script>
 
 <style scoped>

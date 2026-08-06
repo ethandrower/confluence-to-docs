@@ -137,13 +137,28 @@ def _nudge_reply_in_portal(ticket, key):
         f'customer in the portal (not in Jira): {admin_url}'), internal=True)
 
 
+def _priority_ordered(qs):
+    """Highest SLA priority first, then oldest-first within a priority.
+
+    Strict age ordering meant an URGENT filed this morning sat below a
+    Standard from last week, which defeats having a priority at all. Ordered
+    in SQL via a CASE over Ticket.PRIORITY_RANK rather than in Python, so it
+    still holds once the list is capped and doesn't pull the table into memory.
+    """
+    from django.db.models import Case, IntegerField, Value, When
+    return qs.annotate(_rank=Case(
+        *[When(priority=p, then=Value(r)) for p, r in Ticket.PRIORITY_RANK.items()],
+        default=Value(99), output_field=IntegerField(),
+    )).order_by('_rank', 'updated_at')
+
+
 @require_http_methods(['GET'])
 @require_portal_admin
 def inbox(request):
-    qs = _with_message_count(
+    qs = _priority_ordered(_with_message_count(
         Ticket.objects.select_related('company', 'created_by')
         .filter(status=Ticket.STATUS_WAITING_ON_SUPPORT)
-    ).order_by('updated_at')
+    ))
     items = [_admin_dict(t, message_count=t._mc) for t in qs]
     return JsonResponse({'tickets': items, 'awaiting_total': len(items)})
 
@@ -161,6 +176,11 @@ def collection(request):
         status = request.GET.get('status')
         if status:
             qs = qs.filter(status=status)
+        # Ignore an unrecognised value rather than filtering to nothing — an
+        # empty list is indistinguishable from "no tickets match" in the UI.
+        priority = request.GET.get('priority')
+        if priority in dict(Ticket.PRIORITY_CHOICES):
+            qs = qs.filter(priority=priority)
         # Fetch one past the cap so we can flag truncation without an extra
         # COUNT. No pagination yet (spec §6) — the flag drives a UI hint.
         rows = list(qs[:ADMIN_LIST_CAP + 1])
