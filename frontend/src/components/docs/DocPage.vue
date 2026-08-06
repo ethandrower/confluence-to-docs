@@ -313,7 +313,7 @@ watch(() => props.slug, loadPage, { immediate: true })
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--muted-foreground);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 4px 8px;
   transition: color 0.15s, background 0.15s;
 }

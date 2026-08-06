@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { apiFetch } from '../lib/http.js'
 
 const api = (p) => `/api${p}`
 
@@ -15,7 +16,7 @@ export const useFilesStore = defineStore('files', () => {
   async function load() {
     loading.value = true
     try {
-      const r = await fetch(api('/files/buckets/'), { credentials: 'include' })
+      const r = await apiFetch(api('/files/buckets/'), { credentials: 'include' })
       buckets.value = r.ok ? (await r.json()).buckets : []
       // Keep selection valid: prefer the current one, else first request, else general.
       if (!buckets.value.some((b) => b.id === activeBucketId.value)) {
@@ -31,7 +32,7 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function upload(file, bucketId, onProgress) {
-    const init = await fetch(api('/files/upload-init'), {
+    const init = await apiFetch(api('/files/upload-init'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -52,7 +53,7 @@ export const useFilesStore = defineStore('files', () => {
       xhr.send(file)
     })
 
-    const done = await fetch(api('/files/upload-complete'), {
+    const done = await apiFetch(api('/files/upload-complete'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -63,7 +64,7 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function rename(id, name) {
-    await fetch(api(`/files/${id}`), {
+    await apiFetch(api(`/files/${id}`), {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -73,7 +74,7 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function remove(id) {
-    await fetch(api(`/files/${id}`), { method: 'DELETE', credentials: 'include' })
+    await apiFetch(api(`/files/${id}`), { method: 'DELETE', credentials: 'include' })
     await load()
   }
 

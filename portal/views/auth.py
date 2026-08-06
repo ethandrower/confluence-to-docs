@@ -1,8 +1,8 @@
 import secrets
 from datetime import timedelta
 from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_GET
-from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
@@ -65,7 +65,23 @@ MAGIC_LINK_EMAIL_MAX = 5
 MAGIC_LINK_EMAIL_WINDOW = 60 * 60
 
 
-@csrf_exempt
+def _start_authenticated_session(request, user):
+    """Elevate the current request to an authenticated session, safely.
+
+    `flush()` rather than `cycle_key()`: both rotate the session id (defeating
+    fixation — an id planted in the victim's browser pre-login must not stay
+    valid afterwards), but flush also drops the old session server-side and
+    starts empty. `portal_user_id` is the only key this app ever writes to a
+    session, so there is no pre-login state worth carrying across, and keeping
+    none is the safer default.
+
+    Every login path must go through here.
+    """
+    request.session.flush()
+    request.session['portal_user_id'] = user.pk
+    request.session.save()
+
+
 @require_POST
 def request_magic_link(request):
     try:
@@ -123,8 +139,7 @@ def request_magic_link(request):
     # Demo/sandbox accounts skip the magic link entirely — just sign them in.
     # (Restricted to is_demo sandbox users; real users always get a link.)
     if user.is_demo:
-        request.session['portal_user_id'] = user.pk
-        request.session.save()
+        _start_authenticated_session(request, user)
         return JsonResponse({'demo': True, 'user': _user_payload(user, request)})
 
     token = MagicLinkToken.objects.create(
@@ -169,9 +184,20 @@ def request_magic_link(request):
     return JsonResponse({'message': 'Magic link sent if email exists'})
 
 
-@require_GET
+@require_POST
 def verify_magic_link(request):
-    token_str = request.GET.get('token', '')
+    """Exchange a magic-link token for a session.
+
+    POST, not GET: the token is a single-use credential, and on GET it lands
+    in the query string of every gunicorn/nginx access-log line. In the body
+    it stays out of the logs. The SPA reads the token from its own URL and
+    posts it here, then strips it from the address bar so it doesn't linger
+    in history or leak via Referer.
+    """
+    try:
+        token_str = (json.loads(request.body).get('token') or '').strip()
+    except (json.JSONDecodeError, ValueError, AttributeError):
+        return JsonResponse({'error': 'Invalid request'}, status=400)
     if not token_str:
         return JsonResponse({'error': 'Token required'}, status=400)
 
@@ -200,8 +226,7 @@ def verify_magic_link(request):
     user.last_login = timezone.now()
     user.save(update_fields=['last_login'])
 
-    request.session['portal_user_id'] = user.pk
-    request.session.save()
+    _start_authenticated_session(request, user)
 
     return JsonResponse({'user': _user_payload(user, request)})
 
@@ -230,12 +255,12 @@ def demo_login(request):
         from django.http import Http404
         raise Http404()
 
-    request.session['portal_user_id'] = user.pk
-    request.session.save()
+    _start_authenticated_session(request, user)
     from django.http import HttpResponseRedirect
     return HttpResponseRedirect(request.GET.get('next') or '/files')
 
 
+@ensure_csrf_cookie
 @require_GET
 def me(request):
     user_id = request.session.get('portal_user_id')
@@ -252,7 +277,6 @@ def me(request):
     return JsonResponse({'user': _user_payload(user, request)})
 
 
-@csrf_exempt
 @require_POST
 def logout(request):
     request.session.flush()

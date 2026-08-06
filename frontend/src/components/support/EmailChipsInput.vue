@@ -127,7 +127,7 @@ function focusInput() {
   min-height: 38px;
   padding: 5px 8px;
   border: 1px solid var(--input, var(--border));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--background);
   cursor: text;
   transition: border-color 0.15s, box-shadow 0.15s;

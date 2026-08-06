@@ -6,7 +6,6 @@ import logging
 import threading
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 import re
@@ -78,6 +77,9 @@ def _admin_dict(t, message_count=None):
         'company': {'id': t.company_id, 'name': t.company.name},
         'cc_emails': t.cc_emails,
         'created_by_email': t.created_by.email if t.created_by else '',
+        # Staff-only: deliberately not added to _ticket_dict, which is what the
+        # customer endpoints return.
+        'priority': t.priority,
     })
     return d
 
@@ -151,7 +153,6 @@ def inbox(request):
     return JsonResponse({'tickets': items, 'awaiting_total': len(items)})
 
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST'])
 @require_portal_admin
 def collection(request):
@@ -233,7 +234,6 @@ def detail(request, number):
     return JsonResponse(d)
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def reply(request, number):
@@ -271,7 +271,6 @@ def reply(request, number):
                          'status': t.status})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def resend_message(request, number, message_id):
@@ -298,7 +297,6 @@ def resend_message(request, number, message_id):
                          'delivery_detail': m.delivery_detail})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def set_status(request, number):
@@ -323,7 +321,36 @@ def set_status(request, number):
     return JsonResponse({'ok': True, 'status': t.status})
 
 
-@csrf_exempt
+@require_http_methods(['POST'])
+@require_portal_admin
+def set_priority(request, number):
+    """Set the SLA priority. Staff-only by design — the field is an internal
+    commitment, and it never reaches the customer payload. Deliberately does
+    NOT email or notify the customer: severity is our triage signal, not a
+    promise we make to them directly."""
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+    priority = data.get('priority')
+    if priority not in dict(Ticket.PRIORITY_CHOICES):
+        return JsonResponse({'error': 'Invalid priority'}, status=400)
+    old = t.priority
+    if old == priority:
+        return JsonResponse({'ok': True, 'priority': t.priority})
+    t.priority = priority
+    t.save(update_fields=['priority', 'updated_at'])
+    log_ticket_activity(t, 'priority_changed', actor=request.portal_user,
+                        old=old, new=priority)
+    # Nudge open admin tabs so a second agent sees the new severity; the
+    # customer channel is intentionally untouched.
+    transaction.on_commit(lambda: realtime.notify_ticket(t, 'priority_changed'))
+    return JsonResponse({'ok': True, 'priority': t.priority})
+
+
 @require_http_methods(['POST'])
 @require_portal_admin
 def set_jira(request, number):
@@ -364,7 +391,6 @@ def set_jira(request, number):
     return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t)})
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_admin
 def set_cc(request, number):

@@ -43,8 +43,14 @@
           >
             <span class="atl-row-line">
               <span class="atl-ref">{{ t.display_number }} · {{ t.company.name }}</span>
-              <span class="atl-status" :class="`status--${statusTone(t.status, 'staff')}`">
-                <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status, 'staff') }}
+              <span class="atl-meta">
+                <span
+                  class="atl-priority"
+                  :class="`prio--${priorityTone(t.priority)}`"
+                >{{ priorityLabel(t.priority) }}</span>
+                <span class="atl-status" :class="`status--${statusTone(t.status, 'staff')}`">
+                  <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status, 'staff') }}
+                </span>
               </span>
             </span>
             <span class="atl-row-line">
@@ -65,7 +71,7 @@
 </template>
 
 <script setup>
-import { statusLabel, statusTone, relDate, STATUS_KEYS } from '@/lib/ticketStatus'
+import { statusLabel, statusTone, priorityLabel, priorityTone, relDate, STATUS_KEYS } from '@/lib/ticketStatus'
 
 defineProps({
   mode: { type: String, required: true },
@@ -87,13 +93,13 @@ defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompan
 
 .atl-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
 .atl-modes { display: flex; align-items: center; gap: 6px; }
-.seg { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 13.5px; font-weight: 550; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+.seg { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--muted-foreground); font: inherit; font-size: 13.5px; font-weight: 550; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
 .seg:hover { color: var(--foreground); }
 .seg:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .seg--active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); color: var(--primary); }
 .seg-badge { font-size: 11px; font-weight: 700; background: var(--primary); color: var(--primary-foreground); border-radius: 999px; padding: 1px 7px; }
 
-.refresh-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--muted-foreground); cursor: pointer; transition: color 0.15s, border-color 0.15s; flex-shrink: 0; }
+.refresh-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--muted-foreground); cursor: pointer; transition: color 0.15s, border-color 0.15s; flex-shrink: 0; }
 .refresh-btn svg { width: 15px; height: 15px; }
 .refresh-btn:hover { color: var(--primary); border-color: var(--primary); }
 .refresh-btn:disabled { opacity: 0.6; cursor: default; }
@@ -104,7 +110,7 @@ defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompan
 .atl-hint { font-size: 12.5px; color: var(--muted-foreground); margin: 10px 0 12px; line-height: 1.4; }
 
 .atl-filters { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.atl-select { flex: 1 1 auto; min-width: 0; height: 34px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; }
+.atl-select { flex: 1 1 auto; min-width: 0; height: 34px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; }
 .atl-select:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
 
 .atl-rows { list-style: none; margin: 0 -16px; padding: 0; flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
@@ -130,11 +136,25 @@ defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompan
 .status--info { color: var(--info); }
 .status--muted { color: var(--muted-foreground); }
 
+/* Priority sits beside status, so it must read as a DIFFERENT kind of value —
+   a tinted pill against the status dot-and-label, not a second dot. */
+.atl-meta { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.atl-priority {
+  font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 3px 6px; border-radius: var(--radius-sm); white-space: nowrap;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.prio--destructive { color: var(--destructive); }
+.prio--warning { color: var(--warning); }
+.prio--info { color: var(--info); }
+/* Standard is the default on most rows — no tint, so the exceptions stand out. */
+.prio--muted { color: var(--muted-foreground); background: none; padding-left: 0; padding-right: 0; }
+
 .atl-empty { text-align: center; color: var(--muted-foreground); font-size: 13px; padding: 32px 12px; }
 .atl-truncated { text-align: center; color: var(--muted-foreground); font-size: 12px; padding: 14px 16px; border-top: 1px dashed var(--border); }
 
 .atl-row--skeleton { height: 62px; display: flex; align-items: center; padding: 10px 12px; }
-.sk-bar { display: block; width: 100%; height: 16px; border-radius: 6px; background: linear-gradient(90deg, var(--muted) 25%, var(--secondary) 37%, var(--muted) 63%); background-size: 400% 100%; animation: sk-shimmer 1.4s ease infinite; }
+.sk-bar { display: block; width: 100%; height: 16px; border-radius: var(--radius-sm); background: linear-gradient(90deg, var(--muted) 25%, var(--secondary) 37%, var(--muted) 63%); background-size: 400% 100%; animation: sk-shimmer 1.4s ease infinite; }
 @keyframes sk-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .sk-bar { animation: none; } }
 </style>

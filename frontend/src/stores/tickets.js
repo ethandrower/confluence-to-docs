@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { apiFetch } from '../lib/http.js'
 
 const api = (path, opts = {}) =>
-  fetch(`/api${path}`, {
+  apiFetch(`/api${path}`, {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     ...opts,
@@ -109,6 +110,12 @@ export const useTicketsStore = defineStore('tickets', () => {
     })
   }
 
+  async function adminSetPriority(number, priority) {
+    return api(`/admin/tickets/${number}/priority/`, {
+      method: 'POST', body: JSON.stringify({ priority }),
+    })
+  }
+
   async function adminJiraLink(number, action, key) {
     return api(`/admin/tickets/${number}/jira/`, {
       method: 'POST', body: JSON.stringify({ action, key }),
@@ -131,7 +138,7 @@ export const useTicketsStore = defineStore('tickets', () => {
 
   return {
     tickets, current, loading, error, fetchTickets, fetchTicket, createTicket, reply,
-    adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminJiraLink, adminSetCc, adminCreate,
+    adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminSetPriority, adminJiraLink, adminSetCc, adminCreate,
     adminResend,
   }
 })

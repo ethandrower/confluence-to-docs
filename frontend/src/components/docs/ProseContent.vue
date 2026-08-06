@@ -468,7 +468,7 @@ const EMOJI = {
   -webkit-overflow-scrolling: touch;
   margin: 1.25rem 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .confluence-content .table-wrap table {
   margin: 0;
@@ -481,7 +481,7 @@ const EMOJI = {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 500;
   background: var(--muted);
@@ -491,7 +491,7 @@ const EMOJI = {
 
 /* Image placeholder */
 .confluence-content .img-placeholder {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px dashed var(--border);
   background: var(--muted);
   padding: 1.25rem;
@@ -512,7 +512,7 @@ const EMOJI = {
   color: oklch(0.6 0.01 260);
   background: oklch(0.22 0.012 260);
   border: 1px solid oklch(0.30 0.012 260);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
@@ -584,7 +584,7 @@ const EMOJI = {
   width: auto;
   height: auto;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   background: var(--card, #fff);
 }

@@ -113,7 +113,7 @@ async function submit() {
 .form-input {
   padding: 11px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.9375rem;
   font-family: inherit;
   color: var(--foreground);
@@ -157,7 +157,7 @@ async function submit() {
   background: var(--primary);
   color: var(--primary-foreground);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.9375rem;
   font-weight: 600;
   font-family: inherit;
@@ -200,7 +200,7 @@ async function submit() {
   background: color-mix(in srgb, var(--destructive) 9%, var(--card));
   border: 1px solid color-mix(in srgb, var(--destructive) 28%, var(--border));
   border-left: 3px solid var(--destructive);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .notice-icon {
   width: 18px;

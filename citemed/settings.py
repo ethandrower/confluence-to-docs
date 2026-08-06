@@ -27,6 +27,32 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # Example: CSRF_TRUSTED_ORIGINS=https://docs.example.com
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
+# In dev the SPA is served by Vite on another port and proxies /api to Django,
+# so the browser sends Origin=localhost:517x while Django's Host is
+# localhost:8001. Django 4+ rejects that mismatch on unsafe requests. In
+# production Django serves the SPA itself (same origin) so no entry is needed —
+# but if you ever front it from another origin, that origin MUST be added to
+# CSRF_TRUSTED_ORIGINS in env or every write will 403.
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS += [
+        'http://localhost:5173', 'http://localhost:5174',
+        'http://127.0.0.1:5173', 'http://127.0.0.1:5174',
+    ]
+
+# SameSite=Lax on both cookies: the browser withholds them from cross-site
+# POSTs, so a forged form on another origin can't ride the victim's session.
+# Defence in depth alongside CSRF tokens — set unconditionally (unlike the
+# Secure flags below) because it costs nothing over http in local dev.
+# 'Lax' not 'Strict': ticket notifications email CTAs into the app
+# (/support/<n>, /manage — see portal/ticket_notify.py), and those links are
+# followed by users who are ALREADY signed in. Under Strict the browser
+# withholds the session cookie on that cross-site navigation, so the SPA would
+# boot, see a 401 from /auth/me/, and bounce them to the login page. Don't
+# tighten this to Strict on the strength of the magic-link flow alone — that
+# one happens to survive it, because no session exists yet at that point.
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+
 # Cookie hardening — only enforced when DEBUG is off so local dev (http) still works.
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
