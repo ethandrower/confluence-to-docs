@@ -100,6 +100,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useTicketsStore } from '@/stores/tickets'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
+import { apiFetch } from '../lib/http.js'
 
 const props = defineProps({
   // Deep-link target (route /manage/tickets/:number). When present, open that
@@ -126,7 +127,7 @@ const selectError = ref(false)
 const companies = ref([])
 async function loadCompanies(force = false) {
   if (!force && companies.value.length) return
-  const r = await fetch('/api/admin/files/companies/', { credentials: 'include' })
+  const r = await apiFetch('/api/admin/files/companies/', { credentials: 'include' })
   if (r.ok) companies.value = (await r.json()).companies
 }
 
@@ -277,7 +278,7 @@ usePolling(reloadListSilent, { intervalMs: 30000, enabled: () => !adminConnected
 .mt { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
 .mt-top { display: flex; align-items: center; gap: 16px; padding: 18px clamp(1rem, 2vw, 1.5rem) 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--muted-foreground); padding: 6px 10px 6px 6px; border-radius: var(--radius-md); transition: color 0.15s, background 0.15s; flex-shrink: 0; }
+.back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--muted-foreground); padding: 6px 10px 6px 6px; border-radius: var(--radius-sm); transition: color 0.15s, background 0.15s; flex-shrink: 0; }
 .back-link:hover { color: var(--foreground); background: var(--muted); }
 .mt-top h1 { flex: 1 1 auto; font-family: var(--font-ui); font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
 
@@ -287,11 +288,11 @@ usePolling(reloadListSilent, { intervalMs: 30000, enabled: () => !adminConnected
 .mt-detail { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; }
 .mt-detail > :deep(*) { flex: 1 1 auto; min-width: 0; }
 
-.btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s; flex-shrink: 0; }
+.btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s; flex-shrink: 0; }
 .btn-primary:hover { filter: brightness(0.94); }
 .btn-primary:disabled { opacity: 0.6; }
 .btn-primary svg { width: 15px; height: 15px; }
-.btn-ghost { color: var(--muted-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; }
+.btn-ghost { color: var(--muted-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; }
 .btn-ghost:hover { background: var(--muted); color: var(--foreground); }
 
 /* New-ticket dialog (Reka Dialog provides the overlay/panel; this lays out
@@ -301,9 +302,9 @@ usePolling(reloadListSilent, { intervalMs: 30000, enabled: () => !adminConnected
 .form-error { color: var(--destructive); font-size: 0.85rem; margin: 0 0 10px; }
 .field { display: block; margin-bottom: 13px; }
 .field > span { display: block; font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--muted-foreground); margin-bottom: 5px; }
-.field input, .field select { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 14px; }
+.field input, .field select { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 14px; }
 .field input:focus-visible, .field select:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; border-color: var(--ring); }
-.field textarea { width: 100%; padding: 8px 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
+.field textarea { width: 100%; padding: 8px 11px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
 .field textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; border-color: var(--ring); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 

@@ -35,6 +35,18 @@ onMounted(async () => {
     loading.value = false
     return
   }
+  // Drop the token from the address bar as soon as it's been read. Sending it
+  // to the API in a POST body keeps it out of server logs, but the SPA's own
+  // URL would still carry it into browser history and into the Referer of any
+  // request this page makes. replaceState (not push) so Back doesn't restore
+  // it either. Query params other than the token are preserved.
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('token')) {
+      url.searchParams.delete('token')
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+    }
+  } catch { /* non-browser env */ }
   try {
     await auth.verifyToken(token)
     loading.value = false
@@ -68,7 +80,7 @@ onMounted(async () => {
 
 <style scoped>
 .verify-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--surface-1); }
-.verify-card { background: white; border-radius: 12px; padding: 2.5rem 2rem; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+.verify-card { background: white; border-radius: var(--radius-lg); padding: 2.5rem 2rem; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
 .state-error h2 { color: #ef4444; margin-bottom: 0.5rem; }
 .state-error p { color: var(--text-secondary); margin-bottom: 1rem; }
 .btn-link { color: var(--accent); text-decoration: underline; }

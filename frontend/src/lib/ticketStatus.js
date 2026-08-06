@@ -13,6 +13,28 @@ export const TICKET_STATUS = {
 
 export const STATUS_KEYS = ['open', 'waiting_on_support', 'waiting_on_customer', 'resolved', 'closed']
 
+// SLA priority. Staff-only — the API never sends this to a customer, so there
+// is no customer-facing label to pick between (unlike status above).
+//
+// 'standard' is the default and therefore most rows: it stays deliberately
+// quiet (muted, no tint) so Urgent and High actually carry weight in a list.
+export const TICKET_PRIORITY = {
+  urgent:     { label: 'Urgent',     tone: 'destructive' },
+  high:       { label: 'High',       tone: 'warning' },
+  standard:   { label: 'Standard',   tone: 'muted' },
+  csm_direct: { label: 'CSM Direct', tone: 'info' },
+}
+
+export const PRIORITY_KEYS = ['urgent', 'high', 'standard', 'csm_direct']
+
+export function priorityLabel(key) {
+  return TICKET_PRIORITY[key]?.label ?? key
+}
+
+export function priorityTone(key) {
+  return TICKET_PRIORITY[key]?.tone ?? 'muted'
+}
+
 export function statusLabel(key, perspective = 'customer') {
   const s = TICKET_STATUS[key]
   if (!s) return key

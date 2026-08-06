@@ -78,6 +78,7 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import { useTicketsStore } from '@/stores/tickets'
 import { useDebouncedSearch } from '@/lib/useDebounce'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
+import { apiFetch } from '../../lib/http.js'
 
 const emit = defineEmits(['created', 'cancel'])
 
@@ -98,7 +99,7 @@ const submitting = ref(false)
 // reusing the existing docs search endpoint. Advisory only; never blocks submit.
 async function searchDocs(q) {
   try {
-    const r = await fetch(`/api/docs/search/?q=${encodeURIComponent(q)}&match=any`,
+    const r = await apiFetch(`/api/docs/search/?q=${encodeURIComponent(q)}&match=any`,
       { credentials: 'same-origin' })
     if (!r.ok) return []
     const data = await r.json()

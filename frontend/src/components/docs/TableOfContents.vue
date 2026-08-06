@@ -206,7 +206,7 @@ onBeforeUnmount(unbindScroll)
   font-size: 12px;
   line-height: 1.5;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--muted-foreground);
   transition: color 0.15s ease, background 0.15s ease;
   white-space: nowrap;

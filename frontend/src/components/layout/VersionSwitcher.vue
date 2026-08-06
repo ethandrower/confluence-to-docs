@@ -91,7 +91,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
   gap: 6px;
   width: 100%;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
   color: var(--muted-foreground);
@@ -119,7 +119,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
   right: 0;
   background: var(--popover);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 4px;
   box-shadow: 0 4px 12px oklch(0 0 0 / 0.08), 0 1px 3px oklch(0 0 0 / 0.04);
 }
@@ -130,7 +130,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
   gap: 6px;
   width: 100%;
   padding: 6px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   color: var(--foreground);
   background: transparent;
@@ -158,7 +158,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
   color: var(--primary);
   background: var(--accent);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   letter-spacing: 0.02em;
 }
 

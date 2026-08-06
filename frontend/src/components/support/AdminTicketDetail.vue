@@ -18,7 +18,19 @@
         </button>
         <div class="atd-head-top">
           <p class="atd-number">{{ ticket.display_number }} · {{ ticket.company.name }}</p>
-          <StatusMenu :status="ticket.status" :disabled="statusSaving" @change="onStatusChange" />
+          <div class="atd-head-controls">
+            <select
+              class="atd-priority-select"
+              :class="`prio--${priorityTone(ticket.priority)}`"
+              :value="ticket.priority"
+              :disabled="prioritySaving"
+              aria-label="Ticket priority"
+              @change="onPriorityChange($event.target.value)"
+            >
+              <option v-for="p in PRIORITY_KEYS" :key="p" :value="p">{{ priorityLabel(p) }}</option>
+            </select>
+            <StatusMenu :status="ticket.status" :disabled="statusSaving" @change="onStatusChange" />
+          </div>
         </div>
         <h1 ref="subjectHeadingEl" tabindex="-1" class="atd-subject-h">{{ ticket.subject }}</h1>
       </header>
@@ -128,7 +140,7 @@ import MessageThread from '@/components/support/MessageThread.vue'
 import StatusMenu from '@/components/support/StatusMenu.vue'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
-import { statusLabel, fullDate } from '@/lib/ticketStatus'
+import { statusLabel, fullDate, priorityLabel, priorityTone, PRIORITY_KEYS } from '@/lib/ticketStatus'
 
 const props = defineProps({
   ticket: { type: Object, default: null },
@@ -142,7 +154,7 @@ const store = useTicketsStore()
 // Activity is a state-change AUDIT, not a second copy of the conversation:
 // replies and internal notes live in the thread, so they're excluded here.
 // What remains is what you can't see by reading the messages.
-const AUDIT_ACTIONS = new Set(['created', 'status_changed', 'jira_linked', 'jira_unlinked', 'cc_changed'])
+const AUDIT_ACTIONS = new Set(['created', 'status_changed', 'priority_changed', 'jira_linked', 'jira_unlinked', 'cc_changed'])
 const auditEvents = computed(() => (props.ticket?.activity || []).filter((a) => AUDIT_ACTIONS.has(a.action)))
 
 function activityLabel(a) {
@@ -151,6 +163,9 @@ function activityLabel(a) {
   }
   if (a.action === 'status_changed' && a.detail) {
     return `Status: ${statusLabel(a.detail.old, 'staff')} → ${statusLabel(a.detail.new, 'staff')}`
+  }
+  if (a.action === 'priority_changed' && a.detail) {
+    return `Priority: ${priorityLabel(a.detail.old)} → ${priorityLabel(a.detail.new)}`
   }
   if (a.action === 'jira_linked') {
     return a.detail?.key ? `Linked Jira ${a.detail.key}` : 'Jira linked'
@@ -279,6 +294,7 @@ watch(() => props.ticket?.number, (n, old) => {
 })
 
 const statusSaving = ref(false)
+const prioritySaving = ref(false)
 async function onStatusChange(key) {
   if (!props.ticket || key === props.ticket.status) return
   const prev = props.ticket.status
@@ -292,6 +308,22 @@ async function onStatusChange(key) {
     emit('updated', { status: prev })      // revert to server truth
   } finally {
     statusSaving.value = false
+  }
+}
+
+async function onPriorityChange(key) {
+  if (!props.ticket || key === props.ticket.priority) return
+  const prev = props.ticket.priority
+  prioritySaving.value = true
+  actionError.value = ''
+  emit('updated', { priority: key })      // optimistic: header + list row update immediately
+  try {
+    await store.adminSetPriority(props.ticket.number, key)
+  } catch (e) {
+    actionError.value = e.message || 'Could not update priority.'
+    emit('updated', { priority: prev })   // revert to server truth
+  } finally {
+    prioritySaving.value = false
   }
 }
 
@@ -368,6 +400,20 @@ function onComposerKeydown(e) {
 .atd-back:hover { color: var(--foreground); background: var(--muted); }
 .atd-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.atd-head-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* Native select: keyboard and screen-reader behaviour for free, and it reads
+   as a control rather than competing with StatusMenu's richer trigger. */
+.atd-priority-select {
+  font-size: 12px; font-weight: 600; line-height: 1;
+  padding: 5px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--card); color: var(--muted-foreground);
+  cursor: pointer;
+}
+.atd-priority-select:disabled { opacity: 0.6; cursor: default; }
+.atd-priority-select.prio--destructive { color: var(--destructive); border-color: color-mix(in srgb, var(--destructive) 40%, var(--border)); }
+.atd-priority-select.prio--warning { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
+.atd-priority-select.prio--info { color: var(--info); border-color: color-mix(in srgb, var(--info) 40%, var(--border)); }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
 .atd-subject-h { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
 
@@ -394,7 +440,7 @@ function onComposerKeydown(e) {
 /* Docked composer */
 .composer { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding: 11px 28px 12px; flex-shrink: 0; background: var(--card); }
 .composer label[for="admin-reply-body"] { font-size: 0.82rem; font-weight: 550; color: var(--foreground); }
-.composer-textarea { padding: 0.6rem 0.8rem; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 0.9rem; font-family: inherit; color: var(--foreground); background: var(--background); resize: vertical; min-height: 58px; line-height: 1.5; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.composer-textarea { padding: 0.6rem 0.8rem; border: 1px solid var(--input); border-radius: var(--radius-sm); font-size: 0.9rem; font-family: inherit; color: var(--foreground); background: var(--background); resize: vertical; min-height: 58px; line-height: 1.5; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
 .composer-textarea:focus-visible { border-color: var(--brand-accent, var(--primary)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent, var(--primary)) 15%, transparent); }
 .form-error { color: var(--destructive); font-size: 0.85rem; margin: 0; }
 .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -402,7 +448,7 @@ function onComposerKeydown(e) {
 .internal-toggle input { accent-color: var(--warning); width: 16px; height: 16px; cursor: pointer; }
 .composer-send { display: flex; align-items: center; gap: 10px; }
 .composer-hint { font-size: 0.72rem; color: var(--muted-foreground); }
-.btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s, background 0.15s, border-color 0.15s; }
+.btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s, background 0.15s, border-color 0.15s; }
 .btn-primary:hover { filter: brightness(0.94); }
 .btn-primary:disabled { opacity: 0.6; }
 /* --background flips opposite to --warning across themes: light theme = light
@@ -429,7 +475,7 @@ function onComposerKeydown(e) {
 .atd-details-pop .ctrl { display: block; }
 .atd-details-pop .ctrl > span { display: block; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; }
 .atd-details-pop .ctrl-hint { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted-foreground); }
-.atd-details-pop .ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
+.atd-details-pop .ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
 .atd-details-pop .ctrl-input:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
 .atd-details-pop .ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }
 .atd-details-pop .ctrl-inline .ctrl-input { flex: 1 1 auto; min-width: 0; }
@@ -449,7 +495,7 @@ function onComposerKeydown(e) {
 .atd-details-pop .jira-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .atd-details-pop .jira-remove:disabled { opacity: 0.5; cursor: default; }
 
-.atd-details-pop .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
+.atd-details-pop .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
 .atd-details-pop .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
 .atd-details-pop .btn-outline:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-details-pop .btn-outline.sm { padding: 0 12px; height: 38px; }
