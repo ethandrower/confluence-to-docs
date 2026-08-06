@@ -25,6 +25,7 @@ const result = ref(null)
 const projects = ref([])
 const issueTypes = ref([])
 const priorities = ref([])
+const alreadyLinked = ref([])
 const form = ref({
   project: '', issue_type_id: '', priority_id: '', summary: '', description: '',
 })
@@ -37,6 +38,7 @@ async function load(project) {
     projects.value = d.projects || []
     issueTypes.value = d.issue_types || []
     priorities.value = d.priorities || []
+    alreadyLinked.value = d.already_linked || []
     form.value.project = d.project || ''
     // Bugs file as Bug; anything else defaults to Task.
     const wanted = props.ticket.category === 'bug' ? 'bug' : 'task'
@@ -112,6 +114,11 @@ function close() {
       <div v-else class="esc-body">
         <p v-if="error" class="esc-error" role="alert">{{ error }}</p>
         <p v-if="loading" class="esc-muted">Loading Jira options…</p>
+        <!-- Escalating twice silently creates a duplicate issue, so say so. -->
+        <p v-if="alreadyLinked.length" class="esc-warn">
+          Already escalated as {{ alreadyLinked.join(', ') }}. Filing again creates
+          a second Jira issue.
+        </p>
 
         <div class="esc-row">
           <label class="esc-field">
@@ -177,6 +184,7 @@ function close() {
 .esc-hint { margin: 0; font-size: 0.75rem; color: var(--muted-foreground); }
 .esc-muted { margin: 0; font-size: 0.82rem; color: var(--muted-foreground); }
 .esc-error { margin: 0; font-size: 0.82rem; color: var(--destructive); }
+.esc-warn { margin: 0; padding: 8px 10px; border-radius: 7px; font-size: 0.8rem; color: var(--foreground); background: color-mix(in srgb, var(--warning, #b45309) 12%, transparent); border: 1px solid color-mix(in srgb, var(--warning, #b45309) 30%, transparent); }
 .esc-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .esc-key { margin: 0; font-size: 0.95rem; font-weight: 600; }
 .esc-meta { margin: 0; font-size: 0.82rem; color: var(--muted-foreground); }

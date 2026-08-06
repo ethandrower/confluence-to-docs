@@ -47,6 +47,21 @@
             email only
           </span>
         </p>
+
+        <!-- Escalations, in the header rather than only behind Details: once a
+             ticket has become engineering work, "which issue, and where has it
+             got to" is what the agent needs at a glance. -->
+        <p v-if="ticket.jira_links && ticket.jira_links.length" class="atd-jira">
+          <span class="atd-jira-label">Escalated</span>
+          <a v-for="jl in ticket.jira_links" :key="jl.key" class="atd-jira-chip"
+             :href="jl.url" target="_blank" rel="noopener noreferrer"
+             :title="jl.summary || jl.key">
+            <span class="atd-jira-key">{{ jl.key }}</span>
+            <span v-if="jl.status" class="atd-jira-status"
+                  :class="`atd-jira-status--${jl.status_category || 'new'}`">{{ jl.status }}</span>
+            <span v-else class="atd-jira-status atd-jira-status--muted">status unavailable</span>
+          </a>
+        </p>
       </header>
 
       <p v-if="actionError" class="atd-action-error" role="alert">
@@ -492,6 +507,18 @@ function onComposerKeydown(e) {
 .atd-requester { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; font-size: 0.82rem; color: var(--muted-foreground); }
 .atd-requester strong { font-weight: 600; color: var(--foreground); }
 .atd-requester-email { color: var(--muted-foreground); }
+/* Linked Jira issues, surfaced in the header. */
+.atd-jira { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; font-size: 0.82rem; }
+.atd-jira-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
+.atd-jira-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; text-decoration: none; background: var(--background); }
+.atd-jira-chip:hover { background: var(--muted); }
+.atd-jira-key { font-family: var(--font-ui); font-size: 12.5px; font-weight: 650; color: var(--brand-accent, var(--primary)); }
+.atd-jira-status { padding: 0 6px; border-radius: 999px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.atd-jira-status--new { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
+.atd-jira-status--indeterminate { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.atd-jira-status--done { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); }
+.atd-jira-status--muted { color: var(--muted-foreground); font-weight: 400; font-style: italic; text-transform: none; }
+
 .atd-requester-warn { padding: 1px 7px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, transparent); border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent); }
 
 .atd-action-error { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 28px; font-size: 0.82rem; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-bottom: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); flex-shrink: 0; }
