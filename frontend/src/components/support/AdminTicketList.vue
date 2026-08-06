@@ -43,8 +43,14 @@
           >
             <span class="atl-row-line">
               <span class="atl-ref">{{ t.display_number }} · {{ t.company.name }}</span>
-              <span class="atl-status" :class="`status--${statusTone(t.status, 'staff')}`">
-                <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status, 'staff') }}
+              <span class="atl-meta">
+                <span
+                  class="atl-priority"
+                  :class="`prio--${priorityTone(t.priority)}`"
+                >{{ priorityLabel(t.priority) }}</span>
+                <span class="atl-status" :class="`status--${statusTone(t.status, 'staff')}`">
+                  <span class="dot" aria-hidden="true" /> {{ statusLabel(t.status, 'staff') }}
+                </span>
               </span>
             </span>
             <span class="atl-row-line">
@@ -65,7 +71,7 @@
 </template>
 
 <script setup>
-import { statusLabel, statusTone, relDate, STATUS_KEYS } from '@/lib/ticketStatus'
+import { statusLabel, statusTone, priorityLabel, priorityTone, relDate, STATUS_KEYS } from '@/lib/ticketStatus'
 
 defineProps({
   mode: { type: String, required: true },
@@ -129,6 +135,20 @@ defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompan
 .status--warning { color: var(--warning); }
 .status--info { color: var(--info); }
 .status--muted { color: var(--muted-foreground); }
+
+/* Priority sits beside status, so it must read as a DIFFERENT kind of value —
+   a tinted pill against the status dot-and-label, not a second dot. */
+.atl-meta { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.atl-priority {
+  font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 3px 6px; border-radius: 4px; white-space: nowrap;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.prio--destructive { color: var(--destructive); }
+.prio--warning { color: var(--warning); }
+.prio--info { color: var(--info); }
+/* Standard is the default on most rows — no tint, so the exceptions stand out. */
+.prio--muted { color: var(--muted-foreground); background: none; padding-left: 0; padding-right: 0; }
 
 .atl-empty { text-align: center; color: var(--muted-foreground); font-size: 13px; padding: 32px 12px; }
 .atl-truncated { text-align: center; color: var(--muted-foreground); font-size: 12px; padding: 14px 16px; border-top: 1px dashed var(--border); }

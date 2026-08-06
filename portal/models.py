@@ -333,6 +333,26 @@ class Ticket(models.Model):
         ('other', 'Other'),
     ]
 
+    # SLA severity, per the SLA doc. Staff-assigned and staff-visible only:
+    # a customer able to mark their own ticket Urgent would drain the field of
+    # meaning, so it is absent from the customer serializer (_ticket_dict) and
+    # writable solely through the admin endpoint.
+    #
+    # Note 'csm_direct' is a routing origin rather than a severity — it sits in
+    # this list because the SLA doc treats the four as one set. If a ticket ever
+    # needs to be both Urgent AND CSM-direct, this wants splitting into two
+    # fields.
+    PRIORITY_URGENT = 'urgent'
+    PRIORITY_HIGH = 'high'
+    PRIORITY_STANDARD = 'standard'
+    PRIORITY_CSM_DIRECT = 'csm_direct'
+    PRIORITY_CHOICES = [
+        (PRIORITY_URGENT, 'Urgent'),
+        (PRIORITY_HIGH, 'High'),
+        (PRIORITY_STANDARD, 'Standard'),
+        (PRIORITY_CSM_DIRECT, 'CSM Direct'),
+    ]
+
     # null=True so save() can assign it pre-INSERT; unique=True guards races.
     number = models.PositiveIntegerField(unique=True, editable=False, null=True, blank=True)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tickets')
@@ -344,6 +364,8 @@ class Ticket(models.Model):
     category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, default='question')
     status = models.CharField(max_length=32, choices=STATUS_CHOICES,
                               default=STATUS_WAITING_ON_SUPPORT)
+    priority = models.CharField(max_length=16, choices=PRIORITY_CHOICES,
+                                default=PRIORITY_STANDARD)
     cc_emails = models.JSONField(default=list, blank=True)
     # Internal Jira references live in JiraTicketLink (admin-only, never
     # serialized to customers). Was a single `jira_key` CharField — migrated
