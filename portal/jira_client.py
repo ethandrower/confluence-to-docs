@@ -171,11 +171,16 @@ def create_remote_link(key, url, title):
 
 
 def search_issues(jql, fields=None, max_results=100):
-    """Return the issues matching `jql`, following pagination. Best-effort:
-    returns [] on missing creds or any failure (never raises into a caller).
+    """Return the issues matching `jql`, following pagination.
 
-    This is a JQL search, NOT the `[CS-N]`-tag matching that was removed in
-    July — nothing here infers a portal ticket from an issue summary.
+    Best-effort and never raises into a caller: missing creds give []; a
+    failure part-way through pagination returns the pages gathered so far
+    rather than discarding them, so a partial result is possible and is NOT
+    distinguishable from a complete one here. Callers that care (see
+    jira_ingest) should sanity-check the count rather than trust it.
+
+    Matching is by JQL only — nothing in this function infers a portal ticket
+    from an issue's summary text.
     """
     domain, auth = _creds()
     if not (domain and jql):

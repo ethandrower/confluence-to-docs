@@ -355,8 +355,10 @@ JIRA_AUTO_CREATE_SINCE = env('JIRA_AUTO_CREATE_SINCE', default='')
 # pulls those in, matching the Jira reporter's email against the PortalUser
 # allowlist — an exact hit is a real onboarded customer and tells us their
 # company; bots, sales spam and staff have no customer row and are ignored.
-# Default OFF: ship dark, observe with `ingest_jira_requests --dry-run`, then
-# enable. Ingested tickets are NOT emailed to the customer (JSM already sent
+# Default OFF gates WRITING, not looking: the cron entry is a no-op while off,
+# but `ingest_jira_requests --dry-run` still queries and reports. That ordering
+# is what makes 'ship dark, observe, then enable' possible — gate the read too
+# and the only way to preview a match is to arm the live writer. Ingested tickets are NOT emailed to the customer (JSM already sent
 # its own auto-reply) and arrive pre-linked, so provision_jira_issues skips
 # them and can never mint a duplicate Jira issue for them.
 JIRA_INGEST = env.bool('JIRA_INGEST', default=False)

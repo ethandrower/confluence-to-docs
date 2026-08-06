@@ -243,3 +243,157 @@ class IngestRobustnessTest(TestCase):
         self.assertEqual(
             set(JiraTicketLink.objects.values_list('key', flat=True)),
             {'SUP-1', 'SUP-2'})
+
+
+class DryRunObservabilityTest(TestCase):
+    """The documented rollout is: deploy with JIRA_INGEST off, watch --dry-run
+    for a few days, then enable. That only works if --dry-run reports while the
+    flag is still off — otherwise the sole way to preview matches is to arm the
+    live every-5-minute writer, which defeats the point of shipping dark."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='SunNuclear')
+        PortalUser.objects.create(
+            email='ddonaho@mirion.com', role=PortalUser.ROLE_CUSTOMER,
+            company=self.company)
+
+    def test_dry_run_reports_while_the_feature_is_still_off(self):
+        with self.settings(JIRA_INGEST=False):
+            with mock.patch('portal.jira_ingest.jira_client.search_issues',
+                            return_value=[issue()]) as ms:
+                n = jira_ingest.ingest_requests(dry_run=True)
+        self.assertEqual(n, 1, 'dry-run must preview matches while off')
+        ms.assert_called_once()
+        self.assertEqual(Ticket.objects.count(), 0)
+
+    def test_the_cron_stays_inert_while_off(self):
+        # The flag still gates the real (writing) path, so the every-5-minute
+        # cron entry — which passes no --dry-run — remains a no-op.
+        with self.settings(JIRA_INGEST=False):
+            with mock.patch('portal.jira_ingest.jira_client.search_issues') as ms:
+                n = jira_ingest.ingest_requests()
+        self.assertEqual(n, 0)
+        ms.assert_not_called()
+        self.assertEqual(Ticket.objects.count(), 0)
+
+
+class MatchingBoundaryTest(TestCase):
+    """Mutation testing showed the previous suite stayed green when the
+    matching boundary was weakened, so these pin the parts that decide WHICH
+    customer a ticket is filed under — the highest-consequence logic here."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='SunNuclear')
+        self.customer = PortalUser.objects.create(
+            email='ddonaho@mirion.com', role=PortalUser.ROLE_CUSTOMER,
+            company=self.company)
+
+    def _run(self, issues, **kw):
+        opts = dict(JIRA_INGEST=True)
+        opts.update(kw)
+        with self.settings(**opts):
+            with mock.patch('portal.jira_ingest.jira_client.search_issues',
+                            return_value=issues) as ms:
+                with mock.patch('portal.jira_ingest.jira_client.create_remote_link'):
+                    return jira_ingest.ingest_requests(), ms
+
+    def test_reporter_email_matches_case_insensitively(self):
+        # PortalUser.email is not normalised on save and Jira returns whatever
+        # casing the customer's Atlassian account has. A case-sensitive match
+        # would silently stop ingesting a real customer — no ticket, no error,
+        # and a log line indistinguishable from "nothing new".
+        n, _ = self._run([issue(email='DDonaho@Mirion.com')])
+        self.assertEqual(n, 1)
+        self.assertEqual(Ticket.objects.get().created_by, self.customer)
+
+    def test_surrounding_whitespace_still_matches(self):
+        n, _ = self._run([issue(email='  ddonaho@mirion.com  ')])
+        self.assertEqual(n, 1)
+
+    def test_reporter_email_is_actually_requested_from_jira(self):
+        # Every other test mocks search_issues and hands back a fully populated
+        # issue, so the fields we ASK Jira for are never exercised. Drop
+        # 'reporter' from that list in production and _match_customer sees None
+        # for every issue — ingestion silently matches nobody, forever.
+        _, ms = self._run([])
+        requested = ms.call_args.kwargs.get('fields') or ms.call_args[0][1]
+        for field in ('summary', 'reporter', 'description'):
+            self.assertIn(field, requested)
+
+    def test_ingested_ticket_awaits_support(self):
+        # Status drives the admin Inbox, the nav badge and the dashboard count.
+        # An ingested request nobody has answered must land in the queue.
+        self._run([issue()])
+        self.assertEqual(Ticket.objects.get().status,
+                         Ticket.STATUS_WAITING_ON_SUPPORT)
+
+    def test_configured_project_is_the_one_queried(self):
+        _, ms = self._run([], JIRA_INGEST_PROJECT='HELP')
+        self.assertIn('project = HELP', ms.call_args[0][0])
+
+    def test_cutoff_is_inclusive_of_the_boundary_date(self):
+        # >= not > : a request filed ON the enablement date must be picked up.
+        _, ms = self._run([], JIRA_INGEST_SINCE='2026-08-01')
+        self.assertIn('created >= "2026-08-01"', ms.call_args[0][0])
+
+    def test_a_failing_issue_does_not_cost_the_rest_of_the_batch(self):
+        # The previous version of this test used a plain-string description,
+        # which stopped raising once adf_to_text was hardened — so it asserted
+        # nothing about isolation. Force a real failure on the first issue.
+        real_create = TicketMessage.objects.create
+        calls = {'n': 0}
+
+        def flaky(*a, **kw):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                raise RuntimeError('simulated DB failure')
+            return real_create(*a, **kw)
+
+        with self.settings(JIRA_INGEST=True):
+            with mock.patch('portal.jira_ingest.jira_client.search_issues',
+                            return_value=[issue(key='SUP-1'), issue(key='SUP-2')]):
+                with mock.patch('portal.jira_ingest.jira_client.create_remote_link'):
+                    with mock.patch.object(TicketMessage.objects, 'create', flaky):
+                        created = jira_ingest.ingest_requests()
+        self.assertEqual(created, 1, 'second issue should still be ingested')
+        self.assertEqual(
+            list(JiraTicketLink.objects.values_list('key', flat=True)), ['SUP-2'])
+        # The failed one must leave nothing half-built behind.
+        self.assertEqual(Ticket.objects.count(), 1)
+
+    def test_a_key_linked_after_the_snapshot_is_not_duplicated(self):
+        # Simulates a concurrent pass (manual run overlapping the cron): the
+        # key is absent from the run's opening snapshot but present by the time
+        # we go to write.
+        other = Ticket.objects.create(company=self.company, subject='raced in')
+
+        real_filter = JiraTicketLink.objects.filter
+        state = {'linked': False}
+
+        def link_midway(*a, **kw):
+            if not state['linked']:
+                state['linked'] = True
+                JiraTicketLink.objects.create(ticket=other, key='SUP-637')
+            return real_filter(*a, **kw)
+
+        with self.settings(JIRA_INGEST=True):
+            with mock.patch('portal.jira_ingest.jira_client.search_issues',
+                            return_value=[issue(key='SUP-637')]):
+                with mock.patch('portal.jira_ingest.jira_client.create_remote_link'):
+                    with mock.patch.object(JiraTicketLink.objects, 'filter', link_midway):
+                        created = jira_ingest.ingest_requests()
+        self.assertEqual(created, 0, 'must not file a second ticket for one request')
+        self.assertEqual(JiraTicketLink.objects.filter(key='SUP-637').count(), 1)
+
+    def test_a_malformed_issue_shape_does_not_abort_the_pass(self):
+        # Reporter extraction parses payload we don't control; a shape we
+        # didn't anticipate must cost that issue only.
+        bad = {'key': 'SUP-1', 'fields': None}
+        with self.settings(JIRA_INGEST=True):
+            with mock.patch('portal.jira_ingest.jira_client.search_issues',
+                            return_value=[bad, issue(key='SUP-2')]):
+                with mock.patch('portal.jira_ingest.jira_client.create_remote_link'):
+                    created = jira_ingest.ingest_requests()
+        self.assertEqual(created, 1)
+        self.assertEqual(
+            list(JiraTicketLink.objects.values_list('key', flat=True)), ['SUP-2'])

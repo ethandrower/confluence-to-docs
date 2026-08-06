@@ -79,7 +79,7 @@
       "schedule": "* * * * *"
     },
     {
-      "comment": "Create portal tickets from customer-raised JSM requests (email/customer-portal intake), matched on reporter email against the PortalUser allowlist. No-op unless JIRA_INGEST is set; run with --dry-run first to observe matches.",
+      "comment": "Create portal tickets from customer-raised JSM requests (email/customer-portal intake), matched on reporter email against the PortalUser allowlist. The cron entry is a no-op unless JIRA_INGEST is set; --dry-run reports without writing even while it is off, so matches can be observed before enabling.",
       "command": "python manage.py ingest_jira_requests",
       "schedule": "*/5 * * * *"
     }

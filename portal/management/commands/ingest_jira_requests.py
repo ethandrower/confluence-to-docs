@@ -2,7 +2,8 @@
 
 Matches each unlinked Jira request's reporter email against the PortalUser
 allowlist; a hit means a real onboarded customer and tells us their company.
-Gated by settings.JIRA_INGEST — a no-op until enabled.
+settings.JIRA_INGEST gates writing, not looking: with it off the plain
+command (and the cron) does nothing, while --dry-run still reports.
 
     python manage.py ingest_jira_requests --dry-run   # log only, writes nothing
     python manage.py ingest_jira_requests
