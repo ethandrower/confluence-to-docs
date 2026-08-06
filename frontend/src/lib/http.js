@@ -1,4 +1,5 @@
-// Single HTTP entry point for state-changing API calls.
+// Single HTTP entry point for API calls. Safe methods pass straight through;
+// unsafe ones additionally carry the CSRF token.
 //
 // Django's CsrfViewMiddleware now guards every endpoint (the blanket
 // @csrf_exempt is gone), so any unsafe request must carry the token from the

@@ -3,8 +3,10 @@
 Session fixation: an attacker who can plant a session id in a victim's browser
 (shared machine, a stray Set-Cookie, an XSS elsewhere on the origin) keeps that
 id valid across the victim's login unless the id is rotated. Every path that
-elevates an anonymous session to an authenticated one must call
-`session.cycle_key()`.
+elevates an anonymous session to an authenticated one must rotate it — here
+via `session.flush()` in `_start_authenticated_session`, which rotates the id
+AND drops the old session server-side (see that helper for why it's preferred
+over `cycle_key()`).
 """
 import json
 from datetime import timedelta

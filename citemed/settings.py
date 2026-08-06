@@ -43,8 +43,13 @@ if DEBUG:
 # POSTs, so a forged form on another origin can't ride the victim's session.
 # Defence in depth alongside CSRF tokens — set unconditionally (unlike the
 # Secure flags below) because it costs nothing over http in local dev.
-# 'Lax' not 'Strict': the magic-link email is a cross-site GET into the app,
-# and Strict would drop the session cookie on that first navigation.
+# 'Lax' not 'Strict': ticket notifications email CTAs into the app
+# (/support/<n>, /manage — see portal/ticket_notify.py), and those links are
+# followed by users who are ALREADY signed in. Under Strict the browser
+# withholds the session cookie on that cross-site navigation, so the SPA would
+# boot, see a 401 from /auth/me/, and bounce them to the login page. Don't
+# tighten this to Strict on the strength of the magic-link flow alone — that
+# one happens to survive it, because no session exists yet at that point.
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 
