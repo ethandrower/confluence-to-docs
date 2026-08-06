@@ -216,7 +216,7 @@ function reset() {
   font-weight: 500;
   color: var(--muted-foreground);
   padding: 6px 10px 6px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   margin-bottom: 18px;
   transition: color 0.15s, background 0.15s;
 }
@@ -249,7 +249,7 @@ function reset() {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: oklch(0.52 0.20 260 / 0.08);
   color: var(--primary);
   flex-shrink: 0;
@@ -313,14 +313,14 @@ function reset() {
 .signin-notice-link:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* ── Form card ── */
 .form-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 28px;
   box-shadow: 0 1px 3px oklch(0 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.02);
 }
@@ -358,7 +358,7 @@ function reset() {
 .form-input {
   padding: 9px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.875rem;
   font-family: inherit;
   color: var(--foreground);
@@ -422,7 +422,7 @@ select.form-input {
   background: var(--primary);
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.875rem;
   font-weight: 550;
   cursor: pointer;
@@ -458,7 +458,7 @@ select.form-input {
   padding: 56px 32px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px oklch(0 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.02);
 }
 
@@ -486,7 +486,7 @@ select.form-input {
   background: transparent;
   color: var(--primary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.8125rem;
   font-weight: 550;
   cursor: pointer;

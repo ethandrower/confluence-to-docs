@@ -24,7 +24,7 @@
   justify-content: center;
   width: 56px;
   height: 56px;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: oklch(0.52 0.20 260 / 0.10);
   color: var(--primary);
   margin: 0 auto 18px;

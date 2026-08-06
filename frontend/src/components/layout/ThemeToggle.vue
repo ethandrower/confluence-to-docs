@@ -30,7 +30,7 @@ const { theme, toggleTheme } = useTheme()
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--muted-foreground);
   transition: color 0.15s, background 0.15s;
 }

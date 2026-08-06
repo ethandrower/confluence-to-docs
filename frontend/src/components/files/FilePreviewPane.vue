@@ -48,7 +48,7 @@ const isImage = computed(() => /\.(png|jpe?g|gif|webp)$/i.test(props.name))
 }
 .pvp-name { font-size: 0.85rem; font-weight: 600; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pvp-actions { margin-left: auto; display: flex; gap: 0.2rem; }
-.pvp-btn { display: grid; place-items: center; width: 30px; height: 30px; border: none; background: none; color: var(--muted-foreground); border-radius: 7px; cursor: pointer; }
+.pvp-btn { display: grid; place-items: center; width: 30px; height: 30px; border: none; background: none; color: var(--muted-foreground); border-radius: var(--radius-sm); cursor: pointer; }
 .pvp-btn svg { width: 16px; height: 16px; }
 .pvp-btn:hover { background: var(--secondary); color: var(--foreground); }
 .pvp-body { flex: 1; min-height: 0; background: var(--muted); display: flex; align-items: center; justify-content: center; }

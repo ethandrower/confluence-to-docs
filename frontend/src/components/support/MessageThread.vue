@@ -102,7 +102,7 @@ export default { name: 'MessageThread' }
 .mt-time { font-size: 0.72rem; color: var(--muted-foreground); }
 
 /* Option B — true chat bubbles: no borders, tinted fills only. */
-.mt-bub { border-radius: 16px; padding: 9px 13px; font-size: 0.9rem; line-height: 1.55; margin-bottom: 3px; background: var(--bubble-theirs); color: var(--bubble-theirs-foreground); border: none; border-bottom-left-radius: 5px; }
+.mt-bub { border-radius: var(--radius-xl); padding: 9px 13px; font-size: 0.9rem; line-height: 1.55; margin-bottom: 3px; background: var(--bubble-theirs); color: var(--bubble-theirs-foreground); border: none; border-bottom-left-radius: 5px; }
 .mt-group--mine .mt-bub { background: var(--bubble-mine); color: var(--bubble-mine-foreground); border-bottom-left-radius: 16px; border-bottom-right-radius: 5px; margin-left: auto; }
 /* Internal notes keep only a semantic left accent, not a full border. */
 .mt-group--internal .mt-bub { background: color-mix(in srgb, var(--warning) 10%, var(--card)); color: var(--foreground); border-left: 3px solid var(--warning); }

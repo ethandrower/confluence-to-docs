@@ -123,7 +123,7 @@ watch(currentSlug, (slug) => {
   display: flex;
   align-items: center;
   position: relative;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin: 0 4px;
   transition: background-color 0.1s;
 }

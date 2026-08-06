@@ -405,7 +405,7 @@ function onComposerKeydown(e) {
    as a control rather than competing with StatusMenu's richer trigger. */
 .atd-priority-select {
   font-size: 12px; font-weight: 600; line-height: 1;
-  padding: 5px 8px; border-radius: 6px;
+  padding: 5px 8px; border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--card); color: var(--muted-foreground);
   cursor: pointer;
@@ -440,7 +440,7 @@ function onComposerKeydown(e) {
 /* Docked composer */
 .composer { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding: 11px 28px 12px; flex-shrink: 0; background: var(--card); }
 .composer label[for="admin-reply-body"] { font-size: 0.82rem; font-weight: 550; color: var(--foreground); }
-.composer-textarea { padding: 0.6rem 0.8rem; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 0.9rem; font-family: inherit; color: var(--foreground); background: var(--background); resize: vertical; min-height: 58px; line-height: 1.5; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.composer-textarea { padding: 0.6rem 0.8rem; border: 1px solid var(--input); border-radius: var(--radius-sm); font-size: 0.9rem; font-family: inherit; color: var(--foreground); background: var(--background); resize: vertical; min-height: 58px; line-height: 1.5; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
 .composer-textarea:focus-visible { border-color: var(--brand-accent, var(--primary)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent, var(--primary)) 15%, transparent); }
 .form-error { color: var(--destructive); font-size: 0.85rem; margin: 0; }
 .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -448,7 +448,7 @@ function onComposerKeydown(e) {
 .internal-toggle input { accent-color: var(--warning); width: 16px; height: 16px; cursor: pointer; }
 .composer-send { display: flex; align-items: center; gap: 10px; }
 .composer-hint { font-size: 0.72rem; color: var(--muted-foreground); }
-.btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s, background 0.15s, border-color 0.15s; }
+.btn-primary { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--primary); transition: filter 0.15s, background 0.15s, border-color 0.15s; }
 .btn-primary:hover { filter: brightness(0.94); }
 .btn-primary:disabled { opacity: 0.6; }
 /* --background flips opposite to --warning across themes: light theme = light
@@ -475,7 +475,7 @@ function onComposerKeydown(e) {
 .atd-details-pop .ctrl { display: block; }
 .atd-details-pop .ctrl > span { display: block; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; }
 .atd-details-pop .ctrl-hint { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted-foreground); }
-.atd-details-pop .ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
+.atd-details-pop .ctrl-input { width: 100%; height: 38px; padding: 0 11px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--background); color: var(--foreground); font: inherit; font-size: 13.5px; }
 .atd-details-pop .ctrl-input:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
 .atd-details-pop .ctrl-inline { display: flex; gap: 8px; align-items: flex-start; }
 .atd-details-pop .ctrl-inline .ctrl-input { flex: 1 1 auto; min-width: 0; }
@@ -495,7 +495,7 @@ function onComposerKeydown(e) {
 .atd-details-pop .jira-remove:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .atd-details-pop .jira-remove:disabled { opacity: 0.5; cursor: default; }
 
-.atd-details-pop .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
+.atd-details-pop .btn-outline { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--foreground); border: 1px solid var(--border); font-family: var(--font-ui); font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; flex-shrink: 0; }
 .atd-details-pop .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
 .atd-details-pop .btn-outline:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-details-pop .btn-outline.sm { padding: 0 12px; height: 38px; }
