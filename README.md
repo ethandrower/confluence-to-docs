@@ -183,6 +183,10 @@ Both source trees are bind-mounted, so Django's autoreload and Vite's HMR pick
 up edits without a rebuild. Rebuild only when dependencies change:
 `docker compose build web`.
 
+The image is `Dockerfile.dev`, not `Dockerfile` — production deploys through
+Dokku's buildpacks, and a root `Dockerfile` would capture its builder
+auto-detection and ship this dev image instead. Don't rename it.
+
 This path runs **Postgres and a real Redis channel layer**, matching production
 more closely than the SQLite + in-memory default — full-text search and
 cross-worker WebSocket broadcasts behave as they do on Dokku. Postgres is

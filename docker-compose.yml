@@ -42,7 +42,11 @@ services:
       retries: 20
 
   web:
-    build: .
+    # Dockerfile.dev, not Dockerfile — a root Dockerfile would hijack Dokku's
+    # builder detection away from the buildpacks production uses.
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     env_file: .env
     environment:
       DATABASE_URL: postgres://portal:portal@db:5432/portal
