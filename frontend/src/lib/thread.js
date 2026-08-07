@@ -16,14 +16,21 @@ export function stripSignature(body) {
 // Emailed replies arrive with stacked blank lines — mail clients pad before a
 // signature, and stripping the quoted chain leaves more behind — which renders
 // as a large gap mid-bubble. Collapse any run of 3+ newlines to one blank line;
-// paragraph breaks (exactly two) are preserved.
+// paragraph breaks (exactly two) are preserved. Runs at either end are dropped
+// outright, since under white-space:pre-wrap they render as dead space against
+// the bubble edge rather than as a gap between paragraphs.
 //
 // Matching \r\n as a single newline is load-bearing, not defensive: SMTP bodies
 // are CRLF-delimited, so a plain /\n{3,}/ sees \r between each \n and never
 // fires on exactly the emailed messages this exists to tidy.
+const NL = /(?:\r\n|\r|\n)/.source
+
 export function collapseBlankLines(body) {
   if (!body) return body
-  return body.replace(/(?:\r\n|\r|\n){3,}/g, '\n\n')
+  return body
+    .replace(new RegExp(`(?:${NL}){3,}`, 'g'), '\n\n')
+    .replace(new RegExp(`^(?:${NL})+`), '')
+    .replace(new RegExp(`(?:${NL})+$`), '')
 }
 
 function dayKey(iso) {

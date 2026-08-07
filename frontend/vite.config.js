@@ -37,5 +37,12 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
       }
     }
+  },
+  // Unit tests for pure helpers in src/lib. Node environment on purpose: these
+  // are string/data functions with no DOM, so jsdom would only add install
+  // weight. Component tests, if ever added, would need their own environment.
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.js'],
   }
 }))
