@@ -350,6 +350,23 @@ JIRA_AUTO_CREATE_CATEGORIES = env.list('JIRA_AUTO_CREATE_CATEGORIES', default=['
 # it to the enablement date to make auto-create strictly "new tickets only".
 JIRA_AUTO_CREATE_SINCE = env('JIRA_AUTO_CREATE_SINCE', default='')
 
+# Jira→portal request ingestion: a customer who emails support@ (or uses the
+# Atlassian customer portal) creates a JSM request the portal never sees. This
+# pulls those in, matching the Jira reporter's email against the PortalUser
+# allowlist — an exact hit is a real onboarded customer and tells us their
+# company; bots, sales spam and staff have no customer row and are ignored.
+# Default OFF gates WRITING, not looking: the cron entry is a no-op while off,
+# but `ingest_jira_requests --dry-run` still queries and reports. That ordering
+# is what makes 'ship dark, observe, then enable' possible — gate the read too
+# and the only way to preview a match is to arm the live writer. Ingested tickets are NOT emailed to the customer (JSM already sent
+# its own auto-reply) and arrive pre-linked, so provision_jira_issues skips
+# them and can never mint a duplicate Jira issue for them.
+JIRA_INGEST = env.bool('JIRA_INGEST', default=False)
+JIRA_INGEST_PROJECT = env('JIRA_INGEST_PROJECT', default='SUP')
+# Optional cutoff (YYYY-MM-DD) so enabling doesn't backfill months of history.
+# Set it to the enablement date to make ingestion strictly "new requests only".
+JIRA_INGEST_SINCE = env('JIRA_INGEST_SINCE', default='')
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

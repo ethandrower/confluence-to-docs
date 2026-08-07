@@ -77,6 +77,11 @@
       "comment": "Pull public service-desk Jira comments into linked portal tickets so replies typed in Jira reach the customer (S1, ECD-2246). Every minute; for ~30s near-real-time run 'sync_jira_comments --loop --interval 30' as a worker instead.",
       "command": "python manage.py sync_jira_comments",
       "schedule": "* * * * *"
+    },
+    {
+      "comment": "Create portal tickets from customer-raised JSM requests (email/customer-portal intake), matched on reporter email against the PortalUser allowlist. The cron entry is a no-op unless JIRA_INGEST is set; --dry-run reports without writing even while it is off, so matches can be observed before enabling.",
+      "command": "python manage.py ingest_jira_requests",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
