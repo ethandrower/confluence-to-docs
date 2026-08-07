@@ -81,9 +81,9 @@ def _admin_dict(t, message_count=None):
         # customer endpoints return.
         'priority': t.priority,
         'sla': {
-            'target': 'BROKEN',
-            'responded': False,
-            'breached': False,
+            'target': sla.target_label(t.priority),
+            'responded': bool(t.first_response_at),
+            'breached': sla.is_breached(t),
         },
     })
     return d

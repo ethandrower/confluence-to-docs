@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.test import TestCase
+from django.utils import timezone
 
 from portal import sla
 from portal.models import Company, PortalUser, Ticket, TicketMessage
@@ -212,3 +213,40 @@ class MisconfiguredHoursTest(TestCase):
         # reinterpreting via the server's local zone would be quietly wrong.
         naive = datetime(2026, 8, 5, 10, 0)
         self.assertEqual(sla.receipt_time(naive), at(2026, 8, 5, 10, 0))
+
+
+class AdminSerializerExposesRealSlaTest(TestCase):
+    """The SLA tests all exercise portal/sla.py directly. Nothing covered the
+    wiring into _admin_dict — which is how a hardcoded stub in the serializer
+    passed a full green suite and reached main. These assert the API returns
+    values that actually track the ticket."""
+
+    def setUp(self):
+        self.co = Company.objects.create(name='Acme')
+        staff = PortalUser.objects.create(
+            email='s@citemed.com', role=PortalUser.ROLE_ADMIN)
+        s = self.client.session
+        s['portal_user_id'] = staff.id
+        s.save()
+
+    def _row(self, number):
+        r = self.client.get('/api/admin/tickets/')
+        return next(x for x in r.json()['tickets'] if x['number'] == number)
+
+    def test_target_reflects_the_ticket_priority(self):
+        urgent = Ticket.objects.create(company=self.co, subject='u', priority='urgent')
+        csm = Ticket.objects.create(company=self.co, subject='c', priority='csm_direct')
+        self.assertEqual(self._row(urgent.number)['sla']['target'], 'Same business day')
+        self.assertEqual(self._row(csm.number)['sla']['target'], 'Within 24 hours')
+
+    def test_breached_reflects_an_overdue_ticket(self):
+        old = Ticket.objects.create(company=self.co, subject='old', priority='urgent')
+        Ticket.objects.filter(pk=old.pk).update(created_at=at(2026, 1, 5, 9, 0))
+        self.assertTrue(self._row(old.number)['sla']['breached'])
+
+    def test_responded_reflects_first_response_at(self):
+        t = Ticket.objects.create(company=self.co, subject='t', priority='high')
+        self.assertFalse(self._row(t.number)['sla']['responded'])
+        t.first_response_at = timezone.now()
+        t.save(update_fields=['first_response_at'])
+        self.assertTrue(self._row(t.number)['sla']['responded'])
