@@ -264,4 +264,4 @@ class CompanyListView(ReadOnlyApiV1View, generics.ListAPIView):
             open_ticket_count=Count(
                 'tickets', filter=Q(tickets__status__in=OPEN_STATUSES), distinct=True),
             last_ticket_at=Max('tickets__created_at'),
-        )
+        ).prefetch_related('users')

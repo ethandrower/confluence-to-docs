@@ -23,7 +23,7 @@ import json
 from datetime import timedelta
 
 from django.core.management import call_command
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from portal.models import (
@@ -215,11 +215,33 @@ class TicketPayloadTest(ApiV1TestCase):
             'id', 'number', 'display_number', 'company', 'subject', 'status',
             'priority', 'category', 'requester_email', 'assignee_email',
             'message_count', 'created_at', 'updated_at', 'last_message_at',
+            'url',
         })
         self.assertEqual(data['number'], self.t1.number)
         self.assertEqual(data['display_number'], f'CS-{self.t1.number}')
         self.assertEqual(data['company'], {'id': self.acme.pk, 'name': 'Acme Medical'})
         self.assertEqual(data['requester_email'], 'jane@acme.com')
+
+    @override_settings(FRONTEND_URL='https://support.citemed.com')
+    def test_url_deep_links_to_the_staff_view(self):
+        """Consumers are internal CS tools, so the useful destination is the
+        agent's page. Without this a CSM retypes "CS-5" into portal search."""
+        r = self.get(f'/api/v1/tickets/{self.t1.number}/')
+        self.assertEqual(
+            r.json()['url'],
+            f'https://support.citemed.com/manage/tickets/{self.t1.number}')
+
+    @override_settings(FRONTEND_URL='https://support.citemed.com/')
+    def test_url_does_not_double_the_slash(self):
+        r = self.get(f'/api/v1/tickets/{self.t1.number}/')
+        self.assertNotIn('//manage', r.json()['url'])
+
+    @override_settings(FRONTEND_URL='')
+    def test_url_is_empty_rather_than_broken_when_unconfigured(self):
+        """A misconfigured deployment should yield no link, not a link to
+        '/manage/tickets/5' that resolves against the consumer's own host."""
+        r = self.get(f'/api/v1/tickets/{self.t1.number}/')
+        self.assertEqual(r.json()['url'], '')
 
     def test_vocabulary_is_the_portals_own_unmapped(self):
         # The consumer collapses these on ingest; the producer must not.
@@ -283,7 +305,8 @@ class CompanyPayloadTest(ApiV1TestCase):
 
         acme = by_name['Acme Medical']
         self.assertEqual(set(acme), {
-            'id', 'name', 'contract_end_date', 'ticket_counts', 'last_ticket_at'})
+            'id', 'name', 'contract_end_date', 'ticket_counts', 'last_ticket_at',
+            'user_email_domains'})
         self.assertEqual(acme['id'], self.acme.pk)
         self.assertEqual(acme['contract_end_date'], '2027-03-01')
         # Two tickets, one of which is resolved.
@@ -296,6 +319,40 @@ class CompanyPayloadTest(ApiV1TestCase):
         zeta = next(c for c in r.json()['results'] if c['name'] == 'Zeta Ltd')
         self.assertEqual(zeta['ticket_counts'], {'open': 0, 'total': 0})
         self.assertIsNone(zeta['last_ticket_at'])
+
+    def test_user_email_domains_give_the_operator_something_to_match_on(self):
+        """`Company` has only a unique name, and names collide — a consumer
+        with two "Abiomed" accounts has nothing to choose between them."""
+        r = self.get('/api/v1/companies/')
+        by_name = {c['name']: c for c in r.json()['results']}
+        self.assertEqual(by_name['Acme Medical']['user_email_domains'], ['acme.com'])
+        self.assertEqual(by_name['Globex Devices']['user_email_domains'], ['globex.com'])
+
+    def test_domains_are_ordered_most_common_first(self):
+        for i in range(3):
+            PortalUser.objects.create(email=f'u{i}@acme-group.com', company=self.acme)
+        r = self.get('/api/v1/companies/')
+        acme = next(c for c in r.json()['results'] if c['name'] == 'Acme Medical')
+        # 3 acme-group.com beats the 2 acme.com already in the fixtures.
+        self.assertEqual(acme['user_email_domains'], ['acme-group.com', 'acme.com'])
+
+    @override_settings(STAFF_EMAIL_DOMAINS=['citemed.com'])
+    def test_our_own_domain_is_never_listed(self):
+        """Staff get attached to customer companies via on-behalf tickets. A
+        domain that appears under every customer matches everything, which is
+        the same as matching nothing."""
+        PortalUser.objects.create(email='csm@citemed.com', company=self.acme)
+        r = self.get('/api/v1/companies/')
+        acme = next(c for c in r.json()['results'] if c['name'] == 'Acme Medical')
+        self.assertNotIn('citemed.com', acme['user_email_domains'])
+
+    def test_no_email_ADDRESS_is_exposed(self):
+        """Which company a domain belongs to is the fact being established.
+        Who works there is not — this endpoint has no business publishing a
+        customer's staff list."""
+        raw = self.get('/api/v1/companies/').content.decode()
+        for address in ('jane@acme.com', 'bob@acme.com', 'zed@globex.com'):
+            self.assertNotIn(address, raw)
 
     def test_companies_are_not_scoped_to_one_tenant(self):
         # The whole reason this namespace exists: no company filter is applied
