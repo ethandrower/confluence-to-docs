@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thread direction</title>
+<style>
+  :root{
+    --primary:#0C377B; --accent:#3578FF; --info:#3578FF;
+    --card:#ffffff; --bg:#f4f5f8; --border:#e2e5ec;
+    --fg:#1a2233; --muted:#6b7385; --success:#1f9d68; --warning:#c08a1e;
+    --r:12px; --ui:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--ui);
+    -webkit-font-smoothing:antialiased;padding:28px 20px 60px}
+  .head{max-width:1180px;margin:0 auto 22px}
+  .head h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px}
+  .head p{margin:0;color:var(--muted);font-size:14px;line-height:1.5;max-width:760px}
+  .cols{max-width:1180px;margin:0 auto;display:grid;gap:18px;
+    grid-template-columns:repeat(3,1fr)}
+  @media(max-width:980px){.cols{grid-template-columns:1fr}}
+
+  .col{background:var(--card);border:1px solid var(--border);border-radius:16px;
+    display:flex;flex-direction:column;overflow:hidden;transition:box-shadow .15s,border-color .15s}
+  .col.pick{cursor:pointer}
+  .col.pick:hover{border-color:var(--accent);box-shadow:0 6px 24px rgba(53,120,255,.12)}
+  .col.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+  .col-top{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .tag{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+    padding:3px 8px;border-radius:999px}
+  .tag.now{color:var(--muted);background:#eef0f4}
+  .tag.a{color:#fff;background:var(--primary)}
+  .tag.b{color:#fff;background:var(--accent)}
+  .col-top h2{font-size:14px;font-weight:700;margin:0}
+  .col-note{padding:10px 16px 14px;font-size:12px;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);background:#fafbfc}
+
+  /* shared thread canvas */
+  .thread{padding:16px 14px;flex:1 1 auto;min-height:340px;display:flex;flex-direction:column}
+  .void{flex:1 1 auto}
+  .composer{margin:12px 14px 14px;border:1px solid var(--border);border-radius:10px;
+    padding:9px 11px;color:var(--muted);font-size:12.5px;background:#fbfcfd}
+
+  /* day + new dividers */
+  .day{display:flex;align-items:center;gap:10px;margin:4px 2px 12px;color:var(--muted);font-size:11px;font-weight:600}
+  .day::before,.day::after{content:"";height:1px;flex:1;background:var(--border)}
+  .newdiv{display:flex;align-items:center;gap:8px;margin:6px 2px 12px;color:var(--accent);font-size:11px;font-weight:700}
+  .newdiv::before,.newdiv::after{content:"";height:1px;flex:1;background:color-mix(in srgb,var(--accent) 40%,transparent)}
+
+  /* ---- CURRENT: bordered cards, header on every msg, abs time, top-anchored ---- */
+  .c-msg{border:1px solid var(--border);border-radius:10px;background:var(--card);
+    padding:11px 13px;margin-bottom:12px;max-width:88%}
+  .c-msg.mine{align-self:flex-end}
+  .c-msg.staff{align-self:flex-start;background:#f0f5ff;border-color:#cfe0ff}
+  .c-head{display:flex;align-items:baseline;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+  .c-badge{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;
+    color:var(--accent);background:#dbe8ff;padding:2px 6px;border-radius:999px}
+  .c-name{font-size:12.5px;font-weight:700}
+  .c-time{font-size:10.5px;color:var(--muted);margin-left:auto}
+  .c-body{font-size:12.5px;line-height:1.5;margin:0}
+
+  /* ---- OPTION A: refined cards — grouping, relative time, dividers, bottom-anchored ---- */
+  .a-group{margin-bottom:12px;max-width:86%}
+  .a-group.mine{align-self:flex-end}
+  .a-cap{display:flex;align-items:baseline;gap:7px;margin:0 3px 4px}
+  .a-cap .n{font-size:12px;font-weight:700}
+  .a-badge{font-size:9px;font-weight:800;text-transform:uppercase;color:var(--accent);
+    background:#dbe8ff;padding:1px 6px;border-radius:999px}
+  .a-cap .t{font-size:10.5px;color:var(--muted)}
+  .a-bub{border:1px solid var(--border);border-radius:10px;background:var(--card);
+    padding:9px 12px;font-size:12.5px;line-height:1.5;margin-bottom:4px}
+  .a-group.mine .a-bub{background:#f0f5ff;border-color:#cfe0ff}
+  .a-group.staff .a-bub{background:#fff}
+  .a-bub .mt{display:block;font-size:10px;color:var(--muted);margin-top:4px}
+
+  /* ---- OPTION B: true chat bubbles — no border, tinted fills, tight, caption once ---- */
+  .b-group{margin-bottom:10px;max-width:80%}
+  .b-group.mine{align-self:flex-end;text-align:right}
+  .b-cap{font-size:11px;color:var(--muted);margin:0 6px 3px;font-weight:600}
+  .b-cap .b-badge{color:var(--accent);font-weight:800}
+  .b-bub{display:inline-block;text-align:left;border-radius:16px;padding:9px 13px;
+    font-size:12.5px;line-height:1.5;margin-bottom:3px;max-width:100%}
+  .b-group.staff .b-bub{background:#eaf1ff;color:#12305f;border-bottom-left-radius:5px}
+  .b-group.mine .b-bub{background:var(--primary);color:#fff;border-bottom-right-radius:5px}
+  .b-time{font-size:10px;color:var(--muted);margin:1px 8px 0}
+  .b-daypill{align-self:center;background:#eef0f4;color:var(--muted);font-size:10.5px;
+    font-weight:600;padding:3px 12px;border-radius:999px;margin:2px 0 14px}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>How far do we push the message thread?</h1>
+    <p>Same real CS‑1 conversation in three treatments. <strong>Now</strong> is what you just saw live.
+       <strong>A</strong> and <strong>B</strong> both add message grouping, a day divider, relative time,
+       a “New” divider, and bottom‑anchoring — they differ in <em>how much visual chrome the bubbles keep</em>.
+       Click A or B (or tell me in the terminal).</p>
+  </div>
+
+  <div class="cols">
+
+    <!-- ================= NOW ================= -->
+    <div class="col">
+      <div class="col-top"><span class="tag now">Now</span><h2>Bordered email cards</h2></div>
+      <div class="thread">
+        <div class="c-msg mine">
+          <div class="c-head"><span class="c-name">Het Patel</span><span class="c-time">Jul 14, 2026, 3:30 PM</span></div>
+          <p class="c-body">First ticket after the DB reset. Confirming this does not create a Jira SUP issue and does not email a real inbox.</p>
+        </div>
+        <div class="c-msg staff">
+          <div class="c-head"><span class="c-badge">CiteMed</span><span class="c-name">CiteMed Support</span><span class="c-time">Jul 14, 2026, 3:33 PM</span></div>
+          <p class="c-body">Hi — this reply was typed inside Jira. If sync works, it should now appear in the portal thread. — CiteMed Support</p>
+        </div>
+        <div class="c-msg staff">
+          <div class="c-head"><span class="c-badge">CiteMed</span><span class="c-name">CiteMed Support</span><span class="c-time">Jul 14, 2026, 3:41 PM</span></div>
+          <p class="c-body">Second reply from Jira — you should see this appear in the portal WITHOUT refreshing the page. — CiteMed Support</p>
+        </div>
+        <div class="void"></div>
+      </div>
+      <div class="composer">Write your reply…</div>
+      <div class="col-note">Repeated <b>CITEMED · name · full date</b> on every message, redundant “— CiteMed Support” signature, and a dead gap above the composer.</div>
+    </div>
+
+    <!-- ================= OPTION A ================= -->
+    <div class="col pick" data-choice="a" onclick="toggleSelect(this)">
+      <div class="col-top"><span class="tag a">A</span><h2>Refined cards</h2></div>
+      <div class="thread">
+        <div class="void"></div>
+        <div class="day">Thursday, July 14</div>
+        <div class="a-group mine">
+          <div class="a-cap"><span class="n">Het Patel</span><span class="t">3:30 PM</span></div>
+          <div class="a-bub">First ticket after the DB reset. Confirming this does not create a Jira SUP issue and does not email a real inbox.</div>
+        </div>
+        <div class="newdiv">New</div>
+        <div class="a-group staff">
+          <div class="a-cap"><span class="a-badge">CiteMed</span><span class="n">CiteMed Support</span><span class="t">3:33 PM</span></div>
+          <div class="a-bub">Hi — this reply was typed inside Jira. If sync works, it should now appear in the portal thread.</div>
+          <div class="a-bub">Second reply from Jira — you should see this appear in the portal WITHOUT refreshing the page.<span class="mt">3:41 PM</span></div>
+        </div>
+      </div>
+      <div class="composer">Write your reply…  ·  ⌘↵ to send</div>
+      <div class="col-note">Keeps the bordered card language (familiar, on‑brand). Groups the two staff replies under one caption, adds day + “New” dividers, sits above the composer.</div>
+    </div>
+
+    <!-- ================= OPTION B ================= -->
+    <div class="col pick" data-choice="b" onclick="toggleSelect(this)">
+      <div class="col-top"><span class="tag b">B</span><h2>True chat bubbles</h2></div>
+      <div class="thread">
+        <div class="void"></div>
+        <div class="b-daypill">Thursday, July 14</div>
+        <div class="b-group mine">
+          <div class="b-cap">Het Patel · 3:30 PM</div>
+          <div class="b-bub">First ticket after the DB reset. Confirming this does not create a Jira SUP issue and does not email a real inbox.</div>
+        </div>
+        <div class="newdiv">New</div>
+        <div class="b-group staff">
+          <div class="b-cap"><span class="b-badge">CiteMed Support</span> · 3:33 PM</div>
+          <div class="b-bub">Hi — this reply was typed inside Jira. If sync works, it should now appear in the portal thread.</div>
+          <div class="b-bub">Second reply from Jira — you should see this appear in the portal WITHOUT refreshing the page.</div>
+          <div class="b-time">3:41 PM</div>
+        </div>
+      </div>
+      <div class="composer">Write your reply…  ·  ⌘↵ to send</div>
+      <div class="col-note">Lighter, more “messenger”: no borders, tinted fills (staff blue, you = CiteMed navy), tighter rhythm. Strongest chat feel; biggest visual departure.</div>
+    </div>
+
+  </div>
+</body>
+</html>

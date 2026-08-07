@@ -14,7 +14,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from portal import jira_client, realtime, ticket_notify
+from portal import jira_client, realtime, sla, ticket_notify
 from portal.decorators import require_portal_admin
 from portal.models import Company, JiraTicketLink, PortalUser, Ticket, TicketMessage
 from portal.rate_limit import is_rate_limited
@@ -100,6 +100,11 @@ def _admin_dict(t, message_count=None):
         'assignee': _assignee_dict(t),
         'watchers': _watchers_list(t),
         'priority': t.priority,
+        'sla': {
+            'target': sla.target_label(t.priority),
+            'responded': bool(t.first_response_at),
+            'breached': sla.is_breached(t),
+        },
     })
     return d
 
@@ -157,13 +162,34 @@ def _nudge_reply_in_portal(ticket, key):
         f'customer in the portal (not in Jira): {admin_url}'), internal=True)
 
 
+def _priority_ordered(qs):
+    """Highest SLA priority first, then oldest-first within a priority.
+
+    Strict age ordering meant an URGENT filed this morning sat below a
+    Standard from last week, which defeats having a priority at all. Ordered
+    in SQL via a CASE over Ticket.PRIORITY_RANK rather than in Python, so it
+    still holds once the list is capped and doesn't pull the table into memory.
+    """
+    from django.db.models import Case, IntegerField, Value, When
+    return qs.annotate(_rank=Case(
+        *[When(priority=p, then=Value(r)) for p, r in Ticket.PRIORITY_RANK.items()],
+        default=Value(99), output_field=IntegerField(),
+    )).order_by('_rank', 'updated_at')
+
+
 @require_http_methods(['GET'])
 @require_portal_admin
 def inbox(request):
-    qs = _with_message_count(
+    # Everything genuinely awaiting a CiteMed reply — which is what the Inbox
+    # header promises. 'open' belongs here: an on-behalf ticket is created
+    # 'open' (see collection) and nobody has replied to the customer yet.
+    # Excluding it hid live tickets from the queue, the nav badge AND the
+    # dashboard count, with no signal anywhere that they existed.
+    # Ordering is priority-first (see _priority_ordered), not age.
+    qs = _priority_ordered(_with_message_count(
         Ticket.objects.select_related('company', 'created_by')
-        .filter(status=Ticket.STATUS_WAITING_ON_SUPPORT)
-    ).order_by('updated_at')
+        .filter(status__in=[Ticket.STATUS_OPEN, Ticket.STATUS_WAITING_ON_SUPPORT])
+    ))
     items = [_admin_dict(t, message_count=t._mc) for t in qs]
     return JsonResponse({'tickets': items, 'awaiting_total': len(items)})
 
@@ -181,6 +207,11 @@ def collection(request):
         status = request.GET.get('status')
         if status:
             qs = qs.filter(status=status)
+        # Ignore an unrecognised value rather than filtering to nothing — an
+        # empty list is indistinguishable from "no tickets match" in the UI.
+        priority = request.GET.get('priority')
+        if priority in dict(Ticket.PRIORITY_CHOICES):
+            qs = qs.filter(priority=priority)
         # Fetch one past the cap so we can flag truncation without an extra
         # COUNT. No pagination yet (spec §6) — the flag drives a UI hint.
         rows = list(qs[:ADMIN_LIST_CAP + 1])
@@ -290,6 +321,7 @@ def reply(request, number):
     if not is_internal:
         t.status = Ticket.STATUS_WAITING_ON_CUSTOMER
         t.save(update_fields=['status', 'updated_at'])
+        sla.record_first_response(t, m)
         ticket_notify.notify_staff_reply(t, m)
     log_ticket_activity(t, 'note_added' if is_internal else 'message_sent',
                         actor=user)

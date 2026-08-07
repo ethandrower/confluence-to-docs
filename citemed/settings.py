@@ -117,10 +117,27 @@ ASGI_APPLICATION = 'citemed.asgi.application'
 # Channels channel layer: Redis in prod (cross-worker broadcast), in-memory
 # locally so dev/tests need no Redis.
 if env('REDIS_URL', default=None):
+    # socket_timeout MUST exceed channels_redis's brpop_timeout (5s).
+    #
+    # The receive loop issues `bzpopmin(channel, timeout=5)` — a blocking read
+    # that legitimately waits the full 5s on a quiet channel. redis-py 8.0
+    # started defaulting socket_timeout to 5s (7.x had none), so the client's
+    # read timeout tied with the blocking read it was wrapping. When the server
+    # took the full 5s the client sometimes timed out first, and since nothing
+    # passes an explicit timeout to read_response, redis-py disconnected the
+    # socket and raised — surfacing as "Exception in ASGI application" and
+    # dropping the customer's live-update connection until the browser
+    # reconnected. Diagnosed 2026-08-07 from exactly that in production.
+    #
+    # 20s leaves clear headroom over the 5s block. test_channel_layer_config
+    # asserts the relationship so a future redis-py default can't reintroduce it.
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
-            'CONFIG': {'hosts': [env('REDIS_URL')]},
+            'CONFIG': {'hosts': [{
+                'address': env('REDIS_URL'),
+                'socket_timeout': env.int('REDIS_SOCKET_TIMEOUT', default=20),
+            }]},
         }
     }
 else:
@@ -396,6 +413,34 @@ JIRA_AUTO_CREATE_CATEGORIES = env.list('JIRA_AUTO_CREATE_CATEGORIES', default=['
 # this date. Empty = no cutoff (also backfills existing open bug tickets). Set
 # it to the enablement date to make auto-create strictly "new tickets only".
 JIRA_AUTO_CREATE_SINCE = env('JIRA_AUTO_CREATE_SINCE', default='')
+
+# Jira→portal request ingestion: a customer who emails support@ (or uses the
+# Atlassian customer portal) creates a JSM request the portal never sees. This
+# pulls those in, matching the Jira reporter's email against the PortalUser
+# allowlist — an exact hit is a real onboarded customer and tells us their
+# company; bots, sales spam and staff have no customer row and are ignored.
+#
+# Default OFF gates WRITING, not looking: the cron entry is a no-op while off,
+# but `ingest_jira_requests --dry-run` still queries and reports. That ordering
+# is what makes 'ship dark, observe, then enable' possible — gate the read too
+# and the only way to preview a match is to arm the live writer.
+#
+# Ingested tickets are NOT emailed to the customer (JSM already sent its own
+# auto-reply) and arrive pre-linked, so provision_jira_issues skips them and
+# can never mint a duplicate Jira issue for them.
+JIRA_INGEST = env.bool('JIRA_INGEST', default=False)
+JIRA_INGEST_PROJECT = env('JIRA_INGEST_PROJECT', default='SUP')
+# Optional cutoff (YYYY-MM-DD) so enabling doesn't backfill months of history.
+# Set it to the enablement date to make ingestion strictly "new requests only".
+JIRA_INGEST_SINCE = env('JIRA_INGEST_SINCE', default='')
+
+# SLA first-response targets (EC-SOP-07 §4.1) — see portal/sla.py.
+# The doc measures business hours in the CLIENT's time zone and excludes public
+# holidays. We model neither: one company-wide zone, and no holiday calendar.
+# That makes the indicator an internal triage aid, not a contractual measure.
+SLA_TIMEZONE = env('SLA_TIMEZONE', default='America/New_York')
+SLA_BUSINESS_OPEN_HOUR = env.int('SLA_BUSINESS_OPEN_HOUR', default=9)
+SLA_BUSINESS_CLOSE_HOUR = env.int('SLA_BUSINESS_CLOSE_HOUR', default=18)
 
 LOGGING = {
     'version': 1,

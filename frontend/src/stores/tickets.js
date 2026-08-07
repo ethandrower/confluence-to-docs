@@ -86,10 +86,11 @@ export const useTicketsStore = defineStore('tickets', () => {
     return api('/admin/tickets/inbox/')
   }
 
-  async function adminList({ company, status } = {}) {
+  async function adminList({ company, status, priority } = {}) {
     const params = new URLSearchParams()
     if (company) params.set('company', company)
     if (status) params.set('status', status)
+    if (priority) params.set('priority', priority)
     const qs = params.toString()
     return api(`/admin/tickets/${qs ? `?${qs}` : ''}`)
   }

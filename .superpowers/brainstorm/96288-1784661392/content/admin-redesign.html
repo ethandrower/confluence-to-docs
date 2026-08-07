@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin detail redesign</title>
+<style>
+  :root{
+    --primary:#0C377B; --accent:#3578FF; --info:#2C5BB8;
+    --card:#ffffff; --bg:#f4f5f8; --border:#e2e5ec; --input:#d7dbe4;
+    --fg:#1a2233; --muted:#6b7385; --success:#1f9d68; --warning:#c08a1e;
+    --bubble-mine:#204a86; --bubble-theirs:#e6ebf6;
+    --ui:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--ui);-webkit-font-smoothing:antialiased;padding:26px 20px 60px}
+  .head{max-width:1200px;margin:0 auto 20px}
+  .head h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px}
+  .head p{margin:0;color:var(--muted);font-size:14px;line-height:1.5;max-width:900px}
+  .head b{color:var(--fg)}
+  .cols{max-width:1200px;margin:0 auto;display:grid;gap:20px;grid-template-columns:1fr 1fr}
+  @media(max-width:980px){.cols{grid-template-columns:1fr}}
+  .col > .cap{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 8px 2px}
+  .col > .cap.pick{cursor:pointer}
+
+  /* detail pane frame */
+  .pane{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:560px;position:relative}
+
+  /* header */
+  .ph{padding:16px 20px 14px;border-bottom:1px solid var(--border)}
+  .ph-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .ph-ref{font-size:12px;font-weight:700;color:var(--muted)}
+  .ph h2{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:6px 0 0}
+  /* status chip / dropdown trigger */
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:650;padding:5px 10px;border-radius:999px;border:1px solid transparent;cursor:pointer}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .chip .car{width:12px;height:12px;opacity:.7}
+  .chip--warn{color:var(--warning);background:color-mix(in srgb,var(--warning) 14%,transparent)}
+  .chip--warn:hover{border-color:color-mix(in srgb,var(--warning) 40%,transparent)}
+
+  /* status menu (open state, right column) */
+  .menu{position:absolute;top:44px;right:0;width:250px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(20,30,60,.14);padding:5px;z-index:5}
+  .menu .mi{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:7px;font-size:13px;cursor:pointer}
+  .menu .mi:hover{background:var(--bg)}
+  .menu .mi .d{width:7px;height:7px;border-radius:50%}
+  .menu .mi .ck{margin-left:auto;color:var(--accent);font-weight:800}
+  .menu .mi--on{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .menu .hint{border-top:1px solid var(--border);margin-top:4px;padding:8px 9px 4px;font-size:11.5px;line-height:1.45;color:var(--muted)}
+  .d.info{background:var(--info)} .d.warn{background:var(--warning)} .d.ok{background:var(--success)} .d.mut{background:var(--muted)}
+
+  /* details drawer */
+  .drawer{border-bottom:1px solid var(--border);padding:0 20px}
+  .drawer summary,.drawer .sm{display:flex;align-items:center;gap:8px;padding:11px 0;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);cursor:pointer;list-style:none}
+  .drawer .chev{width:12px;height:12px;transition:transform .15s}
+  .drawer.open .chev{transform:rotate(90deg)}
+  .drawer .hint2{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)}
+  .dsec{padding:2px 0 16px;display:grid;gap:16px}
+  .dfield > .l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin-bottom:5px}
+  .dfield .sub{font-size:11px;color:var(--muted);margin-top:5px}
+  .row{display:flex;gap:8px}
+  .inp{flex:1;height:34px;border:1px solid var(--input);border-radius:8px;background:var(--card);padding:0 10px;font-size:13px;color:var(--muted);display:flex;align-items:center}
+  .btn{height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:13px;font-weight:550;color:var(--fg);display:inline-flex;align-items:center}
+  .actv{display:grid;gap:5px;font-size:12px}
+  .actv .a{color:var(--fg)} .actv .a .dim{color:var(--muted)}
+
+  /* conversation */
+  .conv{flex:1 1 auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;background:color-mix(in srgb,var(--bg) 55%,var(--card));min-height:150px;justify-content:flex-end}
+  .day{align-self:center;font-size:10.5px;color:var(--muted);font-weight:600;margin:2px 0 6px}
+  .grp{max-width:78%} .grp.mine{align-self:flex-end;text-align:right}
+  .gc{font-size:10.5px;color:var(--muted);font-weight:600;margin:0 4px 3px}
+  .bub{display:inline-block;text-align:left;padding:8px 12px;border-radius:14px;font-size:12.5px;line-height:1.5}
+  .grp:not(.mine) .bub{background:var(--bubble-theirs);color:var(--fg);border-bottom-left-radius:5px}
+  .grp.mine .bub{background:var(--bubble-mine);color:#fff;border-bottom-right-radius:5px}
+
+  /* composer */
+  .comp{border-top:1px solid var(--border);padding:14px 20px 16px;background:var(--card)}
+  .comp .l{font-size:12px;font-weight:550;margin-bottom:7px}
+  .comp .ta{border:1px solid var(--input);border-radius:8px;height:56px;color:var(--muted);font-size:13px;padding:9px 11px}
+  .comp .act{display:flex;align-items:center;justify-content:space-between;margin-top:9px}
+  .comp .int{font-size:12.5px;color:var(--fg);display:flex;gap:7px;align-items:center}
+  .comp .send{background:var(--primary);color:#fff;font-size:13px;font-weight:600;padding:8px 15px;border-radius:8px}
+  .flowtag{position:absolute;right:16px;font-size:10.5px;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent);padding:2px 8px;border-radius:999px}
+  .note{max-width:1200px;margin:16px auto 0;font-size:12.5px;color:var(--muted);line-height:1.55}
+  .note b{color:var(--fg)}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Admin ticket detail — redesigned control surfaces</h1>
+    <p>Two changes: the <b>status chip in the header becomes a dropdown</b> (always visible, one click to change, with the Jira-vs-status explanation inside it), and the <b>Activity feed moves into the Details drawer</b> so the conversation flows straight into the composer. Left = default view. Right = the status menu open + Details expanded.</p>
+  </div>
+
+  <div class="cols">
+
+    <!-- LEFT: default -->
+    <div class="col">
+      <p class="cap">After — default view</p>
+      <div class="pane">
+        <div class="ph">
+          <div class="ph-top">
+            <span class="ph-ref">CS-1 · PatelBros</span>
+            <span class="chip chip--warn" title="click to change">
+              <span class="dot"></span> Needs reply
+              <svg class="car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </div>
+          <h2>Fresh round: verifying console email backend</h2>
+        </div>
+        <div class="drawer">
+          <div class="sm"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg> Details <span class="hint2">No Jira · No CC · 5 activity</span></div>
+        </div>
+        <div class="conv">
+          <div class="day">Tuesday, July 14</div>
+          <div class="grp"><div class="gc">Het Patel · 3:30 PM</div><div class="bub">First ticket after the DB reset. Confirming this does not create a Jira SUP issue.</div></div>
+          <div class="grp mine"><div class="gc">CITEMED · CiteMed Support · 3:41 PM</div><div class="bub">Second reply — you should see this appear WITHOUT refreshing.</div></div>
+        </div>
+        <div class="comp">
+          <span class="flowtag" style="top:-9px">conversation → composer, uninterrupted</span>
+          <div class="l">Reply to CS-1</div>
+          <div class="ta">Write a reply…</div>
+          <div class="act"><span class="int"><input type="checkbox"> Internal note (not sent to customer)</span><span class="send">Send reply</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: interactions -->
+    <div class="col">
+      <p class="cap">After — status menu open · Details expanded</p>
+      <div class="pane">
+        <div class="ph">
+          <div class="ph-top">
+            <span class="ph-ref">CS-1 · PatelBros</span>
+            <span class="chip chip--warn"><span class="dot"></span> Needs reply
+              <svg class="car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+            <div class="menu">
+              <div class="mi"><span class="d info"></span> Open</div>
+              <div class="mi mi--on"><span class="d warn"></span> Needs reply <span class="ck">✓</span></div>
+              <div class="mi"><span class="d info"></span> Waiting on customer</div>
+              <div class="mi"><span class="d ok"></span> Resolved</div>
+              <div class="mi"><span class="d mut"></span> Closed</div>
+              <div class="hint">Set here — shown to the customer. Independent of any linked Jira issue.</div>
+            </div>
+          </div>
+          <h2>Fresh round: verifying console email backend</h2>
+        </div>
+        <div class="drawer open">
+          <div class="sm"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg> Details</div>
+          <div class="dsec">
+            <div class="dfield"><div class="l">Jira (internal)</div><div class="row"><span class="inp">SUP-374 or paste a Jira URL</span><span class="btn">Link</span></div><div class="sub">Read-only status from Jira. Never shown to the customer.</div></div>
+            <div class="dfield"><div class="l">CC</div><div class="row"><span class="inp">name@company.com</span><span class="btn">Save</span></div></div>
+            <div class="dfield"><div class="l">Activity (5)</div>
+              <div class="actv">
+                <div class="a"><span class="dim">Jul 14, 3:41 PM</span> — Reply sent <span class="dim">· CiteMed Support</span></div>
+                <div class="a"><span class="dim">Jul 14, 3:35 PM</span> — Status: Awaiting reply → Needs reply</div>
+                <div class="a"><span class="dim">Jul 14, 3:30 PM</span> — Ticket created</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="conv" style="min-height:110px">
+          <div class="grp mine"><div class="gc">CITEMED · CiteMed Support · 3:41 PM</div><div class="bub">Second reply — you should see this appear WITHOUT refreshing.</div></div>
+        </div>
+        <div class="comp">
+          <div class="l">Reply to CS-1</div>
+          <div class="ta">Write a reply…</div>
+          <div class="act"><span class="int"><input type="checkbox"> Internal note</span><span class="send">Send reply</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="note"><b>What changes vs today:</b> the status <select> leaves the drawer and becomes the header chip-dropdown; the <b>title=""</b> tooltip is replaced by the visible menu hint (keyboard/touch accessible); Activity moves out from between the conversation and composer into the drawer. Everything else (Jira link mgmt, CC chips, optimistic status change + revert, realtime, mobile slide-over) is unchanged.</p>
+</body>
+</html>

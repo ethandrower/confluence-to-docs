@@ -93,6 +93,10 @@ def adf_to_text(node):
     """
     if not node:
         return ''
+    # Not every field is ADF — a v2-created issue can return a bare string for
+    # description. Pass it straight through rather than raising.
+    if isinstance(node, str):
+        return node
     node_type = node.get('type')
     if node_type == 'text':
         return node.get('text', '')
@@ -329,6 +333,46 @@ def create_remote_link(key, url, title):
     except Exception as e:
         logger.warning('jira remotelink on %s failed: %s', key, e)
         return False
+
+
+def search_issues(jql, fields=None, max_results=100):
+    """Return the issues matching `jql`, following pagination.
+
+    Best-effort and never raises into a caller: missing creds give []; a
+    failure part-way through pagination returns the pages gathered so far
+    rather than discarding them, so a partial result is possible and is NOT
+    distinguishable from a complete one here. Callers that care (see
+    jira_ingest) should sanity-check the count rather than trust it.
+
+    Matching is by JQL only — nothing in this function infers a portal ticket
+    from an issue's summary text.
+    """
+    domain, auth = _creds()
+    if not (domain and jql):
+        return []
+    issues, token = [], None
+    try:
+        while True:
+            payload = {'jql': jql, 'maxResults': max_results,
+                       'fields': fields or ['summary']}
+            if token:
+                payload['nextPageToken'] = token
+            r = requests.post(
+                f'https://{domain}/rest/api/3/search/jql', json=payload,
+                auth=auth, headers={'Accept': 'application/json',
+                                    'Content-Type': 'application/json'},
+                timeout=TIMEOUT)
+            if r.status_code != 200:
+                logger.info('jira search → HTTP %s: %s', r.status_code, r.text[:200])
+                return issues
+            data = r.json() or {}
+            issues.extend(data.get('issues') or [])
+            token = data.get('nextPageToken')
+            if not token or data.get('isLast'):
+                return issues
+    except Exception as e:  # network, timeout, JSON, anything
+        logger.warning('jira search failed: %s', e)
+        return issues
 
 
 def fetch_comments(key, max_results=100):
