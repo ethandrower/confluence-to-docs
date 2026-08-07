@@ -34,9 +34,9 @@ dokku buildpacks:add citemed-docs https://github.com/heroku/heroku-buildpack-pyt
 dokku config:set citemed-docs \
   SECRET_KEY='<paste-generated-key>' \
   DEBUG=False \
-  ALLOWED_HOSTS=docs.citemed.com \
-  CSRF_TRUSTED_ORIGINS=https://docs.citemed.com \
-  FRONTEND_URL=https://docs.citemed.com \
+  ALLOWED_HOSTS=support.citemed.com \
+  CSRF_TRUSTED_ORIGINS=https://support.citemed.com \
+  FRONTEND_URL=https://support.citemed.com \
   ADMIN_PATH='<random-9-char-string>' \
   CONFLUENCE_DOMAIN=citemed.atlassian.net \
   CONFLUENCE_EMAIL=placeholder@example.com \
@@ -44,8 +44,9 @@ dokku config:set citemed-docs \
   CONFLUENCE_SPACE_KEY=CITEMED \
   ATLASSIAN_CLOUD_ID=placeholder \
   MAILGUN_ACCESS_KEY=<mailgun-key> \
-  MAILGUN_SERVER_NAME=<mailgun-domain> \
-  DEFAULT_FROM_EMAIL='CiteMed Support <support@citemedical.com>' \
+  MAILGUN_SERVER_NAME=notification.citemed.com \
+  MAILGUN_WEBHOOK_SIGNING_KEY=<mailgun-http-webhook-signing-key> \
+  DEFAULT_FROM_EMAIL='CiteMed Support <noreply@notification.citemed.com>' \
   SUPPORT_EMAIL=support@citemed.com \
   PORTAL_MAGIC_LINK_EXPIRY_MINUTES=15
 ```
@@ -54,6 +55,54 @@ To reuse Mailgun creds from another Dokku app on the same host:
 ```bash
 dokku config:show <other-app> | grep MAILGUN
 ```
+
+### Inbound email replies (ECD-2250) — Mailgun route
+
+Customers reply straight from their inbox and the reply lands on the ticket.
+This needs Mailgun-side config that no deploy or migration sets up for you.
+
+**The reply address must be on a domain whose MX points at Mailgun.**
+`portal/ticket_notify.py` builds `Reply-To: ticket-<n>+<token>@<domain>`, where
+`<domain>` is the domain part of `DEFAULT_FROM_EMAIL`. `notification.citemed.com`
+has Mailgun MX; `citemed.com` and `citemedical.com` are on Microsoft 365 and can
+never deliver to Mailgun. Point `DEFAULT_FROM_EMAIL` at a Mailgun-MX domain or
+inbound capture silently does nothing — outbound mail keeps working, so this
+failure is invisible from the app side.
+
+**The route must use `forward()`, not `store()`.** Anymail's inbound webhook
+rejects `store()` payloads outright (it raises `AnymailConfigurationError`, and
+the request 500s before our handler runs). A route created via the Mailgun UI's
+"Store and Notify" option looks correct in the dashboard and drops every reply.
+This cost weeks of swallowed customer replies once already — see
+`portal/tests/test_inbound_webhook.py`, which pins the requirement.
+
+```
+Expression:  match_recipient("ticket-.*@notification.citemed.com")
+Actions:     forward("https://support.citemed.com/api/webhooks/mailgun/inbound/")
+             stop()
+Priority:    10
+```
+
+Check the live route (needs a key with route read scope):
+
+```bash
+curl -s -u "api:$MAILGUN_ACCESS_KEY" https://api.mailgun.net/v3/routes
+```
+
+Also required: `MAILGUN_WEBHOOK_SIGNING_KEY` (Mailgun dashboard → **Webhooks →
+HTTP webhook signing key** — this is *not* the API key), and a DMARC record on
+`notification.citemed.com`.
+
+To verify end to end, send a mail to a nonexistent ticket on that domain — the
+route still matches, so the whole chain runs and the handler logs the drop:
+
+```bash
+dokku logs citemed-docs -t | grep -i inbound
+```
+
+- `inbound: no ticket match, dropping` + 200 → route and webhook are healthy
+- `AnymailConfigurationError ... store()` + 500 → route is still on `store()`
+- nothing at all → mail never reached Mailgun; check the MX and the `Reply-To`
 
 ### About the Confluence env vars
 
@@ -107,10 +156,10 @@ The `release:` line in `Procfile` runs `manage.py migrate --noinput` automatical
 ## Set up custom domain + HTTPS
 
 ```bash
-dokku domains:add citemed-docs docs.citemed.com
+dokku domains:add citemed-docs support.citemed.com
 dokku domains:remove citemed-docs citemed-docs.116.203.82.103.sslip.io  # remove the auto-assigned one
 
-# DNS: point an A record for docs.citemed.com at 116.203.82.103 (and wait for it to propagate)
+# DNS: point an A record for support.citemed.com at 116.203.82.103 (and wait for it to propagate)
 
 # Then enable HTTPS:
 dokku letsencrypt:set citemed-docs email ops@citemed.com
@@ -122,7 +171,7 @@ dokku letsencrypt:enable citemed-docs
 ```bash
 dokku run citemed-docs python manage.py createsuperuser
 ```
-Then visit `https://docs.citemed.com/admin/` to manage `ContactSubmission` rows, `PortalUser` records, etc.
+Then visit `https://support.citemed.com/admin/` to manage `ContactSubmission` rows, `PortalUser` records, etc.
 
 ## Initial sync of Confluence content
 
@@ -155,8 +204,8 @@ dokku ps:restart citemed-docs
 ```
 
 In a browser:
-- `https://docs.citemed.com/` → redirects to `/login` (auth gate)
-- `https://docs.citemed.com/tickets` → public contact form (no auth)
+- `https://support.citemed.com/` → redirects to `/login` (auth gate)
+- `https://support.citemed.com/tickets` → public contact form (no auth)
 - Submit a test contact form → check `/admin/portal/contactsubmission/` shows status=`sent`
 - Check Mailgun dashboard for delivered event
 - Click magic link → arrives back at `/docs/`
