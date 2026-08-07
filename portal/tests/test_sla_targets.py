@@ -186,3 +186,29 @@ class FirstResponseTrackingTest(TestCase):
         sla.record_first_response(self.t, later)
         self.t.refresh_from_db()
         self.assertEqual(self.t.first_response_at, original)
+
+
+class MisconfiguredHoursTest(TestCase):
+    """is_breached runs per row when the admin list is serialized, so anything
+    it raises takes out the whole ticket queue. A bad env var must degrade to
+    sane defaults, not 500 the page staff work from."""
+
+    def setUp(self):
+        self.co = Company.objects.create(name='Acme')
+        self.t = Ticket.objects.create(company=self.co, subject='x', priority='high')
+
+    def test_open_equal_to_close_does_not_blow_up(self):
+        with self.settings(SLA_BUSINESS_OPEN_HOUR=9, SLA_BUSINESS_CLOSE_HOUR=9):
+            self.assertIsNotNone(sla.first_response_due(self.t))
+            self.assertIn(sla.is_breached(self.t), (True, False))
+
+    def test_close_before_open_does_not_blow_up(self):
+        with self.settings(SLA_BUSINESS_OPEN_HOUR=18, SLA_BUSINESS_CLOSE_HOUR=9):
+            self.assertIsNotNone(sla.first_response_due(self.t))
+            self.assertIn(sla.is_breached(self.t), (True, False))
+
+    def test_a_naive_created_at_is_read_in_the_sla_zone(self):
+        # Django gives aware datetimes, so this is defensive — but silently
+        # reinterpreting via the server's local zone would be quietly wrong.
+        naive = datetime(2026, 8, 5, 10, 0)
+        self.assertEqual(sla.receipt_time(naive), at(2026, 8, 5, 10, 0))

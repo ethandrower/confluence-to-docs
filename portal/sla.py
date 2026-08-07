@@ -24,20 +24,42 @@ TWO DELIBERATE SIMPLIFICATIONS — read before treating output as contractual:
 Both make this an INTERNAL triage aid, not a contractual measurement. It is
 admin-only and never surfaces to a customer.
 """
+import logging
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.utils import timezone
 
+logger = logging.getLogger(__name__)
+
 
 def _tz():
     return ZoneInfo(getattr(settings, 'SLA_TIMEZONE', 'America/New_York'))
 
 
+DEFAULT_OPEN_HOUR = 9
+DEFAULT_CLOSE_HOUR = 18
+
+
 def _open_close():
-    return (time(getattr(settings, 'SLA_BUSINESS_OPEN_HOUR', 9)),
-            time(getattr(settings, 'SLA_BUSINESS_CLOSE_HOUR', 18)))
+    """Business open/close, falling back to the defaults if misconfigured.
+
+    A zero-or-negative-length business day makes add_business_hours consume no
+    time per iteration, so it walks the calendar until the date overflows. That
+    matters more than it looks: is_breached runs once per row when the admin
+    ticket list is serialized, so a single bad env var would 500 the queue
+    staff work from. Degrade to sane hours and say so in the log instead.
+    """
+    open_h = getattr(settings, 'SLA_BUSINESS_OPEN_HOUR', DEFAULT_OPEN_HOUR)
+    close_h = getattr(settings, 'SLA_BUSINESS_CLOSE_HOUR', DEFAULT_CLOSE_HOUR)
+    if not (0 <= open_h < close_h <= 24):
+        logger.warning(
+            'SLA business hours are invalid (open=%s close=%s); falling back '
+            'to %s-%s. Fix SLA_BUSINESS_OPEN_HOUR / SLA_BUSINESS_CLOSE_HOUR.',
+            open_h, close_h, DEFAULT_OPEN_HOUR, DEFAULT_CLOSE_HOUR)
+        open_h, close_h = DEFAULT_OPEN_HOUR, DEFAULT_CLOSE_HOUR
+    return time(open_h), time(close_h) if close_h < 24 else time(23, 59, 59)
 
 
 def _is_business_day(d):
@@ -48,7 +70,10 @@ def receipt_time(when):
     """When the request is DEEMED received: itself if inside business hours,
     otherwise the start of the next business day (doc §4.1 note)."""
     tz = _tz()
-    when = when.astimezone(tz)
+    # Django hands us aware datetimes; this is defensive. astimezone() on a
+    # naive value assumes the SERVER's local zone, which is both wrong and
+    # machine-dependent, so attach the SLA zone explicitly instead.
+    when = when.replace(tzinfo=tz) if when.tzinfo is None else when.astimezone(tz)
     open_t, close_t = _open_close()
 
     while True:
