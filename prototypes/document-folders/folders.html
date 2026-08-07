@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Document folders — CiteMed Portal prototype</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --background: #F5F6FA;
+    --foreground: #242A35;
+    --card: #FFFFFF;
+    --primary: #0C377B;
+    --secondary: #E6EBF5;
+    --muted: #F5F6FA;
+    --muted-foreground: #626A7A;
+    --accent: #DEEBFA;
+    --accent-foreground: #0C377B;
+    --destructive: #C0392B;
+    --warn: #B45309;
+    --warn-bg: #FEF3C7;
+    --ok: #15803D;
+    --ok-bg: #DCFCE7;
+    --border: #E4E8F0;
+    --border-subtle: #EBEEF4;
+    --brand-accent: #3578FF;
+    --radius: 10px;
+    --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: var(--font-ui); font-size: 15px; line-height: 1.55;
+    color: var(--foreground); background: var(--background);
+    -webkit-font-smoothing: antialiased; letter-spacing: -0.006em;
+  }
+  button { font-family: inherit; font-size: inherit; cursor: pointer; }
+
+  /* ─── Top bar ─── */
+  .topbar {
+    height: 56px; background: var(--card); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 18px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--primary); font-size: 16px; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+  .spacer { flex: 1; }
+  .role-toggle { display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+  .role-toggle button { border: 0; background: transparent; padding: 5px 14px; font-size: 13px; font-weight: 600; color: var(--muted-foreground); }
+  .role-toggle button.on { background: var(--primary); color: #fff; }
+  .role-note { font-size: 12px; color: var(--muted-foreground); }
+
+  /* ─── Layout ─── */
+  .shell { display: flex; height: calc(100vh - 56px); }
+  .sidebar { width: 290px; flex: none; background: var(--card); border-right: 1px solid var(--border); overflow-y: auto; padding: 16px 12px 40px; }
+  .main { flex: 1; min-width: 0; overflow-y: auto; padding: 20px 26px 60px; }
+
+  .side-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 6px; }
+  .side-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+  .side-add { border: 0; background: transparent; color: var(--brand-accent); font-size: 12px; font-weight: 600; padding: 2px 4px; border-radius: 6px; }
+  .side-add:hover { background: var(--accent); }
+  .side-group + .side-group { margin-top: 22px; }
+
+  /* Tree */
+  .node { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .node:hover { background: var(--muted); }
+  .node.sel { background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
+  .node.drop { outline: 2px dashed var(--brand-accent); outline-offset: -2px; }
+  .twisty { width: 14px; flex: none; color: var(--muted-foreground); font-size: 13px; line-height: 1; text-align: center; user-select: none; }
+  .twisty:hover { color: var(--foreground); }
+  .twisty.leaf { visibility: hidden; }
+  .node-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .node-count { font-size: 11px; color: var(--muted-foreground); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-accent); flex: none; }
+
+  /* Request pills */
+  .req { display: block; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; margin-bottom: 6px; cursor: pointer; }
+  .req:hover { border-color: var(--brand-accent); }
+  .req.sel { border-color: var(--brand-accent); background: var(--accent); }
+  .req-title { font-size: 13.5px; font-weight: 600; }
+  .req-meta { font-size: 11.5px; color: var(--muted-foreground); margin-top: 2px; display: flex; gap: 8px; align-items: center; }
+  .pill { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .pill.due { background: var(--warn-bg); color: var(--warn); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+
+  /* Main */
+  .crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted-foreground); margin-bottom: 4px; flex-wrap: wrap; }
+  .crumbs a { color: var(--brand-accent); text-decoration: none; cursor: pointer; }
+  .crumbs a:hover { text-decoration: underline; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted-foreground); font-size: 13.5px; margin: 0 0 16px; }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 6px 12px; font-size: 13.5px; font-weight: 600; color: var(--foreground); }
+  .btn:hover { background: var(--muted); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .search { flex: 1; min-width: 160px; max-width: 280px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13.5px; font-family: inherit; }
+
+  .drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 22px; text-align: center; color: var(--muted-foreground); font-size: 13.5px; background: var(--card); margin-bottom: 16px; }
+  .drop.hot { border-color: var(--brand-accent); background: var(--accent); color: var(--accent-foreground); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-foreground); padding: 9px 12px; border-bottom: 1px solid var(--border); font-weight: 700; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle); font-size: 13.5px; }
+  tr:last-child td { border-bottom: 0; }
+  tr.row:hover td { background: var(--muted); }
+  tr.folder-row td { cursor: pointer; }
+  .fname { display: flex; align-items: center; gap: 9px; }
+  .ficon { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font-size: 10px; font-weight: 700; background: var(--secondary); color: var(--primary); flex: none; }
+  .ficon.dir { background: var(--accent); }
+  .new-tag { font-size: 10px; font-weight: 700; color: var(--brand-accent); text-transform: uppercase; letter-spacing: 0.04em; }
+  .empty { padding: 34px; text-align: center; color: var(--muted-foreground); font-size: 13.5px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+
+  .banner { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; background: var(--accent); color: var(--accent-foreground); font-size: 13px; margin-bottom: 14px; }
+
+  /* Modal */
+  .veil { position: fixed; inset: 0; background: rgba(20,26,38,.45); display: none; place-items: center; z-index: 50; }
+  .veil.on { display: grid; }
+  .modal { background: var(--card); border-radius: 12px; padding: 20px; width: min(430px, 92vw); box-shadow: 0 20px 50px rgba(0,0,0,.22); }
+  .modal h3 { margin: 0 0 12px; font-size: 17px; }
+  .modal input, .modal select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 12px; }
+  .modal .row { display: flex; justify-content: flex-end; gap: 8px; }
+  .hint { font-size: 12px; color: var(--muted-foreground); margin: -6px 0 12px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="brand-mark">C</span> CiteMed Support</div>
+  <div class="spacer"></div>
+  <span class="role-note">Prototype role switch —</span>
+  <div class="role-toggle">
+    <button id="roleCust" class="on" onclick="setRole('customer')">Customer</button>
+    <button id="roleAgent" onclick="setRole('agent')">Agent</button>
+  </div>
+</div>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="side-group" id="agentCompanyGroup" style="display:none">
+      <div class="side-head"><span class="side-title">Customer</span></div>
+      <div id="companyList"></div>
+    </div>
+
+    <div class="side-group">
+      <div class="side-head">
+        <span class="side-title">Requests from CiteMed</span>
+        <button class="side-add" id="newReqBtn" onclick="openNewRequest()" style="display:none">+ New</button>
+      </div>
+      <div id="reqList"></div>
+    </div>
+
+    <div class="side-group">
+      <div class="side-head">
+        <span class="side-title" id="foldersTitle">Your folders</span>
+        <button class="side-add" onclick="openNewFolder()">+ Folder</button>
+      </div>
+      <div id="tree"></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="agentBanner" class="banner" style="display:none">
+      <strong>3 new uploads</strong> across your accounts since yesterday.
+    </div>
+
+    <div class="crumbs" id="crumbs"></div>
+    <h1 id="title">General uploads</h1>
+    <p class="sub" id="subtitle"></p>
+
+    <div class="toolbar">
+      <button class="btn" onclick="openNewFolder()">New subfolder</button>
+      <button class="btn" id="moveBtn" disabled onclick="openMove()">Move…</button>
+      <button class="btn" id="dlBtn">Download all</button>
+      <input class="search" id="search" placeholder="Search this folder…" oninput="render()" />
+      <span class="spacer"></span>
+      <label style="font-size:12.5px;color:var(--muted-foreground);display:none;align-items:center;gap:6px" id="flatWrap">
+        <input type="checkbox" id="flatToggle" onchange="render()" /> Flat view (all files, ignore folders)
+      </label>
+    </div>
+
+    <div class="drop" id="drop">Drop files here to upload into <strong id="dropTarget">General uploads</strong></div>
+
+    <div id="listing"></div>
+  </main>
+</div>
+
+<!-- New folder -->
+<div class="veil" id="folderVeil">
+  <div class="modal">
+    <h3 id="folderModalTitle">New folder</h3>
+    <input id="folderName" placeholder="e.g. 2026 CER — Clinical data" />
+    <p class="hint" id="folderParentHint"></p>
+    <div class="row">
+      <button class="btn" onclick="closeModal('folderVeil')">Cancel</button>
+      <button class="btn primary" onclick="createFolder()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Move -->
+<div class="veil" id="moveVeil">
+  <div class="modal">
+    <h3>Move <span id="moveCount"></span></h3>
+    <select id="moveTarget"></select>
+    <p class="hint">A file belongs to exactly one folder. Moving it out of a request
+      folder detaches it from that request.</p>
+    <div class="row">
+      <button class="btn" onclick="closeModal('moveVeil')">Cancel</button>
+      <button class="btn primary" onclick="doMove()">Move</button>
+    </div>
+  </div>
+</div>
+
+<!-- New request (agent) -->
+<div class="veil" id="reqVeil">
+  <div class="modal">
+    <h3>New request</h3>
+    <input id="reqTitle" placeholder="What do you need from them?" />
+    <input id="reqDue" type="date" />
+    <p class="hint">Requests are pinned above folders and can't be nested — an agent
+      asking for something is a different concept from the customer filing it.</p>
+    <div class="row">
+      <button class="btn" onclick="closeModal('reqVeil')">Cancel</button>
+      <button class="btn primary" onclick="createRequest()">Create request</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ───────────────────────────────────────────────────────────────
+   Prototype state. Folders are an adjacency list (parent id) —
+   the cheapest shape to add to the existing Bucket model.
+   ─────────────────────────────────────────────────────────────── */
+let uid = 100;
+const companies = [
+  { id: 'acme', name: 'Acme Medical' },
+  { id: 'orion', name: 'Orion Devices' },
+];
+let activeCompany = 'acme';
+
+/* folders: {id, name, parent, company} — parent null = top level */
+let folders = [
+  { id: 'gen',  name: 'General uploads', parent: null, company: 'acme', system: true },
+  { id: 'cer',  name: '2026 CER',        parent: null, company: 'acme' },
+  { id: 'clin', name: 'Clinical data',   parent: 'cer', company: 'acme' },
+  { id: 'lit',  name: 'Literature',      parent: 'cer', company: 'acme' },
+  { id: 'pms',  name: 'Post-market',     parent: null, company: 'acme' },
+  { id: 'gen2', name: 'General uploads', parent: null, company: 'orion', system: true },
+];
+
+/* requests are pinned, flat, agent-created */
+let requests = [
+  { id: 'r1', title: 'Signed IFU (v4)', due: '2026-08-12', company: 'acme', status: 'open' },
+  { id: 'r2', title: 'PMS report 2025', due: null, company: 'acme', status: 'complete' },
+];
+
+let files = [
+  { id: f(), name: 'EBOS-clinical-eval.pdf', size: '2.4 MB', at: 'Today',      folder: 'clin', by: 'Jane Customer', isNew: true },
+  { id: f(), name: 'trial-summary-2025.docx', size: '840 KB', at: 'Yesterday', folder: 'clin', by: 'Jane Customer' },
+  { id: f(), name: 'pubmed-export.ris',       size: '112 KB', at: '3 Aug',     folder: 'lit',  by: 'Jane Customer' },
+  { id: f(), name: 'complaints-q2.xlsx',      size: '1.1 MB', at: '2 Aug',     folder: 'pms',  by: 'Raj Patel', isNew: true },
+  { id: f(), name: 'signed-ifu-v4.pdf',       size: '3.2 MB', at: 'Today',     folder: 'r1',   by: 'Jane Customer', isNew: true },
+  { id: f(), name: 'misc-notes.txt',          size: '4 KB',   at: '28 Jul',    folder: 'gen',  by: 'Jane Customer' },
+  { id: f(), name: 'orion-ifu.pdf',           size: '900 KB', at: 'Today',     folder: 'gen2', by: 'Sam Lee' },
+];
+function f(){ return 'f' + (++uid); }
+
+let role = 'customer';
+let current = 'gen';
+let expanded = { cer: true };
+let selected = new Set();
+let pendingParent = null;
+
+/* ─── helpers ─── */
+const byId = id => folders.find(x => x.id === id) || requests.find(x => x.id === id);
+const isRequest = id => !!requests.find(r => r.id === id);
+const label = id => { const n = byId(id); return n ? (n.name || n.title) : '—'; };
+const childrenOf = p => folders.filter(x => x.parent === p && x.company === activeCompany);
+const co = () => companies.find(c => c.id === activeCompany);
+
+function descendants(id) {
+  const out = [id];
+  childrenOf(id).forEach(c => out.push(...descendants(c.id)));
+  return out;
+}
+function filesIn(id, deep) {
+  const ids = deep && !isRequest(id) ? descendants(id) : [id];
+  return files.filter(x => ids.includes(x.folder));
+}
+function pathOf(id) {
+  if (isRequest(id)) return [{ id, name: label(id) }];
+  const out = []; let n = byId(id);
+  while (n) { out.unshift({ id: n.id, name: n.name }); n = n.parent ? byId(n.parent) : null; }
+  return out;
+}
+
+/* ─── render ─── */
+function setRole(r) {
+  role = r;
+  roleCust.classList.toggle('on', r === 'customer');
+  roleAgent.classList.toggle('on', r === 'agent');
+  agentCompanyGroup.style.display = r === 'agent' ? '' : 'none';
+  newReqBtn.style.display = r === 'agent' ? '' : 'none';
+  agentBanner.style.display = r === 'agent' ? '' : 'none';
+  flatWrap.style.display = r === 'agent' ? 'flex' : 'none';
+  foldersTitle.textContent = r === 'agent' ? 'Their folders' : 'Your folders';
+  drop.style.display = r === 'agent' ? 'none' : '';
+  render();
+}
+
+function render() {
+  // company switcher (agent only)
+  companyList.innerHTML = companies.map(c =>
+    `<div class="node ${c.id===activeCompany?'sel':''}" onclick="pickCompany('${c.id}')">
+       <span class="twisty leaf"></span><span class="node-name">${c.name}</span>
+       <span class="node-count">${files.filter(x=>ownedBy(x.folder)===c.id).length}</span>
+     </div>`).join('');
+
+  // requests
+  const rs = requests.filter(r => r.company === activeCompany);
+  reqList.innerHTML = rs.length ? rs.map(r => {
+    const n = filesIn(r.id).length;
+    const pill = r.status === 'complete'
+      ? '<span class="pill ok">Complete</span>'
+      : (r.due ? `<span class="pill due">Due ${r.due.slice(5)}</span>` : '');
+    return `<div class="req ${current===r.id?'sel':''}" onclick="go('${r.id}')">
+      <div class="req-title">${r.title}</div>
+      <div class="req-meta">${pill}<span>${n} file${n===1?'':'s'}</span></div></div>`;
+  }).join('') : `<div class="hint" style="padding:0 8px">No open requests.</div>`;
+
+  // tree
+  tree.innerHTML = childrenOf(null).map(n => nodeHtml(n, 0)).join('');
+
+  // header
+  const path = pathOf(current);
+  crumbs.innerHTML = path.map((p, i) =>
+    i === path.length - 1
+      ? `<span>${p.name}</span>`
+      : `<a onclick="go('${p.id}')">${p.name}</a><span>/</span>`).join('');
+  title.textContent = label(current);
+  dropTarget.textContent = label(current);
+
+  const kids = isRequest(current) ? [] : childrenOf(current);
+  const own = filesIn(current).length;
+  const deep = filesIn(current, true).length;
+  subtitle.textContent = isRequest(current)
+    ? `Request · ${own} file${own===1?'':'s'}`
+    : `${kids.length} subfolder${kids.length===1?'':'s'} · ${own} file${own===1?'':'s'} here` +
+      (deep > own ? ` · ${deep} including subfolders` : '');
+
+  moveBtn.disabled = selected.size === 0;
+  renderListing(kids);
+}
+
+function ownedBy(fid) { const n = byId(fid); return n ? n.company : null; }
+
+function nodeHtml(n, depth) {
+  const kids = childrenOf(n.id);
+  const open = !!expanded[n.id];
+  const count = filesIn(n.id, true).length;
+  const hasNew = filesIn(n.id, true).some(x => x.isNew);
+  return `<div class="node ${current===n.id?'sel':''}" style="padding-left:${8+depth*14}px"
+        ondragover="event.preventDefault();this.classList.add('drop')"
+        ondragleave="this.classList.remove('drop')"
+        ondrop="this.classList.remove('drop');dropOn('${n.id}')"
+        onclick="go('${n.id}')">
+      <span class="twisty ${kids.length?'':'leaf'}" onclick="event.stopPropagation();toggle('${n.id}')">${kids.length?(open?'▾':'▸'):''}</span>
+      <span class="node-name">${n.name}</span>
+      ${hasNew?'<span class="dot" title="New uploads"></span>':''}
+      <span class="node-count">${count||''}</span>
+    </div>` + (open ? kids.map(k => nodeHtml(k, depth+1)).join('') : '');
+}
+
+function renderListing(kids) {
+  const q = search.value.trim().toLowerCase();
+  const flat = role === 'agent' && flatToggle.checked;
+  let rows = flat ? filesIn(current, true) : filesIn(current);
+  if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q));
+  const showKids = !flat && !q;
+
+  if (!rows.length && !(showKids && kids.length)) {
+    listing.innerHTML = `<div class="empty">Nothing here yet.${role==='customer'?' Drop files above, or make a subfolder.':''}</div>`;
+    return;
+  }
+  listing.innerHTML = `<table>
+    <thead><tr>
+      <th style="width:28px"></th><th>Name</th><th style="width:110px">Size</th>
+      <th style="width:130px">Uploaded</th><th style="width:150px">By</th>
+      ${flat?'<th style="width:170px">Folder</th>':''}
+    </tr></thead><tbody>
+    ${showKids ? kids.map(k => `<tr class="row folder-row" onclick="go('${k.id}')">
+        <td></td>
+        <td><span class="fname"><span class="ficon dir">▸</span><strong>${k.name}</strong></span></td>
+        <td colspan="3" style="color:var(--muted-foreground)">${filesIn(k.id,true).length} file(s)</td>
+        ${flat?'<td></td>':''}
+      </tr>`).join('') : ''}
+    ${rows.map(r => `<tr class="row">
+        <td><input type="checkbox" ${selected.has(r.id)?'checked':''} onchange="pick('${r.id}',this.checked)"></td>
+        <td><span class="fname" draggable="true" ondragstart="dragStart('${r.id}')">
+          <span class="ficon">${r.name.split('.').pop().slice(0,3).toUpperCase()}</span>
+          ${r.name} ${r.isNew?'<span class="new-tag">new</span>':''}</span></td>
+        <td>${r.size}</td><td>${r.at}</td><td>${r.by}</td>
+        ${flat?`<td style="color:var(--muted-foreground)">${label(r.folder)}</td>`:''}
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+/* ─── interactions ─── */
+function go(id) { current = id; selected.clear(); if (!isRequest(id)) expanded[id] = true; render(); }
+function toggle(id) { expanded[id] = !expanded[id]; render(); }
+function pickCompany(id) {
+  activeCompany = id;
+  const first = folders.find(x => x.company === id);
+  current = first ? first.id : 'gen';
+  selected.clear(); render();
+}
+function pick(id, on) { on ? selected.add(id) : selected.delete(id); render(); }
+
+let dragged = null;
+function dragStart(id) { dragged = id; }
+function dropOn(folderId) {
+  if (!dragged) return;
+  const file = files.find(x => x.id === dragged);
+  if (file) file.folder = folderId;
+  dragged = null; render();
+}
+
+function openNewFolder() {
+  pendingParent = isRequest(current) ? null : current;
+  folderModalTitle.textContent = pendingParent ? 'New subfolder' : 'New folder';
+  folderParentHint.textContent = pendingParent
+    ? `Will be created inside “${label(pendingParent)}”.`
+    : 'Will be created at the top level.';
+  folderName.value = '';
+  folderVeil.classList.add('on'); folderName.focus();
+}
+function createFolder() {
+  const name = folderName.value.trim(); if (!name) return;
+  const id = 'd' + (++uid);
+  folders.push({ id, name, parent: pendingParent, company: activeCompany });
+  if (pendingParent) expanded[pendingParent] = true;
+  closeModal('folderVeil'); go(id);
+}
+
+function openMove() {
+  moveCount.textContent = `${selected.size} file${selected.size===1?'':'s'}`;
+  const opts = folders.filter(x => x.company === activeCompany)
+    .map(x => `<option value="${x.id}">${pathOf(x.id).map(p=>p.name).join(' / ')}</option>`).join('');
+  const reqs = requests.filter(r => r.company === activeCompany)
+    .map(r => `<option value="${r.id}">Request: ${r.title}</option>`).join('');
+  moveTarget.innerHTML = opts + reqs;
+  moveVeil.classList.add('on');
+}
+function doMove() {
+  const t = moveTarget.value;
+  files.forEach(x => { if (selected.has(x.id)) x.folder = t; });
+  selected.clear(); closeModal('moveVeil'); render();
+}
+
+function openNewRequest() { reqTitle.value=''; reqDue.value=''; reqVeil.classList.add('on'); reqTitle.focus(); }
+function createRequest() {
+  const t = reqTitle.value.trim(); if (!t) return;
+  const id = 'r' + (++uid);
+  requests.push({ id, title: t, due: reqDue.value || null, company: activeCompany, status: 'open' });
+  closeModal('reqVeil'); go(id);
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('on'); }
+
+/* upload (fake) */
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('hot'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('hot'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('hot');
+  [...(e.dataTransfer.files || [])].forEach(file => files.push({
+    id: f(), name: file.name, size: (file.size/1024/1024).toFixed(1)+' MB',
+    at: 'Just now', folder: current, by: 'Jane Customer', isNew: true,
+  }));
+  render();
+});
+drop.addEventListener('click', () => {
+  files.push({ id: f(), name: 'example-upload.pdf', size: '1.0 MB', at: 'Just now',
+               folder: current, by: 'Jane Customer', isNew: true });
+  render();
+});
+
+dlBtn.addEventListener('click', () => alert('Prototype: would zip this folder and its subfolders.'));
+
+setRole('customer');
+</script>
+</body>
+</html>
