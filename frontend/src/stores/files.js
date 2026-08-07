@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiFetch } from '../lib/http.js'
+import { buildFolderTree, folderPath } from '../lib/folders.js'
 
 const api = (p) => `/api${p}`
 
@@ -25,37 +26,12 @@ export const useFilesStore = defineStore('files', () => {
   const activeBucket = computed(() => buckets.value.find((b) => b.id === activeBucketId.value) || null)
   const folders = computed(() => buckets.value.filter((b) => b.kind === 'folder'))
 
-  // The API returns a flat list with a `parent` id; the tree is derived here so
-  // one fetch covers any shape and a re-parent doesn't invalidate a nested
-  // payload. Sorted by title because creation order means nothing to a reader.
-  const folderTree = computed(() => {
-    const byId = new Map(folders.value.map((f) => [f.id, { ...f, children: [] }]))
-    const roots = []
-    for (const node of byId.values()) {
-      const parent = node.parent != null ? byId.get(node.parent) : null
-      ;(parent ? parent.children : roots).push(node)
-    }
-    const sort = (list) => {
-      list.sort((a, b) => a.title.localeCompare(b.title))
-      list.forEach((n) => sort(n.children))
-      return list
-    }
-    return sort(roots)
-  })
+  // Derived from the flat list via the shared helper, so the customer's tree
+  // and the agent's client view are literally the same construction.
+  const folderTree = computed(() => buildFolderTree(buckets.value))
 
   /** Breadcrumb path to a folder, root first. Empty for a non-folder. */
-  function pathTo(id) {
-    const byId = new Map(buckets.value.map((b) => [b.id, b]))
-    const path = []
-    let node = byId.get(id)
-    const seen = new Set()
-    while (node && node.kind === 'folder' && !seen.has(node.id)) {
-      seen.add(node.id)
-      path.unshift(node)
-      node = node.parent != null ? byId.get(node.parent) : null
-    }
-    return path
-  }
+  const pathTo = (id) => folderPath(buckets.value, id)
 
   /** Files in a folder, and — when `deep` — everything in its subfolders too.
    *  The count a customer cares about at a collapsed node is the deep one. */

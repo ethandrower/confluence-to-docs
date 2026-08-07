@@ -297,18 +297,30 @@ class Bucket(models.Model):
 class SharedFile(models.Model):
     """A customer-shared file living in S3 (reached only via presigned URLs).
 
-    Two independent state machines, intentionally separate:
-      - `state`         : upload lifecycle — 'uploading' until the browser→S3
-                          PUT is confirmed, then 'ready'. Only 'ready' files
-                          are listed/downloadable.
-      - `review_status` : the CUSTOMER-FACING review loop driven by CiteMed
-                          staff (pending → review → approved / revision).
-      - `processed`     : a separate INTERNAL "we've integrated this" flag for
-                          the staff inbox. Never shown to customers. Do not
-                          conflate with review_status.
+    Two states that matter:
+      - `state`     : upload lifecycle — 'uploading' until the browser→S3 PUT
+                      is confirmed, then 'ready'. Only 'ready' files are
+                      listed/downloadable.
+      - `processed` : INTERNAL "someone has looked at this". Drives the unseen
+                      dot in the staff view and nothing else. Never shown to
+                      customers, and it is not an approval — see below.
+
+    RETIRED: the customer-facing review loop (`review_status`, `review_notes`,
+    `reviewed_by`, `reviewed_at`). It modelled staff approving or rejecting
+    each uploaded document, which is not what actually happens — documents get
+    collected and ticked off a checklist, not adjudicated one by one. Leaving
+    it in place meant every customer's file list showed a permanent "AWAITING
+    REVIEW" badge for a review that was never coming.
+
+    The columns are kept rather than dropped so existing rows aren't
+    destroyed, but nothing reads or writes them: they are absent from every
+    serializer and there is no endpoint that sets them. Whether a document is
+    accounted for is now expressed by ChecklistItem.linked_file — a fact about
+    the request it satisfies, not a verdict on the file.
     """
     STATE_UPLOADING = 'uploading'
     STATE_READY = 'ready'
+    # Retained only so the retired columns keep valid choices; unused.
     REVIEW_CHOICES = [
         ('pending', 'Pending'), ('review', 'In review'),
         ('approved', 'Approved'), ('revision', 'Needs revision'),

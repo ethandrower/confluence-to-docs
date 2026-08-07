@@ -1,11 +1,10 @@
 <template>
   <div class="files-admin-root">
     <div class="files-modes" role="tablist">
-      <button role="tab" :aria-selected="filesMode==='inbox'" class="seg" :class="filesMode==='inbox' && 'seg--active'" @click="openInbox">
-        Inbox <span v-if="inboxUnprocessed" class="seg-badge">{{ inboxUnprocessed }}</span>
-      </button>
+      <!-- One view per client, not a cross-client queue. The client list
+           carries the "who sent something new" signal the inbox used to. -->
       <button role="tab" :aria-selected="filesMode==='company'" class="seg" :class="filesMode==='company' && 'seg--active'" @click="openCompanyTab">
-        By company
+        Clients <span v-if="totalUnseen" class="seg-badge">{{ totalUnseen }}</span>
       </button>
       <button role="tab" :aria-selected="filesMode==='activity'" class="seg" :class="filesMode==='activity' && 'seg--active'" @click="openActivity">
         Activity
@@ -48,81 +47,6 @@
       <p v-if="!activityItems.length" class="empty">No activity yet.</p>
     </div>
 
-    <!-- INBOX: recent uploads across all clients -->
-    <div v-show="filesMode==='inbox'" class="inbox">
-      <div class="inbox-bar">
-        <span class="panel-hint">Uploads awaiting your review, across all clients. Approving / requesting changes here updates the customer.</span>
-        <div class="inbox-filters">
-          <select v-model="inboxCompany" class="inbox-select" @change="loadInbox" aria-label="Filter by company">
-            <option :value="''">All clients</option>
-            <option v-for="c in fileCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-          <div class="seg sm-seg">
-            <button :class="inboxStatus==='awaiting' && 'on'" @click="inboxStatus='awaiting'; loadInbox()">Awaiting review</button>
-            <button :class="inboxStatus==='all' && 'on'" @click="inboxStatus='all'; loadInbox()">All</button>
-          </div>
-        </div>
-      </div>
-      <div class="split" :class="{ 'has-preview': preview }">
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr v-if="preview"><th>File</th><th>Client</th><th></th></tr>
-              <tr v-else><th>File</th><th>Client</th><th>Location</th><th>Uploaded</th><th>By</th><th></th></tr>
-            </thead>
-            <tbody v-if="inboxLoading">
-              <tr v-for="n in 4" :key="'sk'+n" class="sk-row"><td :colspan="preview ? 3 : 6"><span class="sk-bar" /></td></tr>
-            </tbody>
-            <tbody v-else>
-              <tr v-for="i in inboxItems" :key="i.id" :class="preview && preview.id===i.id && 'row-active'">
-                <td>{{ i.original_name }} <span class="dim">· {{ fmtSize(i.size_bytes) }}</span></td>
-                <td><button class="link" @click="selectCompany(i.company.id); filesMode='company'">{{ i.company.name }}</button></td>
-                <template v-if="!preview">
-                  <!-- Where the file actually is: the request that asked for
-                       it, or the customer's folder path. "General uploads"
-                       stays a dash — it's the absence of a location. -->
-                  <td>
-                    <span v-if="i.bucket.kind==='request'">{{ i.bucket.title }}</span>
-                    <template v-else-if="i.bucket.kind==='folder'">
-                      <span v-if="i.bucket.path" class="dim">{{ i.bucket.path }} / </span>{{ i.bucket.title }}
-                    </template>
-                    <span v-else>—</span>
-                  </td>
-                  <td>{{ fmtFileDate(i.uploaded_at) }}</td>
-                  <td>{{ i.uploaded_by_name || '—' }}</td>
-                </template>
-                <td class="ta-r">
-                  <span class="row-acts">
-                    <button v-if="previewable(i.original_name)" class="act" :class="preview && preview.id===i.id && 'act--on'" :title="preview && preview.id===i.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(i.id, i.original_name)">
-                      <svg v-if="preview && preview.id===i.id" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18 18 6M6 6l12 12"/></svg>
-                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
-                    <a class="act" :href="`/api/admin/files/${i.id}/download`" title="Download" aria-label="Download">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </a>
-                    <button v-if="!preview" class="act act--comment" title="Internal comments" aria-label="Comments" @click="openComments(i.id, i.original_name)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                      <span v-if="i.comment_count" class="act-badge">{{ i.comment_count }}</span>
-                    </button>
-                    <template v-if="!preview">
-                      <template v-if="i.review_status==='pending' || i.review_status==='review'">
-                        <button class="mini-btn mini-btn--approve" @click="reviewInbox(i, 'approved')">Approve</button>
-                        <button class="mini-btn mini-btn--revision" @click="reviewInbox(i, 'revision')">Request changes</button>
-                      </template>
-                      <span v-else-if="i.review_status==='approved'" class="rv-pill rv-pill--approved">Approved</span>
-                      <span v-else-if="i.review_status==='revision'" class="rv-pill rv-pill--revision">Needs revision</span>
-                    </template>
-                  </span>
-                </td>
-              </tr>
-              <tr v-if="!inboxItems.length"><td :colspan="preview ? 3 : 6" class="empty">{{ inboxStatus==='awaiting' ? 'Nothing awaiting review — all caught up. 🎉' : 'No files yet.' }}</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <Transition name="pane"><FilePreviewPane v-if="preview" :src="preview.src" :name="preview.name" @close="closePreview" /></Transition>
-      </div>
-    </div>
-
     <!-- BY COMPANY: drill-down switcher -->
     <div v-show="filesMode==='company'" class="files-admin" :class="{ 'has-preview': preview }">
       <aside class="company-switcher" v-show="!preview">
@@ -130,8 +54,14 @@
         <ul class="cs-list">
           <li v-for="c in filteredFileCompanies" :key="c.id">
             <button class="cs-item" :class="c.id===selectedCompanyId && 'cs-item--active'" @click="selectCompany(c.id)">
-              <span class="cs-name">{{ c.name }}</span>
-              <span class="cs-counts">{{ c.file_count }} file{{ c.file_count===1?'':'s' }}<span v-if="c.open_request_count"> · {{ c.open_request_count }} open</span></span>
+              <span class="cs-name">
+                {{ c.name }}
+                <!-- The whole reason this list replaces the inbox. -->
+                <span v-if="c.unseen_count" class="cs-new">{{ c.unseen_count }} new</span>
+              </span>
+              <span class="cs-counts">
+                {{ c.file_count }} file{{ c.file_count===1?'':'s' }}<span v-if="c.open_request_count"> · {{ c.open_request_count }} open</span><span v-if="c.required_open_count" class="cs-req"> · {{ c.required_open_count }} required</span>
+              </span>
             </button>
           </li>
           <li v-if="!fileCompanies.length" class="cs-empty">No companies.</li>
@@ -157,26 +87,27 @@
               </button>
             </div>
           </div>
-          <div v-for="b in orderedBuckets" :key="b.id" class="fd-bucket">
-            <div class="fd-bucket-head">
-              <div class="fd-bucket-title">
-                <!-- Without the path a nested "Site 04" reads as top-level,
-                     and two customers' identically-named folders look the
-                     same. The agent is scanning, not navigating. -->
-                <span v-if="folderPath(b)" class="fd-path">{{ folderPath(b) }}</span>
-                <h4>{{ b.title }}</h4>
-                <span v-if="b.kind==='request'" class="kind-tag">Request</span>
-                <span v-if="b.kind==='request' && b.required" class="kind-tag kind-tag--required">Required</span>
-                <span v-if="b.due_at" class="due" :class="`due--${dueTone(b)}`">{{ dueLabel(b) }}</span>
+          <!-- 1. WHAT THIS CLIENT STILL OWES US.
+               Pinned above the files because it's the only thing on this
+               screen with a deadline. Required requests first. -->
+          <section v-if="requestBuckets.length" class="fd-needed">
+            <h4 class="fd-section-title">Needed from this client</h4>
+            <div v-for="b in requestBuckets" :key="b.id" class="fd-req" :class="b.required && 'fd-req--required'">
+              <div class="fd-bucket-head">
+                <div class="fd-bucket-title">
+                  <h4>{{ b.title }}</h4>
+                  <span v-if="b.required" class="kind-tag kind-tag--required">Required</span>
+                  <span v-if="b.status === 'complete'" class="kind-tag kind-tag--done">Complete</span>
+                  <span v-if="b.due_at" class="due" :class="`due--${dueTone(b)}`">{{ dueLabel(b) }}</span>
+                </div>
+                <button class="fd-edit" title="Edit request" @click="openRequest(b)" aria-label="Edit request">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
+                </button>
               </div>
-              <button v-if="b.kind==='request'" class="fd-edit" title="Edit request" @click="openRequest(b)" aria-label="Edit request">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
-              </button>
-            </div>
-            <p v-if="b.description" class="fd-desc">{{ b.description }}</p>
+              <p v-if="b.description" class="fd-desc">{{ b.description }}</p>
 
-            <!-- Required-documents checklist (requests only, optional) -->
-            <template v-if="b.kind==='request'">
+              <!-- The checklist IS the completion signal now that nothing gets
+                   approved. Ticking an item links the file that satisfies it. -->
               <div v-if="b.checklist.length || showAdd[b.id]" class="checklist">
                 <template v-if="b.checklist.length">
                   <div class="checklist-head">
@@ -186,10 +117,12 @@
                   <div class="progress-bar"><div :style="{ width: checklistPct(b) + '%' }" /></div>
                   <div v-for="c in b.checklist" :key="c.id" class="check-row">
                     <span class="check-dot" :class="c.linked_file && 'check-dot--on'" />
-                    <span class="check-text">{{ c.text }}</span>
+                    <span class="check-text" :class="c.linked_file && 'check-text--done'">{{ c.text }}</span>
+                    <!-- Any of the client's files, wherever they filed it —
+                         they won't have known which request it answered. -->
                     <select class="check-link" :value="c.linked_file || ''" :aria-label="`Link a file to: ${c.text}`" @change="linkChecklist(c, $event.target.value)">
                       <option value="">— link a file —</option>
-                      <option v-for="f in b.files" :key="f.id" :value="f.id">{{ f.original_name }}</option>
+                      <option v-for="f in allCompanyFiles" :key="f.id" :value="f.id">{{ f.original_name }}</option>
                     </select>
                     <button class="ico-sm" title="Remove" @click="removeChecklist(c)" aria-label="Remove checklist item">×</button>
                   </div>
@@ -200,40 +133,66 @@
                 </div>
               </div>
               <button v-else class="checklist-add-link" @click="showAdd[b.id]=true">+ Add a required-documents checklist (optional)</button>
-            </template>
 
-            <ul v-if="b.files.length" class="fd-rows">
-              <li v-for="f in b.files" :key="f.id" class="fd-row" :class="preview && preview.id===f.id && 'row-active'">
-                <span class="fd-file">
-                  <span class="fd-name">{{ f.original_name }}</span>
-                  <span class="fd-sub">{{ fmtSize(f.size_bytes) }} · {{ fmtFileDate(f.uploaded_at) }} · {{ f.uploaded_by_name || '—' }}</span>
-                  <span v-if="f.review_notes" class="fd-note">Note: {{ f.review_notes }}</span>
-                </span>
-                <select class="review-select" :class="`rv--${f.review_status}`" :value="f.review_status === 'review' ? 'pending' : f.review_status" :aria-label="`Review status for ${f.original_name}`" @change="setReview(f, $event.target.value)">
-                  <option value="pending">Needs review</option>
-                  <option value="approved">Approved</option>
-                  <option value="revision">Needs revision</option>
-                </select>
-                <button class="ico-sm" title="Add / edit note" @click="editNote(f)" aria-label="Edit note">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              <ul v-if="b.files.length" class="fd-rows">
+                <li v-for="f in b.files" :key="f.id" class="fd-row" :class="preview && preview.id===f.id && 'row-active'">
+                  <FileRow :file="f" :preview-id="preview && preview.id" @preview="openPreview" @comments="openComments" @seen="setSeen" />
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- 2. THE CLIENT'S OWN FILING, exactly as they see it. -->
+          <section class="fd-files">
+            <h4 class="fd-section-title">Files</h4>
+            <div class="fd-browser">
+              <div class="fd-tree">
+                <button
+                  v-if="generalBucket"
+                  class="fd-tree-general"
+                  :class="{ 'is-active': generalBucket.id === adminBucketId }"
+                  @click="adminBucketId = generalBucket.id"
+                >
+                  <span class="fd-tree-general-title">{{ generalBucket.title }}</span>
+                  <span v-if="unseenIn(generalBucket)" class="fn-newcount">{{ unseenIn(generalBucket) }} new</span>
+                  <span v-if="generalBucket.files.length" class="fn-count">{{ generalBucket.files.length }}</span>
                 </button>
-                <span class="row-acts">
-                  <button v-if="previewable(f.original_name)" class="act" :class="preview && preview.id===f.id && 'act--on'" :title="preview && preview.id===f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f.id, f.original_name)">
-                    <svg v-if="preview && preview.id===f.id" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18 18 6M6 6l12 12"/></svg>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
-                  </button>
-                  <a class="act" :href="`/api/admin/files/${f.id}/download`" title="Download" aria-label="Download">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  </a>
-                  <button class="act act--comment" title="Internal comments" aria-label="Comments" @click="openComments(f.id, f.original_name)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    <span v-if="f.comment_count" class="act-badge">{{ f.comment_count }}</span>
-                  </button>
-                </span>
-              </li>
-            </ul>
-            <p v-else class="bucket-empty">No files uploaded yet.</p>
-          </div>
+
+                <ul v-if="adminTree.length" class="fs-tree">
+                  <!-- read-only: an agent reorganising the client's folders
+                       would move documents out from under them. -->
+                  <FolderNode
+                    v-for="node in adminTree"
+                    :key="node.id"
+                    :node="node"
+                    :active-id="adminBucketId"
+                    :read-only="true"
+                    @select="adminBucketId = $event"
+                  />
+                </ul>
+                <p v-else class="fd-tree-empty">This client hasn’t made any folders.</p>
+              </div>
+
+              <div class="fd-folder">
+                <template v-if="adminBucket">
+                  <div class="fd-folder-head">
+                    <span v-if="adminCrumb" class="fd-path">{{ adminCrumb }}</span>
+                    <h5>{{ adminBucket.title }}</h5>
+                    <button v-if="unseenIn(adminBucket)" class="btn-ghost sm" @click="markFolderSeen(adminBucket)">
+                      Mark {{ unseenIn(adminBucket) }} as seen
+                    </button>
+                  </div>
+                  <ul v-if="adminBucket.files.length" class="fd-rows">
+                    <li v-for="f in adminBucket.files" :key="f.id" class="fd-row" :class="preview && preview.id===f.id && 'row-active'">
+                      <FileRow :file="f" :preview-id="preview && preview.id" @preview="openPreview" @comments="openComments" @seen="setSeen" />
+                    </li>
+                  </ul>
+                  <p v-else class="bucket-empty">Nothing in this folder.</p>
+                </template>
+                <p v-else class="bucket-empty">Pick a folder to see what’s in it.</p>
+              </div>
+            </div>
+          </section>
         </template>
         <p v-else class="fd-placeholder">Select a company to view its files.</p>
       </div>
@@ -318,7 +277,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
+import FolderNode from '@/components/files/FolderNode.vue'
+import FileRow from '@/components/files/FileRow.vue'
 import { apiFetch } from '../../lib/http.js'
+import { buildFolderTree, folderPath, unseenIn } from '../../lib/folders.js'
 
 const fileCompanies = ref([])
 const fileCompanyQuery = ref('')
@@ -331,43 +293,49 @@ const filteredFileCompanies = computed(() => {
   return q ? fileCompanies.value.filter((c) => c.name.toLowerCase().includes(q)) : fileCompanies.value
 })
 const companyFileCount = computed(() => companyBuckets.value.reduce((n, b) => n + b.files.length, 0))
-// Active requests first, then General uploads, then the customer's own
-// folders in path order so the list reads like their structure.
-const orderedBuckets = computed(() => {
-  const reqs = companyBuckets.value.filter((b) => b.kind === 'request')
-  const gen = companyBuckets.value.filter((b) => b.kind === 'general')
-  const folders = companyBuckets.value
-    .filter((b) => b.kind === 'folder')
-    .sort((a, b) => fullPath(a).localeCompare(fullPath(b)))
-  return [...reqs, ...gen, ...folders]
+const totalUnseen = computed(() =>
+  fileCompanies.value.reduce((n, c) => n + (c.unseen_count || 0), 0)
+)
+
+// Requests are what the client still owes us, so required and still-open ones
+// come first; complete ones sink but stay visible as a record.
+const requestBuckets = computed(() => {
+  const rank = (b) => (b.status === 'complete' ? 2 : b.required ? 0 : 1)
+  return companyBuckets.value
+    .filter((b) => b.kind === 'request')
+    .slice()
+    .sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title))
 })
 
-/** "Clinical Data / 2026 Studies" — the ancestors, without the folder itself. */
-function folderPath(b) {
-  if (b.kind !== 'folder') return ''
-  const byId = new Map(companyBuckets.value.map((x) => [x.id, x]))
-  const names = []
-  const seen = new Set([b.id])
-  let node = b.parent != null ? byId.get(b.parent) : null
-  while (node && !seen.has(node.id)) {
-    seen.add(node.id)
-    names.unshift(node.title)
-    node = node.parent != null ? byId.get(node.parent) : null
-  }
-  return names.join(' / ')
-}
+const generalBucket = computed(() =>
+  companyBuckets.value.find((b) => b.kind === 'general') || null
+)
 
-function fullPath(b) {
-  const p = folderPath(b)
-  return p ? `${p} / ${b.title}` : b.title
-}
+// Built with the SAME helper the customer page uses, so "the structure your
+// client sees" is a fact rather than a claim.
+const adminTree = computed(() => buildFolderTree(companyBuckets.value))
 
-const filesMode = ref('inbox')
-const inboxItems = ref([])
-const inboxStatus = ref('awaiting')
-const inboxCompany = ref('')
-const inboxUnprocessed = ref(0)
-const inboxLoading = ref(false)
+const adminBucketId = ref(null)
+const adminBucket = computed(() =>
+  companyBuckets.value.find((b) => b.id === adminBucketId.value) || null
+)
+const adminCrumb = computed(() => {
+  const path = folderPath(companyBuckets.value, adminBucketId.value)
+  return path.slice(0, -1).map((p) => p.title).join(' / ')
+})
+
+/** Every file this client has, wherever it sits — the checklist links against
+ *  this, because the client had no way of knowing which request a document
+ *  was meant to answer when they filed it. */
+const allCompanyFiles = computed(() =>
+  companyBuckets.value
+    .flatMap((b) => b.files || [])
+    .slice()
+    .sort((a, b) => a.original_name.localeCompare(b.original_name))
+)
+
+// 'company' is the only file view now; 'activity' is the audit trail.
+const filesMode = ref('company')
 
 async function loadFileCompanies(force = false) {
   if (!force && fileCompanies.value.length) return
@@ -379,54 +347,19 @@ const refreshing = ref(false)
 async function refresh() {
   refreshing.value = true
   try {
-    if (filesMode.value === 'inbox') {
-      await loadInbox()
-    } else if (filesMode.value === 'company') {
+    if (filesMode.value === 'activity') {
+      await loadActivity()
+    } else {
+      // Always reload the client list: its unseen counts are the only signal
+      // that another client uploaded while you were looking at this one.
       await loadFileCompanies(true)
       if (selectedCompanyId.value) await selectCompany(selectedCompanyId.value)
-    } else if (filesMode.value === 'activity') {
-      await loadActivity()
     }
   } finally {
     refreshing.value = false
   }
 }
-async function loadInbox() {
-  inboxLoading.value = true
-  try {
-    const params = new URLSearchParams({ status: inboxStatus.value })
-    if (inboxCompany.value) params.set('company', inboxCompany.value)
-    const r = await apiFetch(`/api/admin/files/inbox/?${params}`, { credentials: 'include' })
-    if (r.ok) {
-      const data = await r.json()
-      inboxItems.value = data.items
-      inboxUnprocessed.value = data.awaiting_total
-    }
-  } finally {
-    inboxLoading.value = false
-  }
-}
-// Resolve a file straight from the inbox → updates what the customer sees.
-async function reviewInbox(item, status) {
-  let notes
-  if (status === 'revision') {
-    notes = prompt('What needs to change? (the customer will see this note)', '')
-    if (notes === null) return
-  }
-  const body = { review_status: status }
-  if (notes !== undefined) body.notes = notes
-  const r = await apiFetch(`/api/admin/files/${item.id}/review`, {
-    method: 'PATCH', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (r.ok) await loadInbox()
-}
-function openInbox() {
-  preview.value = null
-  filesMode.value = 'inbox'
-  loadInbox()
-}
+
 async function openCompanyTab() {
   preview.value = null
   filesMode.value = 'company'
@@ -450,8 +383,6 @@ async function openComments(id, name) {
   if (r.ok) comments.value = (await r.json()).comments
 }
 function bumpCommentCount(id) {
-  const i = inboxItems.value.find((x) => x.id === id)
-  if (i) i.comment_count = (i.comment_count || 0) + 1
   for (const b of companyBuckets.value) {
     const f = b.files.find((x) => x.id === id)
     if (f) f.comment_count = (f.comment_count || 0) + 1
@@ -522,24 +453,37 @@ function closePreview() { preview.value = null }
 // Review + checklist
 const checklistDraft = ref({})
 const showAdd = ref({})  // per-bucket: reveal the (optional) checklist editor
-async function setReview(f, status) {
-  const r = await apiFetch(`/api/admin/files/${f.id}/review`, {
+/** The only per-file state left: has anyone here looked at it.
+ *  Optimistic — the dot must clear the instant you click, or you lose your
+ *  place scanning a long folder waiting for a round trip. */
+async function setSeen(f, seen) {
+  const before = f.seen
+  f.seen = seen
+  const r = await apiFetch(`/api/admin/files/${f.id}/processed`, {
     method: 'PATCH', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ review_status: status }),
+    body: JSON.stringify({ processed: seen }),
   })
-  if (r.ok) await selectCompany(selectedCompanyId.value)
+  if (!r.ok) {
+    f.seen = before
+    return
+  }
+  bumpCompanyUnseen(seen ? -1 : 1)
 }
-async function editNote(f) {
-  const notes = prompt('Reviewer note (shown to the customer when status is In review / Needs revision):', f.review_notes || '')
-  if (notes === null) return
-  const r = await apiFetch(`/api/admin/files/${f.id}/review`, {
-    method: 'PATCH', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ notes }),
-  })
-  if (r.ok) await selectCompany(selectedCompanyId.value)
+
+/** Clear a whole folder at once — the realistic action after you've opened a
+ *  client and worked through what they sent. */
+async function markFolderSeen(bucket) {
+  const pending = (bucket.files || []).filter((f) => f.seen === false)
+  for (const f of pending) await setSeen(f, true)
 }
+
+/** Keep the client list's badge honest without refetching it. */
+function bumpCompanyUnseen(delta) {
+  const c = fileCompanies.value.find((x) => x.id === selectedCompanyId.value)
+  if (c) c.unseen_count = Math.max(0, (c.unseen_count || 0) + delta)
+}
+
 async function addChecklist(b) {
   const text = (checklistDraft.value[b.id] || '').trim()
   if (!text) return
@@ -584,6 +528,14 @@ async function selectCompany(id) {
     const data = await r.json()
     selectedCompany.value = data.company
     companyBuckets.value = data.buckets
+    // Land wherever the new files are, otherwise General uploads. Opening on
+    // an empty folder when the client just sent three documents is the exact
+    // failure the unseen counts exist to prevent.
+    const withNew = data.buckets
+      .filter((b) => unseenIn(b) > 0)
+      .sort((a, b) => unseenIn(b) - unseenIn(a))[0]
+    const general = data.buckets.find((b) => b.kind === 'general')
+    adminBucketId.value = (withNew || general || data.buckets[0] || {}).id ?? null
   }
 }
 function fmtSize(b) {
@@ -645,10 +597,7 @@ async function saveRequest() {
   }
 }
 
-onMounted(() => {
-  loadFileCompanies()
-  loadInbox()
-})
+onMounted(loadFileCompanies)
 </script>
 
 <style scoped>
@@ -798,7 +747,6 @@ tbody tr:hover td { background: var(--accent); }
 .field-check { display: flex; gap: 9px; align-items: flex-start; margin-top: 0.9rem; font-size: 0.83rem; color: var(--foreground); }
 .field-check input { margin-top: 3px; flex-shrink: 0; }
 .field-check em { display: block; margin-top: 3px; font-style: normal; font-size: 0.78rem; color: var(--muted-foreground); }
-.kind-tag--required { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, transparent); }
 .kind-tag { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--info); border: 1px solid color-mix(in srgb, var(--info) 35%, var(--border)); background: color-mix(in srgb, var(--info) 10%, transparent); border-radius: 999px; padding: 1px 8px; }
 .fd-desc { font-size: 0.85rem; color: var(--muted-foreground); margin: -2px 0 10px; max-width: 70ch; }
 .fd-placeholder { color: var(--muted-foreground); font-size: 0.95rem; padding: 24px 0; }
@@ -828,7 +776,61 @@ tbody tr:hover td { background: var(--accent); }
 
 /* File rows (company view) */
 .fd-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.fd-row { display: grid; grid-template-columns: 1fr 140px 28px auto; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+/* Two columns now the review select and note button are gone. */
+.fd-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+
+/* ── Client view: what they owe us, then their own filing ── */
+.fd-section-title {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted-foreground);
+  margin: 0 0 10px;
+}
+.fd-needed { margin-bottom: 26px; }
+.fd-req {
+  padding: 12px 14px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--card);
+}
+/* The only accent on the page — a request that actually blocks the client. */
+.fd-req--required { border-color: color-mix(in srgb, var(--warning) 50%, var(--border)); }
+.kind-tag--required { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, transparent); }
+.kind-tag--done { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, var(--border)); background: color-mix(in srgb, var(--success) 10%, transparent); }
+.check-text--done { color: var(--muted-foreground); text-decoration: line-through; }
+
+.fd-browser { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .fd-browser { grid-template-columns: 1fr; } }
+.fd-tree { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; }
+.fd-tree .fs-tree { list-style: none; margin: 4px 0 0; padding: 0; }
+.fd-tree-general {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  border: 0; background: none; border-radius: 7px; cursor: pointer;
+  padding: 6px 8px; text-align: left;
+  font-family: var(--font-ui); font-size: 0.84rem; font-weight: 600; color: var(--foreground);
+}
+.fd-tree-general:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fd-tree-general.is-active { background: var(--accent); }
+.fd-tree-general-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-tree-empty { font-size: 0.78rem; color: var(--muted-foreground); padding: 6px 8px; margin: 0; }
+/* FolderNode's badges are scoped to it, so General uploads needs its own
+   copies to sit level with the folders below it. */
+.fd-tree-general .fn-count { font-size: 0.72rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.fd-tree-general .fn-newcount {
+  font-size: 0.68rem; font-weight: 700;
+  color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 999px; padding: 1px 7px;
+}
+
+.fd-folder-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.fd-folder-head h5 { font-size: 1rem; font-weight: 700; color: var(--foreground); margin: 0; }
+.btn-ghost.sm { font-size: 0.76rem; padding: 3px 9px; }
+
+.cs-name { display: flex; align-items: center; gap: 8px; }
+.cs-new {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--primary); background: color-mix(in srgb, var(--primary) 13%, transparent);
+  border-radius: 999px; padding: 1px 7px; white-space: nowrap;
+}
+.cs-req { color: var(--warning); }
 .fd-file { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .fd-name { font-size: 0.88rem; font-weight: 550; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fd-sub { font-size: 0.74rem; color: var(--muted-foreground); }

@@ -3,7 +3,7 @@
 Uses the same branded HTML shell as the magic-link email
 (emails/notification.html / .txt). Sent synchronously (like the magic-link
 email, which is proven on prod) and wrapped in try/except so a mail failure can
-never block the core action (upload, request, review).
+never block the core action (upload, request, reminder).
 """
 import logging
 
@@ -61,18 +61,6 @@ def notify_request_created(bucket):
         heading='CiteMed has requested documents',
         body=f'“{bucket.title}” —{desc} Please upload the requested files in your portal.',
         cta_label='Upload documents', cta_url=f'{_site()}/files',
-    )
-
-
-def notify_revision(file):
-    _send(
-        'A shared file needs revision',
-        _company_emails(file.company),
-        heading='A file you shared needs revision',
-        body=f'“{file.original_name}” needs an update before we can proceed. '
-             'Please review the note below and re-upload an updated version.',
-        note=file.review_notes,
-        cta_label='Re-upload the file', cta_url=f'{_site()}/files',
     )
 
 

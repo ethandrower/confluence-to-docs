@@ -228,11 +228,10 @@
                       <input ref="renameInput" v-model="editName" class="rename" @keydown.enter="saveRename(f)" @keydown.esc="cancelRename" @blur="saveRename(f)" />
                     </template>
                     <span v-else class="row-name" :title="f.original_name">{{ f.original_name }}</span>
+                    <!-- No review badge: uploading is just uploading. -->
                     <span class="row-sub">
                       {{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}
-                      <span v-if="f.review_status" class="rv-badge" :class="`rv-badge--${f.review_status}`">{{ reviewLabel(f.review_status) }}</span>
                     </span>
-                    <span v-if="f.review_notes" class="rv-note">{{ f.review_notes }}</span>
                   </div>
                   <span class="row-actions">
                     <button v-if="previewable(f.original_name)" class="ico" :class="preview && preview.id === f.id && 'ico--on'" :title="preview && preview.id === f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f)">
@@ -446,11 +445,14 @@ const filtered = computed(() => {
 // Customer-facing request status, derived from what's actually happened
 // (not the raw admin 'open' flag) so it never goes stale.
 function reqState(b) {
+  // Two states the customer can act on, and one they can't. There is no
+  // "awaiting review" any more — nothing was ever going to review it, and a
+  // request that sits on "awaiting review" forever teaches them to ignore the
+  // status entirely. Once they've sent something it's on us, and CiteMed
+  // marking the request complete is what closes it.
   if (b.status === 'complete') return ['Complete', 'success']
   if (!b.files.length) return ['Awaiting your upload', 'warning']
-  if (b.files.some((f) => f.review_status === 'revision')) return ['Action needed', 'danger']
-  if (b.files.every((f) => f.review_status === 'approved')) return ['Approved', 'success']
-  return ['Awaiting review', 'warning']  // files uploaded, not yet approved/revised
+  return ['Sent to CiteMed', 'muted']
 }
 function statusLabel(b) { return reqState(b)[0] }
 function statusTone(b) { return reqState(b)[1] }
@@ -507,8 +509,6 @@ function relDate(d) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function shortDate(d) { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
-// Customer collapses both pre-decision states (pending / in-review) to "Awaiting review".
-function reviewLabel(s) { return { pending: 'Awaiting review', review: 'Awaiting review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
 function checklistReceived(b) { return (b.checklist || []).filter((c) => c.linked_file).length }
 function checklistPct(b) {
   const total = (b.checklist || []).length
@@ -720,11 +720,6 @@ function cat(name) {
 .fs-check-recv { margin-left: auto; font-size: 0.68rem; font-weight: 700; color: var(--success); }
 
 /* Review status badge + note (customer) — colour carries the state */
-.rv-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; border-radius: 999px; color: var(--muted-foreground); background: var(--secondary); }
-.rv-badge--pending, .rv-badge--review { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
-.rv-badge--approved { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
-.rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 14%, transparent); }
-.rv-note { font-size: 0.76rem; color: var(--destructive); margin-top: 0.15rem; }
 
 /* ── File list ── */
 .files { margin-top: 1.5rem; }

@@ -18,17 +18,22 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
       </button>
 
-      <button class="fn-btn" :draggable="true" @click="$emit('select', node.id)" @dragstart="onFolderDragStart">
+      <button class="fn-btn" :draggable="!readOnly" @click="$emit('select', node.id)" @dragstart="onFolderDragStart">
         <svg class="fn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
         <span class="fn-title" :title="node.title">{{ node.title }}</span>
-        <!-- Deep count: at a collapsed node the number that matters is
-             everything inside, not just what sits at this exact level. -->
-        <span v-if="deepCount" class="fn-count">{{ deepCount }}</span>
+        <!-- Deep counts: at a COLLAPSED node the number that matters is
+             everything inside, not just what sits at this exact level —
+             otherwise a folder full of new files reads as empty. -->
+        <span v-if="node.deepUnseen" class="fn-newcount" :title="`${node.deepUnseen} not yet looked at`">
+          {{ node.deepUnseen }} new
+        </span>
+        <span v-if="node.deepCount" class="fn-count">{{ node.deepCount }}</span>
       </button>
 
       <!-- Subfolders get made where the structure is, not from a button in
            the detail pane on the other side of the screen. -->
-      <button class="fn-add" title="New subfolder" :aria-label="`New folder inside ${node.title}`"
+      <button v-if="!readOnly" class="fn-add" title="New subfolder"
+              :aria-label="`New folder inside ${node.title}`"
               @click.stop="$emit('add-child', node.id)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
@@ -57,6 +62,7 @@
         :active-id="activeId"
         :depth="depth + 1"
         :creating-in="creatingIn"
+        :read-only="readOnly"
         @select="$emit('select', $event)"
         @drop-files="$emit('drop-files', $event)"
         @move-folder="$emit('move-folder', $event)"
@@ -69,21 +75,25 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
-import { useFilesStore } from '../../stores/files.js'
+import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps({
+  // A node from buildFolderTree(): carries children + ownCount/deepCount/
+  // deepUnseen. Presentational on purpose — this component reads no store, so
+  // the customer page and the agent's client view can both render it from
+  // their own data.
   node: { type: Object, required: true },
   activeId: { type: [Number, null], default: null },
   depth: { type: Number, default: 0 },
   // id of the folder currently being added to, or undefined when idle.
   creatingIn: { type: [Number, null, undefined], default: undefined },
+  // Agents don't reorganise the customer's filing.
+  readOnly: { type: Boolean, default: false },
 })
 const emit = defineEmits([
   'select', 'drop-files', 'move-folder', 'add-child', 'create-submit', 'create-cancel',
 ])
 
-const store = useFilesStore()
 // Open by default so a customer sees their structure rather than a row of
 // closed boxes; they can collapse what they don't want.
 const open = ref(true)
@@ -107,19 +117,20 @@ function submit() {
   emit('create-submit', { title, parentId: props.node.id })
 }
 
-const deepCount = computed(() => store.fileCount(props.node.id, true))
-
 function onDragOver(e) {
+  if (props.readOnly) return
   dropping.value = true
   e.dataTransfer.dropEffect = 'move'
 }
 
 function onFolderDragStart(e) {
+  if (props.readOnly) return
   e.dataTransfer.effectAllowed = 'move'
   e.dataTransfer.setData('application/x-folder-id', String(props.node.id))
 }
 
 function onDrop(e) {
+  if (props.readOnly) return
   dropping.value = false
   const folderId = e.dataTransfer.getData('application/x-folder-id')
   if (folderId) {
@@ -176,6 +187,16 @@ function onDrop(e) {
   margin-left: auto; flex-shrink: 0;
   font-size: 0.72rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums;
 }
+/* The one thing an agent is scanning this tree for. Sits before the total so
+   "3 new" reads ahead of "12". */
+.fn-newcount {
+  margin-left: auto; flex-shrink: 0;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 999px; padding: 1px 7px;
+}
+.fn-newcount + .fn-count { margin-left: 6px; }
 
 /* Revealed on hover/focus so the tree stays quiet at rest, but always
    reachable by keyboard. */

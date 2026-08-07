@@ -13,7 +13,6 @@ urlpatterns = [
     path('admin/add-page/', admin_api.add_page, name='admin-add-page'),
 
     # Admin — file sharing
-    path('admin/files/inbox/', files_admin.inbox, name='admin-files-inbox'),
     path('admin/files/activity/', files_admin.activity, name='admin-files-activity'),
     path('admin/files/<int:file_id>/processed', files_admin.set_processed, name='admin-files-processed'),
     path('admin/files/companies/', files_admin.companies, name='admin-files-companies'),
@@ -21,7 +20,6 @@ urlpatterns = [
     path('admin/files/companies/<int:company_id>/download-all', files_admin.company_download_all, name='admin-files-zip'),
     path('admin/files/requests/', files_admin.create_request, name='admin-files-create-request'),
     path('admin/files/requests/<int:bucket_id>/', files_admin.update_request, name='admin-files-update-request'),
-    path('admin/files/<int:file_id>/review', files_admin.set_review, name='admin-files-review'),
     path('admin/files/<int:file_id>/comments', files_admin.file_comments, name='admin-files-comments'),
     path('admin/files/checklist/', files_admin.create_checklist_item, name='admin-files-checklist-create'),
     path('admin/files/checklist/<int:item_id>/', files_admin.checklist_item, name='admin-files-checklist-item'),
