@@ -355,17 +355,28 @@ JIRA_AUTO_CREATE_SINCE = env('JIRA_AUTO_CREATE_SINCE', default='')
 # pulls those in, matching the Jira reporter's email against the PortalUser
 # allowlist — an exact hit is a real onboarded customer and tells us their
 # company; bots, sales spam and staff have no customer row and are ignored.
+#
 # Default OFF gates WRITING, not looking: the cron entry is a no-op while off,
 # but `ingest_jira_requests --dry-run` still queries and reports. That ordering
 # is what makes 'ship dark, observe, then enable' possible — gate the read too
-# and the only way to preview a match is to arm the live writer. Ingested tickets are NOT emailed to the customer (JSM already sent
-# its own auto-reply) and arrive pre-linked, so provision_jira_issues skips
-# them and can never mint a duplicate Jira issue for them.
+# and the only way to preview a match is to arm the live writer.
+#
+# Ingested tickets are NOT emailed to the customer (JSM already sent its own
+# auto-reply) and arrive pre-linked, so provision_jira_issues skips them and
+# can never mint a duplicate Jira issue for them.
 JIRA_INGEST = env.bool('JIRA_INGEST', default=False)
 JIRA_INGEST_PROJECT = env('JIRA_INGEST_PROJECT', default='SUP')
 # Optional cutoff (YYYY-MM-DD) so enabling doesn't backfill months of history.
 # Set it to the enablement date to make ingestion strictly "new requests only".
 JIRA_INGEST_SINCE = env('JIRA_INGEST_SINCE', default='')
+
+# SLA first-response targets (EC-SOP-07 §4.1) — see portal/sla.py.
+# The doc measures business hours in the CLIENT's time zone and excludes public
+# holidays. We model neither: one company-wide zone, and no holiday calendar.
+# That makes the indicator an internal triage aid, not a contractual measure.
+SLA_TIMEZONE = env('SLA_TIMEZONE', default='America/New_York')
+SLA_BUSINESS_OPEN_HOUR = env.int('SLA_BUSINESS_OPEN_HOUR', default=9)
+SLA_BUSINESS_CLOSE_HOUR = env.int('SLA_BUSINESS_CLOSE_HOUR', default=18)
 
 LOGGING = {
     'version': 1,

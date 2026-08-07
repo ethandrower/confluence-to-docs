@@ -15,7 +15,7 @@
     </div>
 
     <p class="atl-hint">
-      {{ mode === 'inbox' ? 'Waiting on a CiteMed reply, oldest first.' : 'Every ticket, most recently updated first.' }}
+      {{ mode === 'inbox' ? 'Waiting on a CiteMed reply — highest priority first, then longest waiting.' : 'Every ticket, most recently updated first.' }}
     </p>
 
     <div v-if="mode === 'all'" class="atl-filters">
@@ -26,6 +26,10 @@
       <select :value="filterStatus" class="atl-select" aria-label="Filter by status" @change="$emit('update:filterStatus', $event.target.value)">
         <option value="">All statuses</option>
         <option v-for="s in STATUS_KEYS" :key="s" :value="s">{{ statusLabel(s, 'staff') }}</option>
+      </select>
+      <select :value="filterPriority" class="atl-select" aria-label="Filter by priority" @change="$emit('update:filterPriority', $event.target.value)">
+        <option value="">All priorities</option>
+        <option v-for="p in PRIORITY_KEYS" :key="p" :value="p">{{ priorityLabel(p) }}</option>
       </select>
     </div>
 
@@ -44,6 +48,13 @@
             <span class="atl-row-line">
               <span class="atl-ref">{{ t.display_number }} · {{ t.company.name }}</span>
               <span class="atl-meta">
+                <!-- Only while it's still actionable: a ticket answered late
+                     is history, and flagging it forever is noise in a queue. -->
+                <span
+                  v-if="t.sla && t.sla.breached && !t.sla.responded"
+                  class="atl-sla"
+                  :title="`First response target: ${t.sla.target}`"
+                >Overdue</span>
                 <span
                   class="atl-priority"
                   :class="`prio--${priorityTone(t.priority)}`"
@@ -71,7 +82,7 @@
 </template>
 
 <script setup>
-import { statusLabel, statusTone, priorityLabel, priorityTone, relDate, STATUS_KEYS } from '@/lib/ticketStatus'
+import { statusLabel, statusTone, priorityLabel, priorityTone, relDate, STATUS_KEYS, PRIORITY_KEYS } from '@/lib/ticketStatus'
 
 defineProps({
   mode: { type: String, required: true },
@@ -84,8 +95,9 @@ defineProps({
   companies: { type: Array, default: () => [] },
   filterCompany: { type: [String, Number], default: '' },
   filterStatus: { type: String, default: '' },
+  filterPriority: { type: String, default: '' },
 })
-defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompany', 'update:filterStatus'])
+defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompany', 'update:filterStatus', 'update:filterPriority'])
 </script>
 
 <style scoped>
@@ -143,6 +155,13 @@ defineEmits(['open-inbox', 'open-all', 'refresh', 'select', 'update:filterCompan
   font-size: 11px; font-weight: 600; line-height: 1;
   padding: 3px 6px; border-radius: var(--radius-sm); white-space: nowrap;
   background: color-mix(in srgb, currentColor 12%, transparent);
+}
+/* Past its first-response target and still unanswered. Filled rather than
+   tinted, because unlike priority this is a thing to act on, not a label. */
+.atl-sla {
+  font-size: 10.5px; font-weight: 700; line-height: 1; letter-spacing: 0.02em;
+  padding: 3px 6px; border-radius: var(--radius-sm); white-space: nowrap;
+  background: var(--destructive); color: var(--primary-foreground);
 }
 .prio--destructive { color: var(--destructive); }
 .prio--warning { color: var(--warning); }

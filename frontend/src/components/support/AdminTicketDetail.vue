@@ -29,6 +29,9 @@
             >
               <option v-for="p in PRIORITY_KEYS" :key="p" :value="p">{{ priorityLabel(p) }}</option>
             </select>
+            <span v-if="ticket.sla" class="atd-sla" :class="ticket.sla.breached && !ticket.sla.responded && 'atd-sla--breached'">
+              {{ ticket.sla.responded ? 'Responded' : `First response: ${ticket.sla.target}` }}
+            </span>
             <StatusMenu :status="ticket.status" :disabled="statusSaving" @change="onStatusChange" />
           </div>
         </div>
@@ -401,6 +404,9 @@ function onComposerKeydown(e) {
 .atd-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .atd-head-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* The target is context, not a control — quiet unless it has been missed. */
+.atd-sla { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+.atd-sla--breached { color: var(--destructive); font-weight: 650; }
 /* Native select: keyboard and screen-reader behaviour for free, and it reads
    as a control rather than competing with StatusMenu's richer trigger. */
 .atd-priority-select {

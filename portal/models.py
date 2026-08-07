@@ -353,6 +353,20 @@ class Ticket(models.Model):
         (PRIORITY_CSM_DIRECT, 'CSM Direct'),
     ]
 
+    # Triage rank, lower = attend to first. Ordered by the first-response
+    # commitments in EC-SOP-07 §4.1: URGENT is the only same-business-day
+    # promise; High (1 business day) and CSM Direct (within 24 hours) are
+    # effectively next-day, with High ahead because it denotes a platform
+    # error blocking work rather than an account conversation; Standard
+    # (1–2 business days) is the loosest. The High/CSM Direct order is the
+    # one judgement call here — the doc doesn't rank them against each other.
+    PRIORITY_RANK = {
+        PRIORITY_URGENT: 0,
+        PRIORITY_HIGH: 1,
+        PRIORITY_CSM_DIRECT: 2,
+        PRIORITY_STANDARD: 3,
+    }
+
     # null=True so save() can assign it pre-INSERT; unique=True guards races.
     number = models.PositiveIntegerField(unique=True, editable=False, null=True, blank=True)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tickets')
@@ -366,6 +380,10 @@ class Ticket(models.Model):
                               default=STATUS_WAITING_ON_SUPPORT)
     priority = models.CharField(max_length=16, choices=PRIORITY_CHOICES,
                                 default=PRIORITY_STANDARD)
+    # When we first replied to the customer — drives the SLA first-response
+    # indicator (portal/sla.py). Denormalised rather than derived, because the
+    # admin list needs it per row and deriving it would be a query per ticket.
+    first_response_at = models.DateTimeField(null=True, blank=True)
     cc_emails = models.JSONField(default=list, blank=True)
     # Internal Jira references live in JiraTicketLink (admin-only, never
     # serialized to customers). Was a single `jira_key` CharField — migrated
