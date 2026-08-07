@@ -493,6 +493,45 @@ class SchemaAccessTest(ApiV1TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200)
 
+    def _portal_login(self, user):
+        s = self.client.session
+        s['portal_user_id'] = user.id
+        s.save()
+
+    def test_a_portal_agent_session_opens_them(self):
+        """The portal's own agents are PortalUser rows with no Django user, so
+        gating on Django's is_staff alone left the docs unreachable for every
+        actual staff member — which defeats the point of shipping Swagger."""
+        from portal.models import PortalUser
+
+        agent = PortalUser.objects.create(
+            email='agent@citemed.com', role=PortalUser.ROLE_ADMIN)
+        self._portal_login(agent)
+        for path in self.PATHS:
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 200)
+
+    def test_a_customer_portal_session_does_not_open_them(self):
+        from portal.models import Company, PortalUser
+
+        co = Company.objects.create(name='Acme Docs')
+        cust = PortalUser.objects.create(
+            email='c@acme-docs.com', company=co, role=PortalUser.ROLE_CUSTOMER)
+        self._portal_login(cust)
+        for path in self.PATHS:
+            with self.subTest(path=path):
+                self.assertIn(self.client.get(path).status_code, (401, 403))
+
+    def test_a_disabled_agent_session_does_not_open_them(self):
+        from portal.models import PortalUser
+
+        gone = PortalUser.objects.create(
+            email='gone@citemed.com', role=PortalUser.ROLE_ADMIN, access_enabled=False)
+        self._portal_login(gone)
+        for path in self.PATHS:
+            with self.subTest(path=path):
+                self.assertIn(self.client.get(path).status_code, (401, 403))
+
     def test_non_staff_django_session_does_not_open_them(self):
         from django.contrib.auth import get_user_model
 

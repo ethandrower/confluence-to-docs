@@ -98,20 +98,39 @@ class IsApiClientOrAdminSession(BasePermission):
     """Gate for the schema and Swagger UI only.
 
     An unauthenticated schema endpoint advertises the shape of the data to
-    anyone who finds it, so it is gated too — but a human staffer reading the
-    docs in a browser has a Django admin session, not a bearer token, so both
-    are accepted here (and only here).
+    anyone who finds it, so it is gated — but a human reading the docs in a
+    browser has a cookie, not a bearer token (a browser cannot attach an
+    Authorization header to a normal navigation), so sessions are accepted
+    here and ONLY here.
+
+    Two kinds of session count, and both are needed. Django's `is_staff` covers
+    someone in /django-admin/, but the portal's own agents are PortalUser rows
+    with no Django user at all — gating on `is_staff` alone left the docs
+    unreachable for every actual staff member, which defeats the point of
+    shipping Swagger.
     """
 
-    message = 'A valid API token or an admin session is required.'
+    message = 'A valid API token or a staff session is required.'
 
     def has_permission(self, request, view):
         if isinstance(request.auth, ApiClient) and request.auth.enabled:
             return True
+
         user = getattr(request, 'user', None)
-        return bool(
-            user is not None
-            and user.is_authenticated
-            and getattr(user, 'is_active', False)
-            and getattr(user, 'is_staff', False)
-        )
+        if (user is not None and user.is_authenticated
+                and getattr(user, 'is_active', False)
+                and getattr(user, 'is_staff', False)):
+            return True
+
+        # Portal session. Routed through the same is_portal_admin chokepoint
+        # the rest of the admin surface uses, so "who counts as staff" has one
+        # definition rather than a second copy that can drift.
+        from portal.decorators import is_portal_admin
+        from portal.models import PortalUser
+
+        user_id = request.session.get('portal_user_id')
+        if not user_id:
+            return False
+        portal_user = PortalUser.objects.filter(pk=user_id).first()
+        return bool(portal_user and portal_user.access_enabled
+                    and is_portal_admin(portal_user))
