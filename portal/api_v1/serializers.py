@@ -16,14 +16,10 @@ from rest_framework import serializers
 
 from portal.models import Ticket
 
-# `requester`/`requester_email`/`assignee` are being added to Ticket on a
-# separate branch (ticket assignment). The API contract promises those fields
-# now, so they are resolved defensively: RevenueHub's payload shape does not
-# change when that branch lands, it just starts carrying better data.
-_TICKET_FIELDS = {f.name for f in Ticket._meta.get_fields()}
-HAS_REQUESTER_EMAIL = 'requester_email' in _TICKET_FIELDS
-HAS_REQUESTER = 'requester' in _TICKET_FIELDS
-HAS_ASSIGNEE = 'assignee' in _TICKET_FIELDS
+# This file was written against a Ticket that had no requester/assignee yet
+# and probed for them at import time. Those fields landed with the ticket
+# assignment work, so the probing is gone — but the ORDER it encoded is kept
+# in get_requester_email below, because that part was a real decision.
 
 
 class TicketCountsSerializer(serializers.Serializer):
@@ -91,21 +87,21 @@ class TicketSerializer(serializers.Serializer):
 
     @staticmethod
     def get_requester_email(obj) -> str:
-        if HAS_REQUESTER_EMAIL:
-            email = getattr(obj, 'requester_email', '')
-            if email:
-                return email
-        if HAS_REQUESTER:
-            requester = getattr(obj, 'requester', None)
-            if requester is not None:
-                return requester.email
-        # Pre-assignment-branch fallback: whoever opened it is the requester.
+        """Who the ticket is FOR, which is not always who opened it.
+
+        Three sources in descending order of directness: the address a staff
+        on-behalf ticket names, the linked PortalUser, then whoever opened it.
+        The last is the common case — a customer filing their own ticket is
+        both requester and creator.
+        """
+        if obj.requester_email:
+            return obj.requester_email
+        if obj.requester_id:
+            return obj.requester.email
         return obj.created_by.email if obj.created_by_id else ''
 
     @staticmethod
     def get_assignee_email(obj) -> str:
-        if HAS_ASSIGNEE:
-            assignee = getattr(obj, 'assignee', None)
-            if assignee is not None:
-                return assignee.email
-        return ''
+        """Empty string, not null: unassigned is a real state and RevenueHub
+        shouldn't have to distinguish "nobody owns this" from "field absent"."""
+        return obj.assignee.email if obj.assignee_id else ''

@@ -27,12 +27,7 @@ from portal.models import Company, Ticket
 
 from .auth import ApiClientAuthentication, IsApiClient
 from .pagination import CompanyCursorPagination, TicketCursorPagination
-from .serializers import (
-    HAS_REQUESTER,
-    HAS_REQUESTER_EMAIL,
-    CompanySerializer,
-    TicketSerializer,
-)
+from .serializers import CompanySerializer, TicketSerializer
 
 # Statuses the portal considers still in play. Used only for the discovery
 # endpoint's `open` count — the ticket payload itself returns the portal's
@@ -202,11 +197,11 @@ class TicketQuerysetMixin:
         "What has Jane raised?" is not answered by tickets Jane was copied on,
         so widening is opt-in rather than the silent default.
         """
-        match = Q(created_by__email__iexact=email)
-        if HAS_REQUESTER_EMAIL:
-            match |= Q(requester_email__iexact=email)
-        if HAS_REQUESTER:
-            match |= Q(requester__email__iexact=email)
+        match = (
+            Q(created_by__email__iexact=email)
+            | Q(requester_email__iexact=email)
+            | Q(requester__email__iexact=email)
+        )
 
         if include_cc:
             # cc_emails is a JSON list. Cast to text and look for the address
