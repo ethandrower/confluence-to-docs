@@ -151,8 +151,13 @@
           <div v-for="b in orderedBuckets" :key="b.id" class="fd-bucket">
             <div class="fd-bucket-head">
               <div class="fd-bucket-title">
+                <!-- Without the path a nested "Site 04" reads as top-level,
+                     and two customers' identically-named folders look the
+                     same. The agent is scanning, not navigating. -->
+                <span v-if="folderPath(b)" class="fd-path">{{ folderPath(b) }}</span>
                 <h4>{{ b.title }}</h4>
                 <span v-if="b.kind==='request'" class="kind-tag">Request</span>
+                <span v-if="b.kind==='request' && b.required" class="kind-tag kind-tag--required">Required</span>
                 <span v-if="b.due_at" class="due" :class="`due--${dueTone(b)}`">{{ dueLabel(b) }}</span>
               </div>
               <button v-if="b.kind==='request'" class="fd-edit" title="Edit request" @click="openRequest(b)" aria-label="Edit request">
@@ -256,6 +261,15 @@
               </select>
             </label>
           </div>
+          <label class="field-check">
+            <input v-model="reqForm.required" type="checkbox" />
+            <span>
+              <strong>Required</strong> — show this at the top of the customer’s
+              file page as something they must send.
+              <em>Leave off for nice-to-haves: a long list of equally-urgent
+              demands gets read as noise and none of it gets done.</em>
+            </span>
+          </label>
           <div class="modal-actions">
             <button class="btn-ghost" @click="reqModal=false">Cancel</button>
             <button class="btn-primary" :disabled="reqSaving" @click="saveRequest">{{ reqSaving ? 'Saving…' : (reqEditing ? 'Save' : 'Create request') }}</button>
@@ -308,12 +322,36 @@ const filteredFileCompanies = computed(() => {
   return q ? fileCompanies.value.filter((c) => c.name.toLowerCase().includes(q)) : fileCompanies.value
 })
 const companyFileCount = computed(() => companyBuckets.value.reduce((n, b) => n + b.files.length, 0))
-// Active requests first, the freeform "General uploads" bucket last.
+// Active requests first, then General uploads, then the customer's own
+// folders in path order so the list reads like their structure.
 const orderedBuckets = computed(() => {
   const reqs = companyBuckets.value.filter((b) => b.kind === 'request')
-  const gen = companyBuckets.value.filter((b) => b.kind !== 'request')
-  return [...reqs, ...gen]
+  const gen = companyBuckets.value.filter((b) => b.kind === 'general')
+  const folders = companyBuckets.value
+    .filter((b) => b.kind === 'folder')
+    .sort((a, b) => fullPath(a).localeCompare(fullPath(b)))
+  return [...reqs, ...gen, ...folders]
 })
+
+/** "Clinical Data / 2026 Studies" — the ancestors, without the folder itself. */
+function folderPath(b) {
+  if (b.kind !== 'folder') return ''
+  const byId = new Map(companyBuckets.value.map((x) => [x.id, x]))
+  const names = []
+  const seen = new Set([b.id])
+  let node = b.parent != null ? byId.get(b.parent) : null
+  while (node && !seen.has(node.id)) {
+    seen.add(node.id)
+    names.unshift(node.title)
+    node = node.parent != null ? byId.get(node.parent) : null
+  }
+  return names.join(' / ')
+}
+
+function fullPath(b) {
+  const p = folderPath(b)
+  return p ? `${p} / ${b.title}` : b.title
+}
 
 const filesMode = ref('inbox')
 const inboxItems = ref([])
@@ -555,14 +593,14 @@ const reqModal = ref(false)
 const reqEditing = ref(null)
 const reqSaving = ref(false)
 const reqError = ref('')
-const reqForm = ref({ title: '', description: '', due_at: '', status: 'open', company_id: '' })
+const reqForm = ref({ title: '', description: '', due_at: '', status: 'open', required: false, company_id: '' })
 
 function openRequest(b = null) {
   reqEditing.value = b
   reqError.value = ''
   reqForm.value = b
-    ? { title: b.title, description: b.description || '', due_at: b.due_at ? b.due_at.slice(0, 10) : '', status: b.status === 'general' ? 'open' : b.status, company_id: selectedCompanyId.value || '' }
-    : { title: '', description: '', due_at: '', status: 'open', company_id: selectedCompanyId.value || '' }
+    ? { title: b.title, description: b.description || '', due_at: b.due_at ? b.due_at.slice(0, 10) : '', status: b.status === 'general' ? 'open' : b.status, required: !!b.required, company_id: selectedCompanyId.value || '' }
+    : { title: '', description: '', due_at: '', status: 'open', required: false, company_id: selectedCompanyId.value || '' }
   reqModal.value = true
 }
 async function saveRequest() {
@@ -746,7 +784,12 @@ tbody tr:hover td { background: var(--accent); }
 .checklist-add-link:hover { text-decoration: underline; }
 .fd-bucket h4 { font-size: 0.95rem; font-weight: 600; color: var(--foreground); margin: 0; }
 .fd-bucket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.fd-bucket-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fd-bucket-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.fd-path { font-size: 0.74rem; color: var(--muted-foreground); }
+.field-check { display: flex; gap: 9px; align-items: flex-start; margin-top: 0.9rem; font-size: 0.83rem; color: var(--foreground); }
+.field-check input { margin-top: 3px; flex-shrink: 0; }
+.field-check em { display: block; margin-top: 3px; font-style: normal; font-size: 0.78rem; color: var(--muted-foreground); }
+.kind-tag--required { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, transparent); }
 .kind-tag { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--info); border: 1px solid color-mix(in srgb, var(--info) 35%, var(--border)); background: color-mix(in srgb, var(--info) 10%, transparent); border-radius: 999px; padding: 1px 8px; }
 .fd-desc { font-size: 0.85rem; color: var(--muted-foreground); margin: -2px 0 10px; max-width: 70ch; }
 .fd-placeholder { color: var(--muted-foreground); font-size: 0.95rem; padding: 24px 0; }

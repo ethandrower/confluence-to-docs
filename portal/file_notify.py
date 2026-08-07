@@ -106,13 +106,32 @@ def notify_due_reminder(bucket, overdue=False):
 
 
 def notify_upload(file):
-    """Tell the CSM who created the request that the customer uploaded."""
+    """Tell staff a customer uploaded something.
+
+    This used to email only `bucket.requested_by` — the CSM who opened a
+    document request — and return silently when there wasn't one. Every
+    "General uploads" bucket is created by `get_general_bucket()` with no
+    `requested_by`, and General is where the "Share files" button sends
+    everything, so in practice most uploads notified nobody at all.
+
+    The audience now mirrors the ticket rule so there's one notion of "who is
+    on this account": the CSM who asked, when a request bucket names one, and
+    otherwise every agent — because an unsolicited upload, like a new ticket,
+    belongs to nobody yet. The shared inbox is always copied.
+    """
+    from portal.ticket_notify import _all_agent_emails, _dedupe
+
     csm = getattr(file.bucket, 'requested_by', None)
-    if not csm or not csm.email:
+    recipients = [csm.email] if (csm and csm.email) else list(_all_agent_emails())
+    support = getattr(settings, 'SUPPORT_EMAIL', None)
+    if support:
+        recipients.append(support)
+    recipients = _dedupe(recipients)
+    if not recipients:
         return
     _send(
         f'New upload from {file.company.name}',
-        [csm.email],
+        recipients,
         heading=f'New upload from {file.company.name}',
         body=f'{file.company.name} uploaded “{file.original_name}” to “{file.bucket.title}”. '
              'Review it in Manage → Files.',

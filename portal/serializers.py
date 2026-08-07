@@ -100,6 +100,9 @@ class BucketSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'kind', 'title', 'description', 'due_at', 'status',
             'requested_by_name', 'created_at', 'files', 'checklist',
+            # The client builds the tree from a flat list — one request, and
+            # re-parenting a folder doesn't invalidate a nested payload.
+            'parent', 'required',
         ]
 
     def get_files(self, obj):

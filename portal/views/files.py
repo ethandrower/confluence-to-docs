@@ -64,6 +64,186 @@ def buckets_list(request):
     return JsonResponse({'buckets': BucketSerializer(buckets, many=True).data})
 
 
+# ── Folders ───────────────────────────────────────────────────────────────
+# Customers create and arrange these themselves; that's the point of the
+# feature. Requests and the General uploads root are staff/system concepts and
+# stay outside the tree — see the Bucket docstring.
+MAX_FOLDER_TITLE = 120
+
+
+def _resolve_parent(user, parent_id):
+    """Resolve a parent folder for the acting user, or explain why not.
+
+    Returns (parent_or_None, error_response_or_None). Everything goes through
+    Bucket.for_user, so a parent id belonging to another company is simply not
+    found — the move never sees it.
+    """
+    if parent_id in (None, '', 0):
+        return None, None
+    parent = Bucket.for_user(user).filter(id=parent_id).first()
+    if not parent:
+        return None, JsonResponse({'error': 'Folder not found.'}, status=404)
+    if parent.kind != Bucket.KIND_FOLDER:
+        # Refusing this is what keeps a document request from being buried
+        # inside someone's folder tree.
+        return None, JsonResponse(
+            {'error': 'Only folders can contain other folders.'}, status=400)
+    return parent, None
+
+
+def _clean_title(raw):
+    title = (raw or '').strip()
+    if not title:
+        return None, JsonResponse({'error': 'Folder name required.'}, status=400)
+    if len(title) > MAX_FOLDER_TITLE:
+        return None, JsonResponse(
+            {'error': f'Folder name must be {MAX_FOLDER_TITLE} characters or fewer.'},
+            status=400)
+    if '/' in title:
+        return None, JsonResponse(
+            {'error': 'Folder names can’t contain “/”.'}, status=400)
+    return title, None
+
+
+def _duplicate_sibling(user, title, parent, exclude_id=None):
+    """A second "Reports" beside the first is a usability trap, not a feature."""
+    qs = Bucket.for_user(user).filter(
+        kind=Bucket.KIND_FOLDER, parent=parent, title__iexact=title)
+    if exclude_id:
+        qs = qs.exclude(id=exclude_id)
+    return qs.exists()
+
+
+@require_portal_user
+@require_http_methods(['POST'])
+def folder_create(request):
+    user = request.portal_user
+    if not user.company_id:
+        return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
+    data = json.loads(request.body or '{}')
+    title, err = _clean_title(data.get('title'))
+    if err:
+        return err
+    parent, err = _resolve_parent(user, data.get('parent_id'))
+    if err:
+        return err
+    if parent and parent.level + 1 > Bucket.MAX_DEPTH:
+        return JsonResponse(
+            {'error': f'Folders can only be {Bucket.MAX_DEPTH} levels deep.'}, status=400)
+    if _duplicate_sibling(user, title, parent):
+        return JsonResponse(
+            {'error': 'A folder with that name is already here.'}, status=409)
+    folder = Bucket.objects.create(
+        company_id=user.company_id, kind=Bucket.KIND_FOLDER, title=title,
+        parent=parent, created_by=user, status='general',
+    )
+    log_activity(user.company, 'folder_create', actor=user, bucket=folder,
+                 title=title, parent_id=parent.id if parent else None)
+    return JsonResponse({'folder': BucketSerializer(folder).data}, status=201)
+
+
+@require_portal_user
+@require_http_methods(['PATCH', 'DELETE'])
+def folder_detail(request, folder_id):
+    user = request.portal_user
+    folder = Bucket.for_user(user).filter(id=folder_id).first()
+    if not folder:
+        return JsonResponse({'error': 'Folder not found.'}, status=404)
+    if folder.kind != Bucket.KIND_FOLDER:
+        return JsonResponse(
+            {'error': 'Only folders you created can be renamed or removed.'}, status=400)
+
+    if request.method == 'DELETE':
+        # Refuse rather than cascade. The FK is CASCADE so a company delete can
+        # collect the tree in one pass, which means an unguarded delete here
+        # would silently take every file underneath with it.
+        if folder.children.exists():
+            return JsonResponse(
+                {'error': 'This folder still has subfolders. Empty it first.'}, status=409)
+        if folder.files.filter(deleted_at__isnull=True).exists():
+            return JsonResponse(
+                {'error': 'This folder still has files. Move or delete them first.'},
+                status=409)
+        log_activity(user.company, 'folder_delete', actor=user, title=folder.title)
+        folder.delete()
+        return JsonResponse({'ok': True})
+
+    data = json.loads(request.body or '{}')
+    fields = []
+
+    if 'title' in data:
+        title, err = _clean_title(data.get('title'))
+        if err:
+            return err
+        if _duplicate_sibling(user, title, folder.parent, exclude_id=folder.id):
+            return JsonResponse(
+                {'error': 'A folder with that name is already here.'}, status=409)
+        folder.title = title
+        fields.append('title')
+
+    if 'parent_id' in data:
+        parent, err = _resolve_parent(user, data.get('parent_id'))
+        if err:
+            return err
+        if parent:
+            # Moving a folder into itself or its own descendant would detach
+            # the subtree from the root entirely — it becomes unreachable and
+            # unlistable, with the files still inside it.
+            if parent.is_descendant_of(folder):
+                return JsonResponse(
+                    {'error': 'A folder can’t be moved inside itself.'}, status=400)
+            if parent.level + 1 + folder.subtree_height() > Bucket.MAX_DEPTH:
+                return JsonResponse(
+                    {'error': f'That would nest deeper than {Bucket.MAX_DEPTH} levels.'},
+                    status=400)
+        if _duplicate_sibling(user, folder.title, parent, exclude_id=folder.id):
+            return JsonResponse(
+                {'error': 'A folder with that name is already there.'}, status=409)
+        folder.parent = parent
+        fields.append('parent')
+
+    if not fields:
+        return JsonResponse({'error': 'Nothing to update.'}, status=400)
+    folder.save(update_fields=fields + ['updated_at'])
+    log_activity(user.company, 'folder_update', actor=user, bucket=folder,
+                 changed=fields, title=folder.title)
+    return JsonResponse({'folder': BucketSerializer(folder).data})
+
+
+@require_portal_user
+@require_http_methods(['POST'])
+def files_move(request):
+    """Move files into a folder (or a request bucket, or back to General).
+
+    The destination is resolved through Bucket.for_user rather than trusted
+    from the body: a file's own `company` doesn't change when it moves, so
+    checking only the file would let a valid file be re-homed under another
+    tenant's folder and pass every later scoping check.
+    """
+    user = request.portal_user
+    data = json.loads(request.body or '{}')
+    ids = data.get('file_ids') or []
+    if not isinstance(ids, list) or not ids:
+        return JsonResponse({'error': 'file_ids must be a non-empty list.'}, status=400)
+    target = Bucket.for_user(user).filter(id=data.get('bucket_id')).first()
+    if not target:
+        return JsonResponse({'error': 'Destination folder not found.'}, status=404)
+
+    files = list(SharedFile.for_user(user).filter(id__in=ids))
+    if len(files) != len(set(ids)):
+        # Partial matches mean at least one id was another tenant's or deleted.
+        # Refuse the whole batch rather than half-moving a selection.
+        return JsonResponse({'error': 'Some of those files could not be found.'}, status=404)
+
+    for f in files:
+        f.bucket = target
+    SharedFile.objects.bulk_update(files, ['bucket'])
+    for f in files:
+        log_activity(user.company, 'file_move', actor=user, file=f, bucket=target,
+                     name=f.original_name, to=target.title)
+    return JsonResponse({'ok': True, 'moved': len(files), 'bucket_id': target.id})
+
+
 # ── Upload (presigned PUT) ────────────────────────────────────────────────
 @require_portal_user
 @require_http_methods(['POST'])

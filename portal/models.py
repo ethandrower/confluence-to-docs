@@ -154,26 +154,63 @@ def update_search_vector(sender, instance, **kwargs):
 
 # ── Customer file sharing ───────────────────────────────────────────────
 class Bucket(models.Model):
-    """A flat grouping of shared files for one company. Either a staff-created
-    'request' (asking the customer for specific docs) or the customer's
-    'general' uploads bucket. Explicitly NOT a folder tree — no nesting."""
+    """A grouping of shared files for one company.
+
+    Three kinds, and the difference matters:
+
+      - 'general' — the single auto-created "General uploads" root. One per
+        company, never nested, never deleted.
+      - 'request' — staff asking the customer for specific documents, with a
+        due date and optionally a checklist. Deliberately NOT part of the
+        folder tree: a request is a task with a deadline, and letting a
+        customer drag one into a subfolder would let them bury or lose it.
+        Pinned above the tree in the UI.
+      - 'folder'  — customer-created, nestable, the actual document structure.
+
+    Nesting is an adjacency list (`parent`) rather than a materialised path:
+    depth here is single digits, and this keeps the existing serializer and
+    queries intact. Only 'folder' rows may have a parent or be one.
+    """
     KIND_REQUEST = 'request'
     KIND_GENERAL = 'general'
-    KIND_CHOICES = [(KIND_REQUEST, 'Request'), (KIND_GENERAL, 'General')]
+    KIND_FOLDER = 'folder'
+    KIND_CHOICES = [
+        (KIND_REQUEST, 'Request'), (KIND_GENERAL, 'General'), (KIND_FOLDER, 'Folder'),
+    ]
     STATUS_CHOICES = [
         ('open', 'Open'), ('partial', 'Partial'),
         ('complete', 'Complete'), ('general', 'General'),
     ]
+    # Deep enough for any real document set, shallow enough that a recursive
+    # walk stays cheap and a UI can still show the path.
+    MAX_DEPTH = 8
 
     company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='buckets')
     kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_GENERAL)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    # CASCADE, not PROTECT: a company delete must be able to take its whole
+    # tree with it in one collector pass. Deleting a folder that still holds
+    # anything is refused at the API layer instead (see views.files), which is
+    # where a human-readable error can be returned.
+    parent = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.CASCADE, related_name='children',
+    )
+    created_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_buckets',
+    )
     requested_by = models.ForeignKey(
         'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='requested_buckets',
     )
     due_at = models.DateTimeField(null=True, blank=True)
+    # Only meaningful on a 'request'. Most requests are useful-to-have rather
+    # than genuinely gating, and a customer shown ten equally-urgent demands
+    # reads the whole list as noise and does none of them. Marking the few
+    # that actually block progress lets the UI put those in front of them and
+    # leave the rest sitting quietly alongside their own folders.
+    required = models.BooleanField(default=False)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='general')
     last_reminder_at = models.DateTimeField(null=True, blank=True)  # due-date reminder throttle
     created_at = models.DateTimeField(auto_now_add=True)
@@ -188,10 +225,73 @@ class Bucket(models.Model):
                 fields=['company'], condition=models.Q(kind='general'),
                 name='uniq_general_bucket_per_company',
             ),
+            # Only folders nest. Enforced in the database because the API is
+            # not the only writer — the admin and the shell reach this too.
+            models.CheckConstraint(
+                check=models.Q(parent__isnull=True) | models.Q(kind='folder'),
+                name='only_folders_may_be_nested',
+            ),
         ]
 
     def __str__(self):
         return f'{self.company.name} — {self.title}'
+
+    @classmethod
+    def for_user(cls, user):
+        """Tenant-isolation chokepoint for buckets — the same rule as
+        SharedFile.for_user. Folder endpoints must query through here so a
+        re-parent can never reach across companies.
+
+        This matters more for a tree than it did for a flat list: moving a
+        folder or a file changes its parent but NOT its `company`, so a
+        target picked from another tenant would still pass a naive
+        `company_id` check on the object being moved. The target has to be
+        resolved through this method too.
+        """
+        company_id = getattr(user, 'company_id', None)
+        if not company_id:
+            return cls.objects.none()
+        return cls.objects.filter(company_id=company_id)
+
+    @property
+    def level(self):
+        """1-based depth, so it reads the way the limit is worded: a top-level
+        folder is level 1 and MAX_DEPTH = 8 means eight levels, not nine."""
+        return self.depth + 1
+
+    @property
+    def depth(self):
+        """0 for a top-level bucket. Walks parents, bounded by MAX_DEPTH + 1 so
+        a cycle introduced outside the API can't hang a request."""
+        d, node, seen = 0, self.parent, {self.pk}
+        while node is not None and d <= self.MAX_DEPTH + 1:
+            if node.pk in seen:
+                break
+            seen.add(node.pk)
+            d += 1
+            node = node.parent
+        return d
+
+    def subtree_height(self):
+        """How many levels sit below this bucket (0 if it has no children).
+        A move must fit the whole subtree under MAX_DEPTH, not just the folder
+        being dragged — otherwise dropping a deep branch one level down
+        silently exceeds the limit."""
+        children = list(self.children.all())
+        if not children:
+            return 0
+        return 1 + max(c.subtree_height() for c in children)
+
+    def is_descendant_of(self, other):
+        """True if `other` is this bucket, or anywhere above it. Used to refuse
+        a move that would detach a subtree into its own cycle."""
+        node, seen = self, set()
+        while node is not None and node.pk not in seen:
+            if node.pk == other.pk:
+                return True
+            seen.add(node.pk)
+            node = node.parent
+        return False
 
 
 class SharedFile(models.Model):

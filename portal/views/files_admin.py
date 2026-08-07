@@ -138,6 +138,9 @@ def create_request(request):
         company=company, kind=Bucket.KIND_REQUEST, title=title,
         description=data.get('description', ''), due_at=_parse_due(data.get('due_at')),
         status=status, requested_by=request.portal_user,
+        # Defaults to false: a request has to be argued INTO the customer's
+        # "needed from you" list, not out of it.
+        required=bool(data.get('required')),
     )
     log_activity(company, 'request_created', actor=request.portal_user, bucket=b, title=title)
     try:
@@ -167,6 +170,8 @@ def update_request(request, bucket_id):
         b.description = data.get('description', '')
     if 'due_at' in data:
         b.due_at = _parse_due(data.get('due_at'))
+    if 'required' in data:
+        b.required = bool(data.get('required'))
     became_complete = False
     if 'status' in data and data.get('status') in ('open', 'partial', 'complete'):
         became_complete = data['status'] == 'complete' and b.status != 'complete'
