@@ -1,3 +1,6 @@
+import hashlib
+import secrets
+
 from django.db import models, connection
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -503,6 +506,67 @@ class TicketActivity(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class ApiClient(models.Model):
+    """A machine consumer of the read-only integration API at /api/v1/.
+
+    This is NOT a PortalUser and must never become one. The portal has exactly
+    two authentication doors: the session (a human, scoped to their company by
+    `Ticket.for_user`) and this token (a server, deliberately unscoped). The
+    bearer authenticator returns an AnonymousUser and hands the ApiClient back
+    only as `request.auth`, so nothing downstream can mistake a machine for a
+    person and no code path can be authenticated by both doors at once.
+
+    Only the SHA-256 of the token is stored. The raw token is shown once, by
+    `manage.py create_api_client`, and is unrecoverable afterwards — a database
+    dump therefore leaks nothing usable. A plain hash (not a slow KDF) is the
+    right choice here precisely because the token is 256 bits of `secrets`
+    entropy rather than a human-chosen password: there is nothing to brute
+    force, and every request would otherwise pay the KDF cost.
+
+    Revocation is a row edit (`enabled = False`) or a delete in the Django
+    admin, so a leaked credential is cut off without a deploy.
+    """
+
+    TOKEN_PREFIX = 'csp_'  # helps secret scanners and humans recognise it
+
+    name = models.CharField(max_length=128, unique=True)
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    # Last successful authentication. Its own justification: a sync that
+    # silently stops is otherwise invisible from this side of the integration.
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f'{self.name}{"" if self.enabled else " (disabled)"}'
+
+    @staticmethod
+    def hash_token(raw_token):
+        return hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+
+    @classmethod
+    def issue(cls, name):
+        """Create a client and return (client, raw_token). The raw token is
+        returned exactly once — it is never stored and cannot be recovered."""
+        raw = cls.TOKEN_PREFIX + secrets.token_urlsafe(32)
+        client = cls.objects.create(name=name, token_hash=cls.hash_token(raw))
+        return client, raw
+
+    def touch(self, now=None):
+        """Record a successful authentication.
+
+        A queryset UPDATE rather than save(): one statement, no signals, and it
+        cannot accidentally write back a stale copy of any other column.
+        """
+        from django.utils import timezone
+        stamp = now or timezone.now()
+        type(self).objects.filter(pk=self.pk).update(last_used_at=stamp)
+        self.last_used_at = stamp
 
 
 class JiraTicketLink(models.Model):

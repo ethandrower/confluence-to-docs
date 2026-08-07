@@ -6,7 +6,9 @@ from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 
-from .models import DocPage, DocImage, PortalUser, MagicLinkToken, ContactSubmission
+from .models import (
+    ApiClient, ContactSubmission, DocImage, DocPage, MagicLinkToken, PortalUser,
+)
 
 
 # ── Branding ──────────────────────────────────────────────────────────────
@@ -94,6 +96,32 @@ class MagicLinkTokenAdmin(admin.ModelAdmin):
     list_display = ['user', 'created_at', 'expires_at', 'used']
     list_filter = ['used']
     readonly_fields = ['token', 'created_at']
+
+
+@admin.register(ApiClient)
+class ApiClientAdmin(admin.ModelAdmin):
+    """Revocation surface for /api/v1/ tokens.
+
+    Deliberately cannot create one: a row added here would have no token behind
+    it (only the hash is stored, and the raw value is shown once at mint time).
+    Use `manage.py create_api_client <name>`. What this page IS for is turning a
+    leaked credential off — untick `enabled`, or use the action below — and
+    seeing `last_used_at`, which is how a silently-stopped sync becomes visible.
+    """
+
+    list_display = ['name', 'enabled', 'created_at', 'last_used_at']
+    list_filter = ['enabled']
+    search_fields = ['name']
+    readonly_fields = ['token_hash', 'created_at', 'last_used_at']
+    actions = ['revoke']
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description='Revoke (disable) selected API clients')
+    def revoke(self, request, queryset):
+        updated = queryset.update(enabled=False)
+        self.message_user(request, f'Revoked {updated} API client(s).')
 
 
 @admin.register(ContactSubmission)
