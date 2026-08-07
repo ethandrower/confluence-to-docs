@@ -1,5 +1,7 @@
 Django>=4.2,<5.0
 djangorestframework>=3.14
+# OpenAPI schema + Swagger UI for the read-only /api/v1/ integration API.
+drf-spectacular>=0.27
 django-environ>=0.11
 psycopg2-binary>=2.9
 celery>=5.3

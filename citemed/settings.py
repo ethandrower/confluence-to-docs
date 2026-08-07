@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'channels',
     'rest_framework',
+    'drf_spectacular',
     'django_celery_beat',
     'anymail',
     'portal',
@@ -231,12 +232,40 @@ SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 days
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 REST_FRAMEWORK = {
+    # These defaults govern the SESSION-authenticated surface only. Everything
+    # under /api/v1/ (portal/api_v1/) sets its authentication and permission
+    # classes explicitly and inherits nothing from here — deliberately, so that
+    # a future change to these defaults can't hand that namespace a second
+    # authentication door. See portal/api_v1/auth.py.
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# OpenAPI schema for the /api/v1/ integration API (drf-spectacular). The schema
+# and Swagger UI views themselves are gated — see portal/api_v1/schema.py.
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'CiteMed Support Portal — integration API',
+    'DESCRIPTION': (
+        'Read-only, bearer-token API over support companies and tickets, for '
+        'machine consumers such as RevenueHub.\n\n'
+        'Authenticate with `Authorization: Bearer <token>`; tokens are issued '
+        'with `manage.py create_api_client` and revoked in the Django admin.\n\n'
+        'GET only. Ticket payloads carry metadata and counts — never message '
+        'bodies, never staff-internal notes.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api/v1',
+    # Emit the full endpoint list regardless of who is asking. Access to the
+    # schema is controlled by the view's own permission class, not by silently
+    # returning a half-empty document — an admin reading the docs in a browser
+    # has a session, not a bearer token, and must still see every route.
+    'SERVE_PUBLIC': True,
 }
 
 # Celery
