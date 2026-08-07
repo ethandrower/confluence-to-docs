@@ -6,8 +6,13 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
 
+    # Two branches both numbered 0024 landed independently — requester (this
+    # branch) and priority (PR #40). Depending on both collapses them to a
+    # single leaf without renaming either file, so a database that already
+    # applied one of them stays valid.
     dependencies = [
         ('portal', '0024_ticket_requester_ticket_requester_email'),
+        ('portal', '0024_ticket_priority'),
     ]
 
     operations = [

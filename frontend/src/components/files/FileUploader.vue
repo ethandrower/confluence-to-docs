@@ -120,7 +120,7 @@ function onPick(e) {
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--accent);
   color: var(--primary);
   margin-bottom: 0.25rem;

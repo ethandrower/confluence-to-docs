@@ -38,7 +38,7 @@ const linkSent = ref(false)
 .login-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 40px 36px 32px;
   width: 100%;
   max-width: 420px;

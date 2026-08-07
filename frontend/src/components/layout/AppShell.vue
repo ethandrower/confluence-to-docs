@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   height: 34px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--card);
   font-size: 13px;
@@ -323,7 +323,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--muted-foreground);
 }
 .topbar-icon:hover { color: var(--foreground); background: var(--muted); }
@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
   align-items: center;
   height: 34px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   font-size: 13px;
   font-weight: 500;
@@ -382,7 +382,7 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: none;
   background: none;
   text-align: left;
@@ -408,7 +408,7 @@ onBeforeUnmount(() => {
   min-width: 0;           /* allow it to shrink instead of forcing overflow */
   max-width: 760px;
   padding: 0 10px 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--muted-foreground);
@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
   font-size: 10.5px;
   font-weight: 500;
   padding: 2px 6px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--background);
   color: var(--muted-foreground);
@@ -474,7 +474,7 @@ onBeforeUnmount(() => {
   z-index: 100;
   transform: translateY(-150%);
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--primary);
   color: var(--primary-foreground);
   font-family: var(--font-ui);

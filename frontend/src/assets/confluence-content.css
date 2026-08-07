@@ -155,7 +155,7 @@
 .confluence-content img {
   max-width: 100%;
   height: auto;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   margin: 1rem 0;
   box-shadow: 0 1px 3px oklch(0 0 0 / 0.04);
@@ -178,7 +178,7 @@
   font-size: 0.9rem;
   line-height: 1.55;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 .confluence-content th {
@@ -211,14 +211,14 @@
   font-size: 0.82em;
   background: var(--prose-code-bg);
   padding: 2px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--prose-code-fg);
   border: 1px solid var(--border-subtle);
 }
 .confluence-content pre {
   background: var(--prose-pre-bg);
   border: 1px solid color-mix(in srgb, var(--prose-pre-bg) 60%, #000);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 1rem 1.25rem;
   overflow-x: auto;
   margin: 1.25rem 0;
@@ -257,7 +257,7 @@
 .confluence-content .panel {
   --c: #6B7689; /* neutral fallback for untyped panels (e.g. output-block) */
   position: relative;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 0.9rem 1.125rem;
   margin: 1.5rem 0;
   border: 1px solid color-mix(in srgb, var(--c) 22%, var(--border));
@@ -350,7 +350,7 @@
 /* ── Expand ────────────────────────────────────────────────── */
 .confluence-content .confluence-expand {
   border: 2px solid var(--divider);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   margin: 1.25rem 0;
   overflow: hidden;
 }

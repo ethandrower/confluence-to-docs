@@ -221,7 +221,7 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--card);
   font-size: 13px;
@@ -236,7 +236,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--primary);
   font-weight: 600;
@@ -256,7 +256,7 @@ onMounted(() => {
   list-style: none;
   margin: 0;
   padding: 5px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--popover);
   box-shadow: 0 10px 30px oklch(0 0 0 / 0.12);
@@ -267,7 +267,7 @@ onMounted(() => {
   gap: 8px;
   width: 100%;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--foreground);
   transition: background 0.12s;
@@ -284,7 +284,7 @@ onMounted(() => {
   color: var(--brand-accent);
   background: color-mix(in srgb, var(--brand-accent) 14%, transparent);
   padding: 1px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .ver-drop-enter-active, .ver-drop-leave-active { transition: opacity 0.14s, transform 0.14s; }
 .ver-drop-enter-from, .ver-drop-leave-to { opacity: 0; transform: translateY(-4px); }
@@ -294,7 +294,7 @@ onMounted(() => {
   display: flex;
   gap: 18px;
   padding: 26px;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--primary);
   color: #fff;
   position: relative;
@@ -313,7 +313,7 @@ onMounted(() => {
   z-index: 1;
   width: 46px;
   height: 46px;
-  border-radius: 11px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.14);
   display: flex;
   align-items: center;
@@ -346,7 +346,7 @@ onMounted(() => {
   width: 100%;
   max-width: 380px;
   padding: 9px 12px;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: rgba(255, 255, 255, 0.9);
@@ -359,7 +359,7 @@ onMounted(() => {
   font-family: var(--font-ui);
   font-size: 11px;
   padding: 2px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.16);
 }
 
@@ -388,7 +388,7 @@ onMounted(() => {
   column-gap: 13px;
   row-gap: 2px;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--card);
   transition: border-color 0.16s, box-shadow 0.16s, transform 0.16s;
@@ -405,7 +405,7 @@ onMounted(() => {
   align-self: start;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -437,7 +437,7 @@ onMounted(() => {
 }
 
 /* ── Recently updated ── */
-.recent-list { list-style: none; margin: 0; padding: 0; border-radius: 12px; border: 1px solid var(--border); background: var(--card); overflow: hidden; }
+.recent-list { list-style: none; margin: 0; padding: 0; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--card); overflow: hidden; }
 .recent-row {
   display: flex;
   align-items: center;

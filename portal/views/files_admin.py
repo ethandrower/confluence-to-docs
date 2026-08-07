@@ -10,7 +10,6 @@ from django.db import transaction
 from django.http import JsonResponse, FileResponse, HttpResponseRedirect
 from django.utils.dateparse import parse_datetime, parse_date
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 # Bounds for the "download all" export so one large company can't OOM a worker.
@@ -121,7 +120,6 @@ def company_download_all(request, company_id):
     return resp
 
 
-@csrf_exempt
 @require_portal_admin
 @require_http_methods(['POST'])
 def create_request(request):
@@ -149,7 +147,6 @@ def create_request(request):
     return JsonResponse(BucketSerializer(b, context={'staff': True}).data, status=201)
 
 
-@csrf_exempt
 @require_portal_admin
 @require_http_methods(['PATCH', 'DELETE'])
 def update_request(request, bucket_id):
@@ -229,7 +226,6 @@ def inbox(request):
     return JsonResponse({'items': items, 'awaiting_total': awaiting_total})
 
 
-@csrf_exempt
 @require_portal_admin
 @require_http_methods(['PATCH'])
 def set_processed(request, file_id):
@@ -251,7 +247,6 @@ def set_processed(request, file_id):
 REVIEW_STATES = ('pending', 'review', 'approved', 'revision')
 
 
-@csrf_exempt
 @require_portal_admin
 @require_http_methods(['PATCH'])
 def set_review(request, file_id):
@@ -286,7 +281,6 @@ def set_review(request, file_id):
     return JsonResponse(SharedFileSerializer(f, context={'staff': True}).data)
 
 
-@csrf_exempt
 @require_portal_admin
 @require_http_methods(['POST'])
 def create_checklist_item(request):
@@ -305,7 +299,6 @@ def create_checklist_item(request):
     return JsonResponse(ChecklistItemSerializer(item).data, status=201)
 
 
-@csrf_exempt
 @require_portal_admin
 @require_http_methods(['PATCH', 'DELETE'])
 def checklist_item(request, item_id):
@@ -345,7 +338,6 @@ def _comment_dict(c):
     }
 
 
-@csrf_exempt
 @require_portal_admin
 @require_http_methods(['GET', 'POST'])
 def file_comments(request, file_id):

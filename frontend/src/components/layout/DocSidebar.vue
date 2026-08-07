@@ -248,7 +248,7 @@ function countPages(section) {
   display: flex;
   align-items: center;
   gap: 9px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 7px 10px;
   font-size: 13.5px;
   font-weight: 500;
@@ -296,7 +296,7 @@ function countPages(section) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   margin: -2px -4px;
   padding: 2px 4px;
   transition: background 0.12s;
@@ -318,7 +318,7 @@ function countPages(section) {
   list-style: none;
   margin: 0;
   padding: 4px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--popover);
   box-shadow: 0 8px 24px oklch(0 0 0 / 0.12);
@@ -329,7 +329,7 @@ function countPages(section) {
   gap: 6px;
   width: 100%;
   padding: 7px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12.5px;
   color: var(--foreground);
   transition: background 0.1s;
@@ -345,7 +345,7 @@ function countPages(section) {
   color: var(--brand-accent);
   background: color-mix(in srgb, var(--brand-accent) 14%, transparent);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .ver-drop-enter-active, .ver-drop-leave-active { transition: opacity 0.14s, transform 0.14s; }
 .ver-drop-enter-from, .ver-drop-leave-to { opacity: 0; transform: translateY(-4px); }
@@ -356,7 +356,7 @@ function countPages(section) {
   gap: 6px;
   height: 32px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--background);
   border: 1px solid var(--border-subtle);
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -391,7 +391,7 @@ function countPages(section) {
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--muted-foreground);
   transition: color 0.15s, background 0.15s;
 }

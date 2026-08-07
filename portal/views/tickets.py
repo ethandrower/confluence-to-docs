@@ -6,7 +6,6 @@ from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 
 from portal.models import ContactSubmission
@@ -44,7 +43,6 @@ def _build_bodies(submission, category_label):
     )
 
 
-@csrf_exempt
 @require_POST
 def submit_ticket(request):
     try:
@@ -228,7 +226,6 @@ def _clean_ccs(raw):
     return list(dict.fromkeys(ccs))
 
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST'])
 @require_portal_user
 def tickets_collection(request):
@@ -316,7 +313,6 @@ def ticket_detail(request, number):
     return JsonResponse(data)
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @require_portal_user
 def ticket_reply(request, number):
