@@ -250,3 +250,64 @@ class AdminSerializerExposesRealSlaTest(TestCase):
         t.first_response_at = timezone.now()
         t.save(update_fields=['first_response_at'])
         self.assertTrue(self._row(t.number)['sla']['responded'])
+
+
+class BackfillFirstResponseTest(TestCase):
+    """first_response_at was added by migration 0025 with no backfill, so every
+    ticket answered before that deploy read as never-answered — and therefore
+    breached. In prod that mislabelled 4 of 9 tickets as Overdue, three of them
+    already resolved. Backfill uses the same rule as live recording."""
+
+    def setUp(self):
+        self.co = Company.objects.create(name='Acme')
+        self.cust = PortalUser.objects.create(
+            email='c@acme.com', company=self.co, role=PortalUser.ROLE_CUSTOMER)
+        self.staff = PortalUser.objects.create(
+            email='s@citemed.com', role=PortalUser.ROLE_ADMIN)
+
+    def _ticket(self):
+        return Ticket.objects.create(
+            company=self.co, created_by=self.cust, subject='t')
+
+    def _msg(self, t, origin, internal=False, author=None):
+        return TicketMessage.objects.create(
+            ticket=t, author=author, author_email='x@y.z', body='b',
+            origin=origin, is_internal=internal)
+
+    def test_backfills_from_the_first_real_staff_reply(self):
+        t = self._ticket()
+        self._msg(t, TicketMessage.ORIGIN_PORTAL, author=self.cust)
+        first = self._msg(t, TicketMessage.ORIGIN_STAFF, author=self.staff)
+        self._msg(t, TicketMessage.ORIGIN_STAFF, author=self.staff)
+        self.assertEqual(sla.backfill_first_response(), 1)
+        t.refresh_from_db()
+        self.assertEqual(t.first_response_at, first.created_at)
+
+    def test_leaves_a_genuinely_unanswered_ticket_alone(self):
+        t = self._ticket()
+        self._msg(t, TicketMessage.ORIGIN_PORTAL, author=self.cust)
+        self.assertEqual(sla.backfill_first_response(), 0)
+        t.refresh_from_db()
+        self.assertIsNone(t.first_response_at)
+
+    def test_internal_notes_do_not_count(self):
+        t = self._ticket()
+        self._msg(t, TicketMessage.ORIGIN_PORTAL, author=self.cust)
+        self._msg(t, TicketMessage.ORIGIN_STAFF, internal=True, author=self.staff)
+        self.assertEqual(sla.backfill_first_response(), 0)
+
+    def test_the_opening_message_of_an_on_behalf_ticket_does_not_count(self):
+        t = self._ticket()
+        self._msg(t, TicketMessage.ORIGIN_STAFF, author=self.staff)  # opening
+        self.assertEqual(sla.backfill_first_response(), 0)
+
+    def test_is_idempotent_and_never_overwrites(self):
+        t = self._ticket()
+        self._msg(t, TicketMessage.ORIGIN_PORTAL, author=self.cust)
+        self._msg(t, TicketMessage.ORIGIN_STAFF, author=self.staff)
+        sla.backfill_first_response()
+        t.refresh_from_db()
+        original = t.first_response_at
+        self.assertEqual(sla.backfill_first_response(), 0)
+        t.refresh_from_db()
+        self.assertEqual(t.first_response_at, original)

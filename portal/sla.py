@@ -149,6 +149,38 @@ def is_breached(ticket, now=None):
     return (now or timezone.now()) > due
 
 
+def backfill_first_response():
+    """Populate first_response_at for tickets answered before the column
+    existed. Returns how many were set.
+
+    Migration 0025 added the field with no backfill, so every historical
+    ticket read as never-answered — and therefore breached, including ones
+    long since resolved. Applies exactly the rule record_first_response uses,
+    so live and historical values mean the same thing. Idempotent: only
+    touches rows that are still NULL.
+    """
+    from portal.models import Ticket, TicketMessage
+    filled = 0
+    qs = Ticket.objects.filter(first_response_at__isnull=True).prefetch_related('messages')
+    for ticket in qs:
+        msgs = sorted(ticket.messages.all(), key=lambda m: (m.created_at, m.pk))
+        if not msgs:
+            continue
+        opening = msgs[0]
+        reply = next(
+            (m for m in msgs
+             if m.origin == TicketMessage.ORIGIN_STAFF and not m.is_internal
+             and m.pk != opening.pk),
+            None)
+        if not reply:
+            continue
+        Ticket.objects.filter(pk=ticket.pk).update(first_response_at=reply.created_at)
+        filled += 1
+    if filled:
+        logger.info('sla: backfilled first_response_at on %s ticket(s)', filled)
+    return filled
+
+
 def record_first_response(ticket, message):
     """Stamp first_response_at when `message` is the first real reply to the
     customer. No-op otherwise, and never overwritten once set.
