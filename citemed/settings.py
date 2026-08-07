@@ -116,10 +116,27 @@ ASGI_APPLICATION = 'citemed.asgi.application'
 # Channels channel layer: Redis in prod (cross-worker broadcast), in-memory
 # locally so dev/tests need no Redis.
 if env('REDIS_URL', default=None):
+    # socket_timeout MUST exceed channels_redis's brpop_timeout (5s).
+    #
+    # The receive loop issues `bzpopmin(channel, timeout=5)` — a blocking read
+    # that legitimately waits the full 5s on a quiet channel. redis-py 8.0
+    # started defaulting socket_timeout to 5s (7.x had none), so the client's
+    # read timeout tied with the blocking read it was wrapping. When the server
+    # took the full 5s the client sometimes timed out first, and since nothing
+    # passes an explicit timeout to read_response, redis-py disconnected the
+    # socket and raised — surfacing as "Exception in ASGI application" and
+    # dropping the customer's live-update connection until the browser
+    # reconnected. Diagnosed 2026-08-07 from exactly that in production.
+    #
+    # 20s leaves clear headroom over the 5s block. test_channel_layer_config
+    # asserts the relationship so a future redis-py default can't reintroduce it.
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
-            'CONFIG': {'hosts': [env('REDIS_URL')]},
+            'CONFIG': {'hosts': [{
+                'address': env('REDIS_URL'),
+                'socket_timeout': env.int('REDIS_SOCKET_TIMEOUT', default=20),
+            }]},
         }
     }
 else:
