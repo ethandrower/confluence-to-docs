@@ -13,6 +13,19 @@ export function stripSignature(body) {
   return body.replace(/\s*\n?\s*—\s*CiteMed Support\s*$/, '').replace(/[ \t]+$/, '')
 }
 
+// Emailed replies arrive with stacked blank lines — mail clients pad before a
+// signature, and stripping the quoted chain leaves more behind — which renders
+// as a large gap mid-bubble. Collapse any run of 3+ newlines to one blank line;
+// paragraph breaks (exactly two) are preserved.
+//
+// Matching \r\n as a single newline is load-bearing, not defensive: SMTP bodies
+// are CRLF-delimited, so a plain /\n{3,}/ sees \r between each \n and never
+// fires on exactly the emailed messages this exists to tidy.
+export function collapseBlankLines(body) {
+  if (!body) return body
+  return body.replace(/(?:\r\n|\r|\n){3,}/g, '\n\n')
+}
+
 function dayKey(iso) {
   const d = new Date(iso)
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`

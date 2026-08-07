@@ -46,7 +46,7 @@
 <script setup>
 import { computed } from 'vue'
 import { linkify } from '@/lib/linkify'
-import { groupMessages, stripSignature } from '@/lib/thread'
+import { groupMessages, stripSignature, collapseBlankLines } from '@/lib/thread'
 import { fullDate } from '@/lib/ticketStatus'
 import { useThreadScroll } from '@/lib/useThreadScroll'
 
@@ -60,7 +60,7 @@ const props = defineProps({
 defineEmits(['resend'])
 
 const items = computed(() => groupMessages(props.messages, props.perspective, { lastReadAt: props.lastReadAt }))
-function clean(body) { return stripSignature(body) }
+function clean(body) { return collapseBlankLines(stripSignature(body)) }
 function isFresh(m) { return !!(props.freshIds && props.freshIds.has(m.id)) }
 
 const { containerRef, showNewPill, checkAtBottom, scrollToBottom, resetToBottom } =
