@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity placement</title>
+<style>
+  :root{
+    --primary:#0C377B; --accent:#3578FF; --info:#2C5BB8;
+    --card:#ffffff; --bg:#f4f5f8; --border:#e2e5ec; --input:#d7dbe4;
+    --fg:#1a2233; --muted:#6b7385; --success:#1f9d68; --warning:#c08a1e;
+    --bubble-mine:#204a86; --bubble-theirs:#e6ebf6; --ui:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--ui);-webkit-font-smoothing:antialiased;padding:26px 20px 60px}
+  .head{max-width:1200px;margin:0 auto 20px}
+  .head h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px}
+  .head p{margin:0;color:var(--muted);font-size:14px;line-height:1.5;max-width:900px}
+  .head b{color:var(--fg)}
+  .cols{max-width:1200px;margin:0 auto;display:grid;gap:20px;grid-template-columns:1fr 1fr}
+  @media(max-width:980px){.cols{grid-template-columns:1fr}}
+  .col{cursor:pointer}
+  .col > .cap{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 8px 2px}
+  .col > .cap .rec{color:var(--accent)}
+
+  .pane{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:560px;position:relative;transition:box-shadow .15s,border-color .15s}
+  .col:hover .pane{border-color:var(--accent);box-shadow:0 6px 22px rgba(53,120,255,.12)}
+  .col.selected .pane{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+
+  .ph{padding:16px 20px 14px;border-bottom:1px solid var(--border)}
+  .ph-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .ph-ref{font-size:12px;font-weight:700;color:var(--muted)}
+  .ph-right{display:flex;align-items:center;gap:8px}
+  .ph h2{font-size:18px;font-weight:650;letter-spacing:-.01em;margin:6px 0 0}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:650;padding:5px 10px;border-radius:999px;color:var(--warning);background:color-mix(in srgb,var(--warning) 14%,transparent)}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .chip .car{width:11px;height:11px;opacity:.7}
+  .histbtn{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:5px 10px}
+  .histbtn svg{width:13px;height:13px}
+
+  .drawer{border-bottom:1px solid var(--border);padding:11px 20px;display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .drawer .chev{width:12px;height:12px}
+  .drawer .hint2{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)}
+
+  .conv{flex:1 1 auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;background:color-mix(in srgb,var(--bg) 55%,var(--card));min-height:150px;justify-content:flex-end}
+  .day{align-self:center;font-size:10.5px;color:var(--muted);font-weight:600;margin:2px 0 6px}
+  .grp{max-width:78%} .grp.mine{align-self:flex-end;text-align:right}
+  .gc{font-size:10.5px;color:var(--muted);font-weight:600;margin:0 4px 3px}
+  .bub{display:inline-block;text-align:left;padding:8px 12px;border-radius:14px;font-size:12.5px;line-height:1.5}
+  .grp:not(.mine) .bub{background:var(--bubble-theirs);color:var(--fg);border-bottom-left-radius:5px}
+  .grp.mine .bub{background:var(--bubble-mine);color:#fff;border-bottom-right-radius:5px}
+
+  .comp{border-top:1px solid var(--border);padding:14px 20px 16px;background:var(--card)}
+  .comp .l{font-size:12px;font-weight:550;margin-bottom:7px}
+  .comp .ta{border:1px solid var(--input);border-radius:8px;height:48px;color:var(--muted);font-size:13px;padding:9px 11px}
+  .comp .act{display:flex;align-items:center;justify-content:space-between;margin-top:9px}
+  .comp .int{font-size:12.5px;color:var(--fg);display:flex;gap:7px;align-items:center}
+  .comp .send{background:var(--primary);color:#fff;font-size:13px;font-weight:600;padding:8px 15px;border-radius:8px}
+
+  /* Activity footer strip (option A) */
+  .actfoot{border-top:1px solid var(--border);padding:11px 20px;display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);background:color-mix(in srgb,var(--bg) 50%,var(--card))}
+  .actfoot .chev{width:12px;height:12px}
+
+  /* History side panel (option B) */
+  .panel{position:absolute;top:0;right:0;bottom:0;width:270px;background:var(--card);border-left:1px solid var(--border);box-shadow:-8px 0 24px rgba(20,30,60,.10);padding:16px;display:flex;flex-direction:column;gap:10px}
+  .panel h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0;display:flex;align-items:center}
+  .panel h3 .x{margin-left:auto;color:var(--muted);font-size:15px}
+  .panel .a{font-size:12px;color:var(--fg);line-height:1.5} .panel .a .dim{color:var(--muted)}
+  .tag{position:absolute;left:50%;transform:translateX(-50%);top:-10px;font-size:10.5px;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--success) 12%,var(--card));padding:2px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--success) 25%,transparent)}
+  .note{max-width:1200px;margin:16px auto 0;font-size:12.5px;color:var(--muted);line-height:1.55}
+  .note b{color:var(--fg)}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Where should Activity live?</h1>
+    <p>Agreed: the <b>Details drawer holds only the editable controls</b> (Jira + CC), and the conversation flows into the composer. Activity is a read‑only audit log, so it gets its own home. Two options — click the one you prefer.</p>
+  </div>
+
+  <div class="cols">
+
+    <!-- A: bottom footer strip -->
+    <div class="col" data-choice="footer" onclick="toggleSelect(this)">
+      <p class="cap">A · Collapsible footer <span class="rec">— recommended</span></p>
+      <div class="pane">
+        <div class="ph"><div class="ph-top"><span class="ph-ref">CS-1 · PatelBros</span>
+          <span class="chip"><span class="dot"></span> Needs reply <svg class="car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span></div>
+          <h2>Fresh round: verifying console email backend</h2></div>
+        <div class="drawer"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg> Details <span class="hint2">No Jira · No CC</span></div>
+        <div class="conv"><div class="day">Tuesday, July 14</div>
+          <div class="grp"><div class="gc">Het Patel · 3:30 PM</div><div class="bub">First ticket after the DB reset. Confirming this does not create a Jira SUP issue.</div></div>
+          <div class="grp mine"><div class="gc">CITEMED · 3:41 PM</div><div class="bub">Second reply — you should see this WITHOUT refreshing.</div></div>
+        </div>
+        <div class="comp"><div class="l">Reply to CS-1</div><div class="ta">Write a reply…</div>
+          <div class="act"><span class="int"><input type="checkbox"> Internal note</span><span class="send">Send reply</span></div></div>
+        <div class="actfoot"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg> Activity (5)</div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:8px 2px 0;line-height:1.5">A quiet, collapsed audit strip pinned at the very bottom. Separate from the editable controls, out of the reply flow, one click when you need the history. Least new UI.</p>
+    </div>
+
+    <!-- B: history side panel -->
+    <div class="col" data-choice="panel" onclick="toggleSelect(this)">
+      <p class="cap">B · Header “History” panel</p>
+      <div class="pane">
+        <div class="ph"><div class="ph-top"><span class="ph-ref">CS-1 · PatelBros</span>
+          <span class="ph-right">
+            <span class="histbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg> History</span>
+            <span class="chip"><span class="dot"></span> Needs reply <svg class="car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </span></div>
+          <h2>Fresh round: verifying…</h2></div>
+        <div class="drawer"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg> Details <span class="hint2">No Jira · No CC</span></div>
+        <div class="conv"><div class="day">Tuesday, July 14</div>
+          <div class="grp"><div class="gc">Het Patel · 3:30 PM</div><div class="bub">First ticket after the DB reset.</div></div>
+          <div class="grp mine"><div class="gc">CITEMED · 3:41 PM</div><div class="bub">Second reply — appears WITHOUT refreshing.</div></div>
+        </div>
+        <div class="comp"><div class="l">Reply to CS-1</div><div class="ta">Write a reply…</div>
+          <div class="act"><span class="int"><input type="checkbox"> Internal note</span><span class="send">Send reply</span></div></div>
+        <div class="panel">
+          <h3>Activity <span class="x">✕</span></h3>
+          <div class="a"><span class="dim">Jul 14, 3:41 PM</span><br>Reply sent · CiteMed Support</div>
+          <div class="a"><span class="dim">Jul 14, 3:35 PM</span><br>Status: Awaiting reply → Needs reply</div>
+          <div class="a"><span class="dim">Jul 14, 3:30 PM</span><br>Ticket created</div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:8px 2px 0;line-height:1.5">A “History” button in the header opens a slide‑over panel — roomiest for long audit trails and fully out of the main column. More UI to build and test, and it covers the conversation while open.</p>
+    </div>
+
+  </div>
+  <p class="note"><b>Both</b> keep the Details drawer to Jira + CC only and leave the conversation → composer flow uninterrupted. The only difference is where the read‑only history lives.</p>
+</body>
+</html>

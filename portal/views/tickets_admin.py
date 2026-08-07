@@ -160,9 +160,15 @@ def _priority_ordered(qs):
 @require_http_methods(['GET'])
 @require_portal_admin
 def inbox(request):
+    # Everything genuinely awaiting a CiteMed reply — which is what the Inbox
+    # header promises. 'open' belongs here: an on-behalf ticket is created
+    # 'open' (see collection) and nobody has replied to the customer yet.
+    # Excluding it hid live tickets from the queue, the nav badge AND the
+    # dashboard count, with no signal anywhere that they existed.
+    # Ordering is priority-first (see _priority_ordered), not age.
     qs = _priority_ordered(_with_message_count(
         Ticket.objects.select_related('company', 'created_by')
-        .filter(status=Ticket.STATUS_WAITING_ON_SUPPORT)
+        .filter(status__in=[Ticket.STATUS_OPEN, Ticket.STATUS_WAITING_ON_SUPPORT])
     ))
     items = [_admin_dict(t, message_count=t._mc) for t in qs]
     return JsonResponse({'tickets': items, 'awaiting_total': len(items)})
