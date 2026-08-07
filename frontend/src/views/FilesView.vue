@@ -151,6 +151,7 @@
                 </nav>
                 <input
                   v-if="renamingFolder && active.kind === 'folder'"
+                  ref="renameFolderInput"
                   v-model="renameFolderName"
                   class="fs-rename-h1"
                   @keydown.enter="submitFolderRename(active)"
@@ -340,6 +341,7 @@ const newFolderName = ref('')
 const newFolderInput = ref(null)
 const renamingFolder = ref(false)
 const renameFolderName = ref('')
+const renameFolderInput = ref(null)
 const confirmDeleteFolder = ref(false)
 
 function promptFolder(parentId) {
@@ -378,6 +380,12 @@ function promptRename(folder) {
   folderError.value = ''
   renameFolderName.value = folder.title
   renamingFolder.value = true
+  // Focus AND select: the field is pre-filled with the current name, so
+  // without the select you have to clear it by hand before typing.
+  nextTick(() => {
+    renameFolderInput.value?.focus()
+    renameFolderInput.value?.select()
+  })
 }
 
 function submitFolderRename(folder) {

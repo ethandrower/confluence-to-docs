@@ -68,7 +68,7 @@
           <table>
             <thead>
               <tr v-if="preview"><th>File</th><th>Client</th><th></th></tr>
-              <tr v-else><th>File</th><th>Client</th><th>Request</th><th>Uploaded</th><th>By</th><th></th></tr>
+              <tr v-else><th>File</th><th>Client</th><th>Location</th><th>Uploaded</th><th>By</th><th></th></tr>
             </thead>
             <tbody v-if="inboxLoading">
               <tr v-for="n in 4" :key="'sk'+n" class="sk-row"><td :colspan="preview ? 3 : 6"><span class="sk-bar" /></td></tr>
@@ -78,7 +78,16 @@
                 <td>{{ i.original_name }} <span class="dim">· {{ fmtSize(i.size_bytes) }}</span></td>
                 <td><button class="link" @click="selectCompany(i.company.id); filesMode='company'">{{ i.company.name }}</button></td>
                 <template v-if="!preview">
-                  <td>{{ i.bucket.kind==='request' ? i.bucket.title : '—' }}</td>
+                  <!-- Where the file actually is: the request that asked for
+                       it, or the customer's folder path. "General uploads"
+                       stays a dash — it's the absence of a location. -->
+                  <td>
+                    <span v-if="i.bucket.kind==='request'">{{ i.bucket.title }}</span>
+                    <template v-else-if="i.bucket.kind==='folder'">
+                      <span v-if="i.bucket.path" class="dim">{{ i.bucket.path }} / </span>{{ i.bucket.title }}
+                    </template>
+                    <span v-else>—</span>
+                  </td>
                   <td>{{ fmtFileDate(i.uploaded_at) }}</td>
                   <td>{{ i.uploaded_by_name || '—' }}</td>
                 </template>

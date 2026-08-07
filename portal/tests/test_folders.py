@@ -326,6 +326,38 @@ class RequiredRequestTest(FolderTestBase):
         self.assertFalse(rows['Optional']['required'])
 
 
+class AgentInboxPathTest(FolderTestBase):
+    """An agent scanning "what did they send me" needs to know where it
+    landed; a nested folder name alone is ambiguous."""
+
+    def setUp(self):
+        super().setUp()
+        self.staff = PortalUser.objects.create(
+            email='agent@citemed.com', role=PortalUser.ROLE_ADMIN)
+        self.login(self.staff)
+
+    def test_inbox_reports_the_folder_path(self):
+        a = self.mkfolder('Clinical Data')
+        b = self.mkfolder('Site 04', parent=a)
+        SharedFile.objects.create(
+            bucket=b, company=self.acme, original_name='enrolment.pdf',
+            storage_key='k', state=SharedFile.STATE_READY)
+        r = self.client.get('/api/admin/files/inbox/')
+        self.assertEqual(r.status_code, 200)
+        row = next(i for i in r.json()['items'] if i['original_name'] == 'enrolment.pdf')
+        self.assertEqual(row['bucket']['title'], 'Site 04')
+        self.assertEqual(row['bucket']['path'], 'Clinical Data')
+
+    def test_a_top_level_folder_has_an_empty_path(self):
+        a = self.mkfolder('Reports')
+        SharedFile.objects.create(
+            bucket=a, company=self.acme, original_name='r.pdf',
+            storage_key='k', state=SharedFile.STATE_READY)
+        r = self.client.get('/api/admin/files/inbox/')
+        row = next(i for i in r.json()['items'] if i['original_name'] == 'r.pdf')
+        self.assertEqual(row['bucket']['path'], '')
+
+
 @override_settings(SUPPORT_EMAIL='support@citemed.com')
 class UploadNotificationTest(TestCase):
     """Regression: uploads into 'General uploads' notified nobody, because the

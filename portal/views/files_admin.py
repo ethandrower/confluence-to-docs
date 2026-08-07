@@ -211,8 +211,30 @@ def inbox(request):
     except (TypeError, ValueError):
         limit = 100
 
+    rows = list(qs.order_by('-uploaded_at')[:limit])
+
+    # Folder paths for the location column. Walking `parent` per file would be
+    # a query per level per row; one pass over the companies involved is a
+    # single extra query no matter how deep the trees go.
+    parents, titles = {}, {}
+    company_ids = {f.company_id for f in rows}
+    if company_ids:
+        for bid, ptitle, pid in Bucket.objects.filter(
+                company_id__in=company_ids).values_list('id', 'title', 'parent_id'):
+            titles[bid] = ptitle
+            parents[bid] = pid
+
+    def _path(bucket_id):
+        """Ancestors of this bucket, root first — the folder itself excluded."""
+        names, seen, node = [], {bucket_id}, parents.get(bucket_id)
+        while node is not None and node not in seen:
+            seen.add(node)
+            names.insert(0, titles.get(node, ''))
+            node = parents.get(node)
+        return ' / '.join(n for n in names if n)
+
     items = []
-    for f in qs.order_by('-uploaded_at')[:limit]:
+    for f in rows:
         items.append({
             'id': f.id,
             'original_name': f.original_name,
@@ -220,7 +242,8 @@ def inbox(request):
             'uploaded_at': f.uploaded_at.isoformat(),
             'uploaded_by_name': (f.uploaded_by.name or f.uploaded_by.email) if f.uploaded_by else None,
             'company': {'id': f.company_id, 'name': f.company.name},
-            'bucket': {'id': f.bucket_id, 'title': f.bucket.title, 'kind': f.bucket.kind},
+            'bucket': {'id': f.bucket_id, 'title': f.bucket.title, 'kind': f.bucket.kind,
+                       'path': _path(f.bucket_id)},
             'review_status': f.review_status,
             'review_notes': f.review_notes,
             'comment_count': f.comments.count(),
