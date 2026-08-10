@@ -3,11 +3,16 @@
     <template #content>
       <div class="fs" :class="{ 'has-preview': preview }">
         <!-- Sidebar -->
-        <aside class="fs-side" aria-label="File buckets">
+        <aside
+          class="fs-side"
+          aria-label="File buckets"
+          @dragover="onSideDragOver"
+          @drop="dragKind = null"
+        >
           <!-- Only the requests that genuinely block progress get this slot.
                An empty section is worse than no section: a standing "Requests
                from CiteMed" header teaches the customer to scroll past it. -->
-          <div v-if="store.requiredRequests.length" class="fs-group">
+          <div v-if="store.requiredRequests.length || store.doneRequests.length" class="fs-group">
             <div class="fs-group-head">
               <h2 class="fs-group-title">Needed from you</h2>
               <button class="refresh-mini" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh requests" @click="store.load()">
@@ -30,6 +35,43 @@
                 <span v-if="duePill(b)" class="due" :class="`due--${duePill(b).tone}`">{{ duePill(b).label }}</span>
               </span>
             </button>
+
+            <!-- A satisfied mandatory document stays here rather than moving in
+                 with the optional ones. It has stopped being a task, so it
+                 loses the card, but the customer still gets to see that the
+                 thing they were chased for actually landed. -->
+            <button
+              v-for="b in store.doneRequests"
+              :key="b.id"
+              class="fs-req-done"
+              :class="{ 'is-active': b.id === store.activeBucketId }"
+              @click="store.select(b.id)"
+            >
+              <svg class="fs-req-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              <span class="fs-req-title">{{ b.title }}</span>
+            </button>
+          </div>
+
+          <!-- Optional asks get their own heading rather than a twisty. They
+               were previously behind a collapsed "Also shared with CiteMed",
+               which is where content goes to never be read. A peer section
+               keeps them visible while the absence of a card keeps them from
+               reading as a blocker. -->
+          <div v-if="store.optionalRequests.length" class="fs-group">
+            <h2 class="fs-group-title fs-group-title--quiet">Nice to have</h2>
+            <ul class="fs-opt-list">
+              <li v-for="b in store.optionalRequests" :key="b.id">
+                <button
+                  class="fs-opt-item"
+                  :class="{ 'is-active': b.id === store.activeBucketId }"
+                  @click="store.select(b.id)"
+                >
+                  <span class="fs-opt-dot" />
+                  <span class="fs-opt-title">{{ b.title }}</span>
+                  <span v-if="b.files.length" class="fs-opt-n">{{ b.files.length }}</span>
+                </button>
+              </li>
+            </ul>
           </div>
 
           <div class="fs-group">
@@ -40,23 +82,6 @@
                 New folder
               </button>
             </div>
-
-            <!-- General uploads is a drop target too: it's where files go to
-                 leave a folder without being deleted. -->
-            <button
-              v-if="store.generalBucket"
-              class="b-card"
-              :class="{ 'is-active': store.generalBucket.id === store.activeBucketId, 'is-drop': dropTarget === store.generalBucket.id }"
-              @click="store.select(store.generalBucket.id)"
-              @dragover.prevent="dropTarget = store.generalBucket.id"
-              @dragleave="dropTarget = null"
-              @drop.prevent="onDropOn(store.generalBucket.id, $event)"
-            >
-              <span class="b-title">{{ store.generalBucket.title }}</span>
-              <span class="b-meta">
-                <span class="status status--muted"><span class="dot" /> {{ store.generalBucket.files.length }} file{{ store.generalBucket.files.length === 1 ? '' : 's' }}</span>
-              </span>
-            </button>
 
             <!-- Only the top-level input lives out here; subfolder inputs
                  render inside the tree, under the folder being added to. -->
@@ -94,10 +119,33 @@
               No folders yet — make one to organise your uploads.
             </p>
 
-            <!-- Root drop zone: the only way to drag a nested folder back to
-                 the top level, which has no row of its own to drop onto. -->
+            <!-- Files that aren't in a folder. Shown as a peer row rather than
+                 the card it used to be, and hidden entirely when empty, so a
+                 new customer sees folders rather than a bucket named after our
+                 database. It reappears mid-drag because it is also how a file
+                 gets back out of a folder without being deleted. -->
+            <button
+              v-if="store.generalBucket && (store.generalBucket.files.length || dragKind === 'file')"
+              class="fs-loose"
+              :class="{
+                'is-active': store.generalBucket.id === store.activeBucketId,
+                'is-drop': dropTarget === store.generalBucket.id,
+              }"
+              @click="store.select(store.generalBucket.id)"
+              @dragover.prevent="dropTarget = store.generalBucket.id"
+              @dragleave="dropTarget = null"
+              @drop.prevent="onDropOn(store.generalBucket.id, $event)"
+            >
+              <svg class="fs-loose-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+              <span class="fs-loose-title">Not in a folder</span>
+              <span v-if="store.generalBucket.files.length" class="fs-loose-n">{{ store.generalBucket.files.length }}</span>
+            </button>
+
+            <!-- Only rendered while a folder is actually being dragged. A
+                 permanent "drop here" strip is dead furniture the other 99% of
+                 the time, and it was competing with real folders for weight. -->
             <div
-              v-if="store.folderTree.length"
+              v-if="dragKind === 'folder'"
               class="fs-root-drop"
               :class="{ 'is-drop': dropTarget === 'root' }"
               @dragover.prevent="dropTarget = 'root'"
@@ -107,28 +155,6 @@
 
             <p v-if="folderError" class="fs-folder-err">{{ folderError }}</p>
 
-            <!-- Everything CiteMed has asked for that isn't blocking. Present
-                 and findable, but sitting alongside the customer's own
-                 structure rather than presented as a to-do list. -->
-            <div v-if="store.otherRequests.length" class="fs-other">
-              <button class="fs-other-head" @click="showOther = !showOther">
-                <svg class="fs-other-twisty" :class="showOther && 'is-open'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-                Also shared with CiteMed
-                <span class="fs-other-count">{{ store.otherRequests.length }}</span>
-              </button>
-              <ul v-if="showOther" class="fs-other-list">
-                <li v-for="b in store.otherRequests" :key="b.id">
-                  <button
-                    class="fs-other-item"
-                    :class="{ 'is-active': b.id === store.activeBucketId }"
-                    @click="store.select(b.id)"
-                  >
-                    <span class="fs-other-title">{{ b.title }}</span>
-                    <span v-if="b.files.length" class="fs-other-n">{{ b.files.length }}</span>
-                  </button>
-                </li>
-              </ul>
-            </div>
           </div>
         </aside>
 
@@ -284,7 +310,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FileUploader from '@/components/files/FileUploader.vue'
 import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
@@ -331,10 +357,35 @@ async function guard(fn) {
   }
 }
 
+// What kind of thing is currently being dragged, so the sidebar can reveal
+// only the drop target that applies. Read from dataTransfer.types rather than
+// tracked via events from the tree: during a drag the *values* are protected,
+// but the type keys are readable, which is exactly the question being asked
+// here — and it means FolderNode doesn't have to report its drag state upward.
+const dragKind = ref(null)
+
+function onSideDragOver(e) {
+  const types = Array.from(e.dataTransfer?.types || [])
+  if (types.includes('application/x-folder-id')) dragKind.value = 'folder'
+  else if (types.includes('application/x-file-ids')) dragKind.value = 'file'
+}
+
+// dragend fires on the source element, which may be inside the tree or the
+// file list, so it's bound at the document rather than on the sidebar. Without
+// this a cancelled drag would leave the drop targets showing.
+function clearDrag() { dragKind.value = null; dropTarget.value = null }
+onMounted(() => {
+  document.addEventListener('dragend', clearDrag)
+  document.addEventListener('drop', clearDrag)
+})
+onUnmounted(() => {
+  document.removeEventListener('dragend', clearDrag)
+  document.removeEventListener('drop', clearDrag)
+})
+
 // Inline rather than window.prompt/confirm: a native dialog blocks the whole
 // page, can't be styled, and reads as a browser warning rather than part of
 // the app.
-const showOther = ref(false)
 const creatingIn = ref(undefined)   // undefined = idle, null = top level, id = subfolder
 const newFolderName = ref('')
 const newFolderInput = ref(null)
@@ -580,10 +631,6 @@ function cat(name) {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--foreground);
 }
-.b-card.is-drop {
-  border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-}
 .fs-folder-err {
   margin-top: 0.5rem; font-size: 0.78rem; color: var(--destructive);
 }
@@ -616,29 +663,60 @@ function cat(name) {
    on, so it gets the only accent border in the sidebar. */
 .b-card--required { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
 
-.fs-other { margin-top: 0.9rem; }
-.fs-other-head {
-  display: flex; align-items: center; gap: 5px; width: 100%;
-  border: 0; background: none; padding: 4px 2px; cursor: pointer;
-  font-family: var(--font-ui); font-size: 0.72rem; font-weight: 600;
-  letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--muted-foreground);
-}
-.fs-other-twisty { width: 12px; height: 12px; transition: transform 0.12s ease; }
-.fs-other-twisty.is-open { transform: rotate(90deg); }
-.fs-other-count { margin-left: auto; font-variant-numeric: tabular-nums; }
-.fs-other-list { list-style: none; margin: 2px 0 0; padding: 0; }
-.fs-other-item {
-  display: flex; align-items: center; gap: 7px; width: 100%;
+/* "Nice to have" — a peer section, but a deliberately quieter heading than
+   "Needed from you" so the eye still lands on the blocker first. */
+.fs-group-title--quiet { font-weight: 600; opacity: 0.75; }
+
+.fs-opt-list { list-style: none; margin: 0; padding: 0; }
+.fs-opt-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
   border: 0; background: none; border-radius: 7px; cursor: pointer;
-  padding: 5px 8px 5px 20px;
+  padding: 6px 8px;
   font-family: var(--font-ui); font-size: 0.83rem; color: var(--foreground);
   text-align: left;
 }
-.fs-other-item:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
-.fs-other-item.is-active { background: var(--accent); }
-.fs-other-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fs-other-n { margin-left: auto; font-size: 0.72rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.fs-opt-item:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fs-opt-item.is-active { background: var(--accent); }
+.fs-opt-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  background: var(--muted-foreground); opacity: 0.55;
+}
+.fs-opt-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-opt-n { margin-left: auto; font-size: 0.72rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+
+/* A required request that's been satisfied: no card, no status, just proof. */
+.fs-req-done {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  border: 0; background: none; border-radius: 7px; cursor: pointer;
+  padding: 6px 8px; margin-top: 2px;
+  font-family: var(--font-ui); font-size: 0.83rem; color: var(--muted-foreground);
+  text-align: left;
+}
+.fs-req-done:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fs-req-done.is-active { background: var(--accent); }
+.fs-req-tick { width: 13px; height: 13px; flex-shrink: 0; color: var(--success, var(--muted-foreground)); }
+.fs-req-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Unfiled files. Sits below the tree as a peer of the folders, weighted like
+   a tree row rather than the card it replaced. */
+.fs-loose {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  margin-top: 0.45rem; padding: 6px 8px;
+  border: 0; border-top: 1px solid var(--border); border-radius: 0 0 7px 7px;
+  background: none; cursor: pointer;
+  font-family: var(--font-ui); font-size: 0.83rem; color: var(--muted-foreground);
+  text-align: left;
+}
+.fs-loose:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fs-loose.is-active { background: var(--accent); color: var(--foreground); }
+.fs-loose.is-drop {
+  border: 1px solid var(--primary); border-radius: 7px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--foreground);
+}
+.fs-loose-ico { width: 14px; height: 14px; flex-shrink: 0; }
+.fs-loose-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-loose-n { margin-left: auto; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 
 .fs-rename-h1 {
   width: 100%; max-width: 420px;

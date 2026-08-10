@@ -19,8 +19,15 @@ export const useFilesStore = defineStore('files', () => {
   const requiredRequests = computed(() =>
     requests.value.filter((b) => b.required && b.status !== 'complete')
   )
-  const otherRequests = computed(() =>
-    requests.value.filter((b) => !(b.required && b.status !== 'complete'))
+
+  // Split on `required` alone, NOT on "everything that isn't currently
+  // blocking". A mandatory document that has been satisfied is still a
+  // mandatory document, and sweeping it in with the optional ones would file
+  // "Signed Declaration of Conformity" under a heading that says the customer
+  // never had to send it.
+  const optionalRequests = computed(() => requests.value.filter((b) => !b.required))
+  const doneRequests = computed(() =>
+    requests.value.filter((b) => b.required && b.status === 'complete')
   )
   const generalBucket = computed(() => buckets.value.find((b) => b.kind === 'general') || null)
   const activeBucket = computed(() => buckets.value.find((b) => b.id === activeBucketId.value) || null)
@@ -55,9 +62,19 @@ export const useFilesStore = defineStore('files', () => {
       // worth landing: a request that actually blocks them, else their own
       // files. Never an optional request — opening on "Old IFU versions (if
       // handy)" makes a nice-to-have look like the task of the day.
+      // The general bucket is only *shown* when it has files, so falling back
+      // to it unconditionally could select a row that isn't on screen — the
+      // main pane would show contents with nothing highlighted in the sidebar.
+      // Prefer a real folder, and only land on unfiled files if there is
+      // something in there to look at.
       if (!buckets.value.some((b) => b.id === activeBucketId.value)) {
+        const general = generalBucket.value
         activeBucketId.value =
-          requiredRequests.value[0]?.id ?? generalBucket.value?.id ?? null
+          requiredRequests.value[0]?.id
+          ?? folderTree.value[0]?.id
+          ?? (general?.files.length ? general.id : null)
+          ?? general?.id
+          ?? null
       }
     } finally {
       loading.value = false
@@ -164,7 +181,7 @@ export const useFilesStore = defineStore('files', () => {
 
   return {
     buckets, loading, activeBucketId, requests, generalBucket, activeBucket,
-    requiredRequests, otherRequests,
+    requiredRequests, optionalRequests, doneRequests,
     folders, folderTree, pathTo, fileCount,
     load, select, upload, rename, remove, downloadUrl,
     createFolder, renameFolder, moveFolder, deleteFolder, moveFiles,
