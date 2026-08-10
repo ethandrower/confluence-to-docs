@@ -3,9 +3,13 @@
 // <a> and text segments as interpolated text, so message bodies never go
 // through v-html and the zero-XSS property of the ticket views is preserved.
 //
-// The trailing char is excluded from common sentence punctuation so a URL at
-// the end of a sentence ("see https://x.com/y.") doesn't swallow the period.
-const URL_RE = /(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g
+// Two forms are matched. First an RFC-style bracketed URL (<https://x/y>):
+// mail clients wrap links this way routinely, so an emailed reply arrives with
+// delimiters that must be consumed rather than rendered as stray text. Second a
+// bare URL, whose trailing char is excluded from common sentence punctuation so
+// a URL ending a sentence ("see https://x.com/y.") doesn't swallow the period.
+// Brackets already bound the first form, so it needs no such trimming.
+const URL_RE = /<(https?:\/\/[^\s<>]+)>|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g
 
 export function linkify(text) {
   const src = text == null ? '' : String(text)
@@ -17,7 +21,9 @@ export function linkify(text) {
     if (m.index > last) {
       segments.push({ type: 'text', value: src.slice(last, m.index) })
     }
-    segments.push({ type: 'link', value: m[0] })
+    // m[1] is the bracketed form's inner URL, m[2] the bare form. Either way
+    // `last` advances past the whole match, so delimiters never reach output.
+    segments.push({ type: 'link', value: m[1] || m[2] })
     last = m.index + m[0].length
   }
   if (last < src.length) {
