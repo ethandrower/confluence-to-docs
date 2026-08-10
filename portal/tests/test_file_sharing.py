@@ -194,7 +194,7 @@ class AdminFilesTests(TestCase):
         self.assertEqual(len(files), 1)
 
 
-class InboxTests(TestCase):
+class ClientListTests(TestCase):
     def setUp(self):
         self.acme = Company.objects.create(name='Acme')
         self.globex = Company.objects.create(name='Globex')
@@ -211,38 +211,35 @@ class InboxTests(TestCase):
         s['portal_user_id'] = u.id
         s.save()
 
-    def test_customer_blocked_from_inbox(self):
-        self._login(self.cust)
-        self.assertEqual(self.client.get('/api/admin/files/inbox/').status_code, 403)
-
-    def test_inbox_returns_files_awaiting_review(self):
+    def test_the_client_list_carries_the_unseen_count(self):
+        """With the cross-client inbox gone, this list is the ONLY place
+        "who sent us something new" is answered. If it stops counting, an
+        agent has to open every client to find the one that uploaded."""
         self._login(self.admin)
-        r = self.client.get('/api/admin/files/inbox/')
+        rows = {c['name']: c for c in
+                self.client.get('/api/admin/files/companies/').json()['companies']}
+        self.assertEqual(rows['Acme']['unseen_count'], 1)
+        self.assertEqual(rows['Globex']['unseen_count'], 1)
+
+    def test_marking_a_file_seen_clears_it_from_the_count(self):
+        self._login(self.admin)
+        r = self.client.patch(f'/api/admin/files/{self.f1.id}/processed',
+                              data=json.dumps({'processed': True}),
+                              content_type='application/json')
         self.assertEqual(r.status_code, 200)
-        names = {i['original_name'] for i in r.json()['items']}
-        self.assertEqual(names, {'a.pdf', 'b.pdf'})  # both pending → awaiting
-        self.assertEqual(r.json()['awaiting_total'], 2)
+        rows = {c['name']: c for c in
+                self.client.get('/api/admin/files/companies/').json()['companies']}
+        self.assertEqual(rows['Acme']['unseen_count'], 0)
+        self.assertEqual(rows['Acme']['file_count'], 1)  # still there, just seen
 
-    def test_resolving_in_inbox_updates_customer_and_clears_queue(self):
+    def test_the_retired_review_endpoints_are_gone(self):
+        """Both were removed with the approve/reject loop. Asserting they 404
+        stops them being quietly reinstated by a merge."""
         self._login(self.admin)
-        # Approve f1 straight from the review endpoint (what the inbox calls).
-        r = self.client.patch(f'/api/admin/files/{self.f1.id}/review',
-                              data=json.dumps({'review_status': 'approved'}), content_type='application/json')
-        self.assertEqual(r.status_code, 200)
-        self.f1.refresh_from_db()
-        self.assertEqual(self.f1.review_status, 'approved')
-        # default inbox (awaiting) no longer lists f1; total drops
-        items = self.client.get('/api/admin/files/inbox/').json()
-        self.assertEqual({i['original_name'] for i in items['items']}, {'b.pdf'})
-        self.assertEqual(items['awaiting_total'], 1)
-        # status=all still shows both
-        allitems = self.client.get('/api/admin/files/inbox/?status=all').json()['items']
-        self.assertEqual(len({i['id'] for i in allitems}), 2)
-
-    def test_inbox_company_filter(self):
-        self._login(self.admin)
-        items = self.client.get(f'/api/admin/files/inbox/?company={self.globex.id}').json()['items']
-        self.assertEqual({i['original_name'] for i in items}, {'b.pdf'})
+        self.assertEqual(self.client.get('/api/admin/files/inbox/').status_code, 404)
+        self.assertEqual(
+            self.client.patch(f'/api/admin/files/{self.f1.id}/review',
+                              data='{}', content_type='application/json').status_code, 404)
 
     def test_activity_feed_admin_only_and_lists_events(self):
         from portal.views.files import log_activity
@@ -317,32 +314,32 @@ class ReviewAndChecklistTests(TestCase):
         s['portal_user_id'] = u.id
         s.save()
 
-    def test_admin_sets_review_and_revision_emails_customer(self):
-        self._login(self.admin)
-        mail.outbox = []
-        r = self.client.patch(f'/api/admin/files/{self.f.id}/review',
-                              data=json.dumps({'review_status': 'revision', 'notes': 'Fix page 2.'}),
-                              content_type='application/json')
-        self.assertEqual(r.status_code, 200)
-        self.f.refresh_from_db()
-        self.assertEqual(self.f.review_status, 'revision')
-        self.assertEqual(self.f.review_notes, 'Fix page 2.')
-        self.assertTrue(FileActivity.objects.filter(file=self.f, action='status_change').exists())
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('a@acme.com', mail.outbox[0].to)
+    def _customer_file(self):
+        data = self.client.get('/api/files/buckets/').json()
+        return next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
 
-    def test_customer_sees_notes_only_on_revision(self):
-        # pending → notes hidden from customer
-        self.f.review_status = 'pending'; self.f.review_notes = 'secret'; self.f.save()
+    def test_no_review_state_reaches_the_customer(self):
+        """The approve/reject loop is retired. Any leak of these keys puts a
+        permanent "AWAITING REVIEW" badge back on the customer's files for a
+        review that is never coming."""
+        self.f.review_status = 'pending'
+        self.f.review_notes = 'internal scribble'
+        self.f.save()
         self._login(self.cust)
-        data = self.client.get('/api/files/buckets/').json()
-        f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
-        self.assertEqual(f['review_notes'], '')
-        # revision → notes visible
-        self.f.review_status = 'revision'; self.f.save()
-        data = self.client.get('/api/files/buckets/').json()
-        f = next(x for b in data['buckets'] for x in b['files'] if x['id'] == self.f.id)
-        self.assertEqual(f['review_notes'], 'secret')
+        f = self._customer_file()
+        for key in ('review_status', 'review_notes'):
+            self.assertNotIn(key, f)
+        self.assertNotIn('internal scribble', json.dumps(f))
+
+    def test_the_seen_flag_is_staff_only(self):
+        """Whether we've opened their file is our business — surfacing it
+        would recreate the badge we just removed."""
+        self._login(self.cust)
+        self.assertIsNone(self._customer_file()['seen'])
+        self._login(self.admin)
+        r = self.client.get(f'/api/admin/files/companies/{self.acme.id}/').json()
+        f = next(x for b in r['buckets'] for x in b['files'] if x['id'] == self.f.id)
+        self.assertIs(f['seen'], False)
 
     def test_internal_comments_add_list_and_hidden_from_customer(self):
         self._login(self.admin)

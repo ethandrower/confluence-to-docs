@@ -1,0 +1,14 @@
+.git
+.claude
+.venv
+__pycache__/
+*.py[oc]
+node_modules/
+frontend/node_modules/
+frontend/dist/
+staticfiles/
+media/
+*.sqlite3
+.env
+.playwright-mcp/
+.DS_Store

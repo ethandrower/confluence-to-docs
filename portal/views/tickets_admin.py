@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from portal import jira_client, realtime, sla, ticket_notify
 from portal.decorators import require_portal_admin
-from portal.models import Company, JiraTicketLink, Ticket, TicketMessage
+from portal.models import Company, JiraTicketLink, PortalUser, Ticket, TicketMessage
 from portal.rate_limit import is_rate_limited
 from portal.views.tickets import (
     _clean_ccs, _message_dict, _ticket_dict, _with_message_count,
@@ -71,14 +71,34 @@ def _extract_jira_key(raw):
     return raw.upper()
 
 
+def _assignee_dict(t):
+    u = t.assignee
+    return {'id': u.id, 'email': u.email, 'name': u.name} if u else None
+
+
+def _watchers_list(t):
+    return [{'id': u.id, 'email': u.email, 'name': u.name}
+            for u in t.watchers.all()]
+
+
 def _admin_dict(t, message_count=None):
     d = _ticket_dict(t, message_count=message_count)
     d.update({
         'company': {'id': t.company_id, 'name': t.company.name},
         'cc_emails': t.cc_emails,
         'created_by_email': t.created_by.email if t.created_by else '',
-        # Staff-only: deliberately not added to _ticket_dict, which is what the
-        # customer endpoints return.
+        # Who it's for. `has_portal_access` is the bit staff need: false means
+        # this person only ever sees the thread by email, so a reply that says
+        # "see the portal" would be telling them to go somewhere they can't.
+        'requester': {
+            'email': t.requester_email or (t.requester.email if t.requester else ''),
+            'name': t.requester.name if t.requester else '',
+            'has_portal_access': bool(t.requester and t.requester.access_enabled),
+        } if (t.requester_id or t.requester_email) else None,
+        # Staff-only. These keys must never migrate into _ticket_dict,
+        # which the customer endpoints share.
+        'assignee': _assignee_dict(t),
+        'watchers': _watchers_list(t),
         'priority': t.priority,
         'sla': {
             'target': sla.target_label(t.priority),
@@ -222,9 +242,18 @@ def collection(request):
     if category not in dict(Ticket.CATEGORY_CHOICES):
         category = 'other'
 
+    # Resolve the named customer to a real account where one exists, so the
+    # ticket reaches them in the portal and not just by email. When it doesn't,
+    # the address is still recorded and the response says so — an agent who
+    # types an address with no account should find that out at create time,
+    # not from a customer who never saw the thread.
+    requester = (PortalUser.objects.filter(email__iexact=customer_email).first()
+                 if customer_email else None)
+
     user = request.portal_user
     ticket = Ticket.objects.create(
         company=company, created_by=user, subject=subject[:512],
+        requester=requester, requester_email=customer_email,
         category=category, cc_emails=ccs,
         # Brand-new on-behalf ticket: nothing has been asked of the customer
         # yet, so 'open' (not 'waiting on customer', which read as misleading
@@ -276,6 +305,16 @@ def reply(request, number):
     is_internal = bool(data.get('is_internal'))
 
     user = request.portal_user
+    # Answering an unclaimed ticket is picking it up. Doing it implicitly keeps
+    # ownership honest without asking agents to remember a second click; an
+    # explicit reassign still wins, since this only fires when nobody owns it.
+    claimed = False
+    if t.assignee_id is None:
+        t.assignee = user
+        t.save(update_fields=['assignee', 'updated_at'])
+        log_ticket_activity(t, 'assigned', actor=user,
+                            assignee=(user.name or user.email), auto=True)
+        claimed = True
     m = TicketMessage.objects.create(
         ticket=t, author=user, author_email=user.email, body=body,
         origin=TicketMessage.ORIGIN_STAFF, is_internal=is_internal)
@@ -295,7 +334,9 @@ def reply(request, number):
                          'message': dict(_message_dict(m),
                                          is_internal=m.is_internal,
                                          delivery_detail=m.delivery_detail),
-                         'status': t.status})
+                         'status': t.status,
+                         'assignee': _assignee_dict(t),
+                         'auto_claimed': claimed})
 
 
 @require_http_methods(['POST'])
@@ -392,6 +433,7 @@ def set_jira(request, number):
         return JsonResponse({'error': 'Invalid request body'}, status=400)
     action = data.get('action', 'add')
     key = _extract_jira_key(data.get('key'))
+    warning = ''
     if action == 'remove':
         JiraTicketLink.objects.filter(ticket=t, key=key).delete()
         log_ticket_activity(t, 'jira_unlinked', actor=request.portal_user, key=key)
@@ -400,9 +442,22 @@ def set_jira(request, number):
             return JsonResponse(
                 {'error': 'Enter a Jira key (e.g. SUP-374) or paste a Jira issue URL'},
                 status=400)
+        # Confirm the issue is real before recording the link. A mistyped key
+        # matches the format fine and would otherwise link silently, leaving a
+        # permanent "status unavailable" the agent can't tell apart from Jira
+        # being down. Only a definite 404 rejects — an outage or a permissions
+        # error still lets the link through, with a warning.
+        state, data_ = jira_client.verify_issue(key)
+        if state == 'missing':
+            return JsonResponse(
+                {'error': f"{key} doesn't exist in Jira, or you don't have "
+                          "access to it. Check the key and try again."},
+                status=400)
+        warning = ('' if state == 'ok' else
+                   f'Linked {key}, but Jira could not be reached to confirm it '
+                   'or read its status.')
         link, created = JiraTicketLink.objects.get_or_create(ticket=t, key=key)
         if created:
-            data_ = jira_client.fetch_issue(key)  # populate status immediately
             if data_:
                 link.cached_status = data_['status'][:64]
                 link.cached_status_category = data_['status_category'][:32]
@@ -415,7 +470,8 @@ def set_jira(request, number):
             # block the admin's "Link" click if Jira is slow.
             _defer(lambda: _nudge_reply_in_portal(t, key))
     t.save(update_fields=['updated_at'])
-    return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t)})
+    return JsonResponse({'ok': True, 'jira_links': _refresh_jira_links(t),
+                         'warning': warning})
 
 
 @require_http_methods(['POST'])
@@ -434,3 +490,156 @@ def set_cc(request, number):
                         cc_emails=t.cc_emails)
     transaction.on_commit(lambda: realtime.notify_ticket(t, 'cc_changed'))
     return JsonResponse({'ok': True, 'cc_emails': t.cc_emails})
+
+
+@require_http_methods(['GET'])
+@require_portal_admin
+def escalation_options(request, number):
+    """What the escalate form needs: targets, issue types, priorities, and the
+    pre-composed description the agent can edit before filing."""
+    from portal import escalation
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    projects = escalation.allowed_projects()
+    project = request.GET.get('project') or (projects[0] if projects else '')
+    opts = escalation.escalation_options(project) if project else {
+        'issue_types': [], 'priorities': []}
+    return JsonResponse({
+        'projects': projects,
+        'project': project,
+        'issue_types': opts.get('issue_types', []),
+        'priorities': opts.get('priorities', []),
+        'summary': f'[{t.display_number}] {t.subject}'[:255],
+        'description': escalation.compose_description(t, _portal_ticket_url(t)),
+        'already_linked': [l.key for l in t.jira_links.all()],
+    })
+
+
+def _portal_ticket_url(ticket):
+    base = getattr(settings, 'FRONTEND_URL', '').rstrip('/')
+    return f'{base}/manage/tickets/{ticket.number}' if base else ''
+
+
+@require_http_methods(['POST'])
+@require_portal_admin
+def escalate(request, number):
+    """Escalate this ticket into a real Jira issue (agent-initiated)."""
+    from portal import escalation
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+
+    project = (data.get('project') or '').strip()
+    issue_type_id = (data.get('issue_type_id') or '').strip()
+    summary = (data.get('summary') or '').strip()
+    description = (data.get('description') or '').strip()
+    if not (project and issue_type_id and summary and description):
+        return JsonResponse(
+            {'error': 'project, issue_type_id, summary and description are required'},
+            status=400)
+
+    result = escalation.escalate(
+        t, project=project, issue_type_id=issue_type_id, summary=summary,
+        description=description, priority_id=data.get('priority_id') or None,
+        actor=request.portal_user, portal_url=_portal_ticket_url(t))
+
+    if not result.get('key'):
+        return JsonResponse({'error': result.get('error') or 'Escalation failed'},
+                            status=502)
+
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        t, 'escalated', to_company=False))
+    return JsonResponse({'ok': True, 'key': result['key'],
+                         'epic_key': result.get('epic_key'),
+                         'sprint_id': result.get('sprint_id'),
+                         'warnings': result.get('warnings', []),
+                         'jira_links': _refresh_jira_links(t)})
+
+
+def _agents_qs():
+    """Agents eligible to own a ticket."""
+    return PortalUser.objects.filter(
+        role__in=[PortalUser.ROLE_ADMIN, PortalUser.ROLE_OWNER],
+        access_enabled=True,
+    ).order_by('name', 'email')
+
+
+@require_http_methods(['GET'])
+@require_portal_admin
+def agents(request):
+    """Assignable agents, for the assignee and watcher pickers."""
+    return JsonResponse({'agents': [
+        {'id': u.id, 'email': u.email, 'name': u.name} for u in _agents_qs()
+    ]})
+
+
+@require_http_methods(['POST'])
+@require_portal_admin
+def set_assignee(request, number):
+    """Assign a ticket, claim it, or hand it back to the queue.
+
+    Body: {"assignee_id": <id>} to assign, {"assignee_id": null} to unassign,
+    or {"assign_to_me": true} for the one-click claim.
+    """
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+
+    actor = request.portal_user
+    if data.get('assign_to_me'):
+        assignee = actor
+    elif not data.get('assignee_id'):
+        assignee = None
+    else:
+        assignee = _agents_qs().filter(id=data.get('assignee_id')).first()
+        if not assignee:
+            # Only agents can own a ticket — assigning a customer would put a
+            # name on it belonging to someone with no admin access at all.
+            return JsonResponse({'error': 'That user is not an agent'}, status=400)
+
+    if t.assignee_id == (assignee.pk if assignee else None):
+        return JsonResponse({'ok': True, 'assignee': _assignee_dict(t)})
+
+    t.assignee = assignee
+    t.save(update_fields=['assignee', 'updated_at'])
+    log_ticket_activity(
+        t, 'assigned' if assignee else 'unassigned', actor=actor,
+        assignee=(assignee.name or assignee.email) if assignee else '')
+    if assignee:
+        _defer(lambda: ticket_notify.notify_assigned(t, actor=actor))
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        t, 'assigned', to_company=False))
+    return JsonResponse({'ok': True, 'assignee': _assignee_dict(t)})
+
+
+@require_http_methods(['POST'])
+@require_portal_admin
+def set_watchers(request, number):
+    """Replace the internal watcher list. Staff-only — watchers are never
+    serialized to the customer, unlike cc_emails."""
+    t = _get(number)
+    if not t:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+    ids = data.get('watcher_ids')
+    if not isinstance(ids, list):
+        return JsonResponse({'error': 'watcher_ids must be a list'}, status=400)
+    chosen = list(_agents_qs().filter(id__in=ids))
+    t.watchers.set(chosen)
+    log_ticket_activity(t, 'watchers_changed', actor=request.portal_user,
+                        watchers=[u.email for u in chosen])
+    transaction.on_commit(lambda: realtime.notify_ticket(
+        t, 'watchers_changed', to_company=False))
+    return JsonResponse({'ok': True, 'watchers': _watchers_list(t)})

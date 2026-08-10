@@ -52,15 +52,17 @@ class PortalUserSerializer(serializers.ModelSerializer):
 
 class SharedFileSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.SerializerMethodField()
-    review_notes = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
+    seen = serializers.SerializerMethodField()
 
     class Meta:
         model = SharedFile
+        # No review_status / review_notes: the approve-or-reject loop is
+        # retired (see the SharedFile docstring). A customer's file list is
+        # now just their files.
         fields = [
             'id', 'original_name', 'size_bytes', 'mime_type', 'state',
-            'review_status', 'review_notes', 'uploaded_at', 'uploaded_by_name',
-            'comment_count',
+            'uploaded_at', 'uploaded_by_name', 'comment_count', 'seen',
         ]
 
     def get_comment_count(self, obj):
@@ -71,12 +73,13 @@ class SharedFileSerializer(serializers.ModelSerializer):
         u = obj.uploaded_by
         return (u.name or u.email) if u else None
 
-    def get_review_notes(self, obj):
-        # Staff always see notes; customers only when the file needs their
-        # attention (in review / needs revision).
-        if self.context.get('staff') or obj.review_status in ('review', 'revision'):
-            return obj.review_notes
-        return ''
+    def get_seen(self, obj):
+        """Staff-only: has anyone here looked at this yet. Absent for
+        customers — whether we've opened their file is our business, and
+        surfacing it would recreate the review badge we just removed."""
+        if not self.context.get('staff'):
+            return None
+        return obj.processed
 
 
 class ChecklistItemSerializer(serializers.ModelSerializer):
@@ -100,6 +103,9 @@ class BucketSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'kind', 'title', 'description', 'due_at', 'status',
             'requested_by_name', 'created_at', 'files', 'checklist',
+            # The client builds the tree from a flat list — one request, and
+            # re-parenting a folder doesn't invalidate a nested payload.
+            'parent', 'required',
         ]
 
     def get_files(self, obj):

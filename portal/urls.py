@@ -8,11 +8,11 @@ urlpatterns = [
     path('admin/companies/<int:company_id>/', admin_api.company_detail, name='admin-company-detail'),
     path('admin/users/', admin_api.users, name='admin-users'),
     path('admin/users/<int:user_id>/', admin_api.user_detail, name='admin-user-detail'),
+    path('admin/demo-accounts/', admin_api.demo_accounts, name='admin-demo-accounts'),
     path('admin/sync/', admin_api.sync_docs, name='admin-sync'),
     path('admin/add-page/', admin_api.add_page, name='admin-add-page'),
 
     # Admin — file sharing
-    path('admin/files/inbox/', files_admin.inbox, name='admin-files-inbox'),
     path('admin/files/activity/', files_admin.activity, name='admin-files-activity'),
     path('admin/files/<int:file_id>/processed', files_admin.set_processed, name='admin-files-processed'),
     path('admin/files/companies/', files_admin.companies, name='admin-files-companies'),
@@ -20,7 +20,6 @@ urlpatterns = [
     path('admin/files/companies/<int:company_id>/download-all', files_admin.company_download_all, name='admin-files-zip'),
     path('admin/files/requests/', files_admin.create_request, name='admin-files-create-request'),
     path('admin/files/requests/<int:bucket_id>/', files_admin.update_request, name='admin-files-update-request'),
-    path('admin/files/<int:file_id>/review', files_admin.set_review, name='admin-files-review'),
     path('admin/files/<int:file_id>/comments', files_admin.file_comments, name='admin-files-comments'),
     path('admin/files/checklist/', files_admin.create_checklist_item, name='admin-files-checklist-create'),
     path('admin/files/checklist/<int:item_id>/', files_admin.checklist_item, name='admin-files-checklist-item'),
@@ -29,6 +28,9 @@ urlpatterns = [
 
     # File sharing (customer + shared)
     path('files/buckets/', files.buckets_list, name='files-buckets'),
+    path('files/folders/', files.folder_create, name='files-folder-create'),
+    path('files/folders/<int:folder_id>/', files.folder_detail, name='files-folder'),
+    path('files/move/', files.files_move, name='files-move'),
     path('files/upload-init', files.upload_init, name='files-upload-init'),
     path('files/upload-complete', files.upload_complete, name='files-upload-complete'),
     path('files/<int:file_id>', files.file_detail, name='files-file'),
@@ -72,4 +74,9 @@ urlpatterns = [
     path('admin/tickets/<int:number>/priority/', tickets_admin.set_priority, name='admin-ticket-priority'),
     path('admin/tickets/<int:number>/jira/', tickets_admin.set_jira, name='admin-ticket-jira'),
     path('admin/tickets/<int:number>/cc/', tickets_admin.set_cc, name='admin-ticket-cc'),
+    path('admin/tickets/<int:number>/assignee/', tickets_admin.set_assignee, name='admin-ticket-assignee'),
+    path('admin/tickets/<int:number>/watchers/', tickets_admin.set_watchers, name='admin-ticket-watchers'),
+    path('admin/agents/', tickets_admin.agents, name='admin-agents'),
+    path('admin/tickets/<int:number>/escalate/options/', tickets_admin.escalation_options, name='admin-ticket-escalate-options'),
+    path('admin/tickets/<int:number>/escalate/', tickets_admin.escalate, name='admin-ticket-escalate'),
 ]

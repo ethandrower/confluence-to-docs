@@ -137,9 +137,39 @@ export const useTicketsStore = defineStore('tickets', () => {
     return api(`/admin/tickets/${number}/messages/${messageId}/resend/`, { method: 'POST' })
   }
 
+  async function adminAgents() {
+    return api('/admin/agents/')
+  }
+
+  async function adminEscalateOptions(number, project) {
+    const q = project ? `?project=${encodeURIComponent(project)}` : ''
+    return api(`/admin/tickets/${number}/escalate/options/${q}`)
+  }
+
+  async function adminEscalate(number, payload) {
+    return api(`/admin/tickets/${number}/escalate/`, {
+      method: 'POST', body: JSON.stringify(payload),
+    })
+  }
+
+  // payload is {assign_to_me: true} to claim, or {assignee_id: <id>|null}.
+  async function adminSetAssignee(number, payload) {
+    return api(`/admin/tickets/${number}/assignee/`, {
+      method: 'POST', body: JSON.stringify(payload),
+    })
+  }
+
+  async function adminSetWatchers(number, watcherIds) {
+    return api(`/admin/tickets/${number}/watchers/`, {
+      method: 'POST', body: JSON.stringify({ watcher_ids: watcherIds }),
+    })
+  }
+
   return {
     tickets, current, loading, error, fetchTickets, fetchTicket, createTicket, reply,
-    adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminSetPriority, adminJiraLink, adminSetCc, adminCreate,
-    adminResend,
+    adminInbox, adminList, adminTicket, adminReply, adminSetStatus, adminSetPriority,
+    adminJiraLink, adminSetCc, adminCreate,
+    adminResend, adminAgents, adminSetAssignee, adminSetWatchers,
+    adminEscalateOptions, adminEscalate,
   }
 })

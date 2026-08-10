@@ -164,6 +164,35 @@ cd frontend && npm run dev
 
 Open `http://localhost:5174`.
 
+### Run with Docker (alternative)
+
+`docker compose up` brings up the whole stack — Postgres, Redis, the ASGI API
+and the Vite dev server — with no Python, Node or database installed on the
+host. You still need a `.env` (step 1); compose overrides `DATABASE_URL`,
+`REDIS_URL` and `ALLOWED_HOSTS` so the same file works either way.
+
+```bash
+cp .env.example .env        # fill in the Confluence values
+docker compose up           # http://localhost:5174
+
+docker compose exec web python manage.py sync_confluence
+docker compose exec web python manage.py create_test_users   # prints magic links
+```
+
+Both source trees are bind-mounted, so Django's autoreload and Vite's HMR pick
+up edits without a rebuild. Rebuild only when dependencies change:
+`docker compose build web`.
+
+The image is `Dockerfile.dev`, not `Dockerfile` — production deploys through
+Dokku's buildpacks, and a root `Dockerfile` would capture its builder
+auto-detection and ship this dev image instead. Don't rename it.
+
+This path runs **Postgres and a real Redis channel layer**, matching production
+more closely than the SQLite + in-memory default — full-text search and
+cross-worker WebSocket broadcasts behave as they do on Dokku. Postgres is
+published on host port `5433` and Redis on `6380` so they don't collide with
+anything already running locally.
+
 ### Keeping docs in sync
 
 **Manual:** `python manage.py sync_confluence` (full) or `--incremental` (changed pages only).
@@ -194,6 +223,45 @@ celery -A citemed beat --loglevel=info
 | `ws://…/ws/tickets/<number>/` | WS | Live thread updates (customer or staff) |
 | `ws://…/ws/admin/tickets/` | WS | Live inbox/badge updates (staff) |
 | `ws://…/ws/customer/tickets/` | WS | Live customer ticket-list updates |
+
+### Integration API (`/api/v1/`)
+
+A **separate**, read-only, machine-to-machine surface for systems that need
+support data across every customer — RevenueHub's health scoring, today. It is
+not an extension of the table above and shares no authentication with it.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/companies/` | GET | Discovery: id, name, contract end, ticket counts, last ticket. Populate a consumer's account-id mapping from this once, instead of matching on names forever |
+| `/api/v1/tickets/` | GET | Ticket metadata. Filters: `company_id`, `email` (+`include_cc`), `status`, `priority`, `created_since`, `updated_since`; cursor paginated |
+| `/api/v1/tickets/<number>/` | GET | One ticket, same shape |
+| `/api/v1/schema/` | GET | OpenAPI 3 schema (drf-spectacular) |
+| `/api/v1/docs/` | GET | Swagger UI |
+
+```bash
+python manage.py create_api_client "RevenueHub"   # prints the token once
+curl -H "Authorization: Bearer csp_…" https://…/api/v1/tickets/?updated_since=2026-08-01T00:00:00Z
+```
+
+Four rules hold this surface together, and all four are asserted in
+`portal/tests/test_api_v1.py`:
+
+- **Read-only.** GET only; there is no write path in the namespace.
+- **Two doors, one key each.** The bearer authenticator never falls back to the
+  session, and the session endpoints never accept a bearer token. A token
+  authenticates nothing under `/api/`; a session authenticates nothing under
+  `/api/v1/`.
+- **No conversation content.** Payloads carry `message_count` (customer-visible
+  messages only) and never a message body, an internal note, a watcher or a
+  Jira key.
+- **It crosses the tenant boundary on purpose.** Unlike every other reader in
+  the portal it does not go through `Ticket.for_user`, because its consumer is
+  a cross-customer dashboard. The token is therefore the only thing protecting
+  it — revoke one in the Django admin under *Portal → API clients*.
+
+Statuses and priorities are returned in the portal's own vocabulary, unmapped.
+Consumers with a smaller enum collapse it on ingest; note `csm_direct` is a
+routing origin rather than a severity and has no clean severity equivalent.
 
 ## Project structure
 

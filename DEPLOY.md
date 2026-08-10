@@ -48,8 +48,14 @@ dokku config:set citemed-docs \
   MAILGUN_WEBHOOK_SIGNING_KEY=<mailgun-http-webhook-signing-key> \
   DEFAULT_FROM_EMAIL='CiteMed Support <noreply@notification.citemed.com>' \
   SUPPORT_EMAIL=support@citemed.com \
-  PORTAL_MAGIC_LINK_EXPIRY_MINUTES=15
+  PORTAL_MAGIC_LINK_EXPIRY_MINUTES=15 \
+  STAFF_EMAIL_DOMAINS=citemed.com
 ```
+
+`STAFF_EMAIL_DOMAINS` makes a first-time sign-in from one of those domains an
+agent automatically. Leave it unset and the portal stays fully closed — every
+agent must be created by hand. It only applies to brand-new accounts, so a user
+you disable or demote is never re-upgraded by signing in again.
 
 To reuse Mailgun creds from another Dokku app on the same host:
 ```bash
@@ -138,6 +144,64 @@ A freshly provisioned Postgres has zero pages. Two paths:
    # Load it inside the app container:
    dokku run citemed-docs python manage.py loaddata /tmp/portal-snapshot.json
    ```
+
+## Pre-flight checklist
+
+Run through this before a release that carries new features.
+
+**1. Confirm Dokku is still building with buildpacks, not a Dockerfile.**
+
+The repo contains `Dockerfile.dev` and `docker-compose.yml` for local development.
+They're named so Dokku ignores them — its builder auto-detection treats a root
+`Dockerfile` as the build strategy, which would deploy the dev image (runserver,
+no frontend build) instead of the Node+Python buildpack chain. Never rename
+`Dockerfile.dev` to `Dockerfile`. To be certain:
+
+```bash
+dokku builder:report citemed-docs          # expect herokuish, not dockerfile
+```
+
+**2. Set any new config.** Missing vars don't error — features default to off
+and fail silently, which is harder to spot than a crash:
+
+```bash
+# Staff auto-provisioning. Unset means NOBODY is auto-provisioned and every
+# agent has to be created by hand.
+dokku config:set citemed-docs STAFF_EMAIL_DOMAINS=citemed.com
+
+# Jira escalation targets. The defaults (ECD,AI and epic type 10000) are
+# already correct for this Jira site — set them only to change the targets.
+# dokku config:set citemed-docs JIRA_ESCALATION_PROJECTS=ECD,AI
+# dokku config:set citemed-docs JIRA_EPIC_ISSUE_TYPE_ID=10000
+```
+
+**3. Confluence creds must be REAL, not the placeholders above.** The Jira
+client reuses `CONFLUENCE_DOMAIN` / `CONFLUENCE_EMAIL` / `CONFLUENCE_API_TOKEN`.
+With placeholders, escalation and live Jira status both no-op silently — the
+button appears to work and nothing is ever created:
+
+```bash
+dokku config:show citemed-docs | grep -E 'CONFLUENCE_(EMAIL|API_TOKEN)'
+```
+
+**4. Redis, if you want real-time across workers.** The `Procfile` runs two
+web workers; without `REDIS_URL` each has its own in-memory channel layer, so a
+WebSocket broadcast only reaches clients on the worker that produced it. The
+client falls back to a 30s poll, so nothing breaks — it's just not live:
+
+```bash
+dokku plugin:install https://github.com/dokku/dokku-redis.git   # one-time
+dokku redis:create citemed-realtime
+dokku redis:link citemed-realtime citemed-docs                  # sets REDIS_URL
+```
+
+**5. Check pending migrations.** Additive and nullable ones are safe to run
+against a live database; anything that rewrites a table deserves a maintenance
+window:
+
+```bash
+dokku run citemed-docs python manage.py showmigrations portal | grep '\[ \]'
+```
 
 ## Deploy
 

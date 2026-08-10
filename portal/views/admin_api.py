@@ -7,9 +7,11 @@ import json
 import re
 import subprocess
 import sys
+from urllib.parse import quote
 
 from django.conf import settings
 from django.http import JsonResponse
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from portal.decorators import require_portal_admin
@@ -262,6 +264,35 @@ def add_page(request):
     if not page:
         return JsonResponse({'error': 'The page could not be added.'}, status=502)
     return JsonResponse({'ok': True, 'message': f'Added “{page.title}”.', 'slug': page.slug})
+
+
+@require_http_methods(['GET'])
+@require_portal_admin
+def demo_accounts(request):
+    """Sandbox customer accounts staff can sign in as, to see the customer view.
+
+    Returns the ready-made `auth.demo_login` URL for each, because a session
+    cookie belongs to the whole browser rather than a single tab — following
+    one of these in the current window would replace the agent's own session.
+    The intended use is to paste the URL into a private window and keep both
+    perspectives open side by side, which the UI says out loud.
+    """
+    rows = (PortalUser.objects
+            .select_related('company')
+            .filter(is_demo=True, access_enabled=True)
+            .order_by('email'))
+    # Built from FRONTEND_URL, not build_absolute_uri: in dev the Vite proxy
+    # forwards with changeOrigin, so the request Host here is the internal
+    # service name and an absolute URL derived from it ('http://web:8001/…')
+    # is not reachable from the browser. FRONTEND_URL is the origin the user
+    # actually types, in dev and in production alike.
+    base = settings.FRONTEND_URL.rstrip('/')
+    return JsonResponse({'accounts': [{
+        'email': u.email,
+        'name': u.name,
+        'company': u.company.name if u.company else None,
+        'login_url': f"{base}{reverse('demo-login')}?email={quote(u.email)}",
+    } for u in rows]})
 
 
 @require_http_methods(['POST'])

@@ -19,6 +19,20 @@
         <div class="atd-head-top">
           <p class="atd-number">{{ ticket.display_number }} · {{ ticket.company.name }}</p>
           <div class="atd-head-controls">
+            <!-- Ownership. Unassigned reads as "nobody has this yet", which is
+                 the state the queue exists to clear. -->
+            <select class="atd-assignee" :value="ticket.assignee?.id || ''"
+                    :disabled="assigneeSaving" aria-label="Assigned agent"
+                    @change="onAssigneeChange($event.target.value)">
+              <option value="">Unassigned</option>
+              <option v-for="a in agents" :key="a.id" :value="a.id">
+                {{ a.name || a.email }}
+              </option>
+            </select>
+            <button v-if="ticket.assignee?.id !== auth.user?.id" type="button"
+                    class="btn-outline sm" :disabled="assigneeSaving"
+                    @click="claim">Assign to me</button>
+            <EscalateDialog :ticket="ticket" @escalated="onEscalated" />
             <select
               class="atd-priority-select"
               :class="`prio--${priorityTone(ticket.priority)}`"
@@ -36,6 +50,31 @@
           </div>
         </div>
         <h1 ref="subjectHeadingEl" tabindex="-1" class="atd-subject-h">{{ ticket.subject }}</h1>
+        <!-- Only set on staff on-behalf tickets, where created_by is the agent
+             and this is the person the ticket is actually for. -->
+        <p v-if="ticket.requester" class="atd-requester">
+          For <strong>{{ ticket.requester.name || ticket.requester.email }}</strong>
+          <span v-if="ticket.requester.name" class="atd-requester-email">{{ ticket.requester.email }}</span>
+          <span v-if="!ticket.requester.has_portal_access" class="atd-requester-warn"
+                title="No portal account — they only see this thread by email">
+            email only
+          </span>
+        </p>
+
+        <!-- Escalations, in the header rather than only behind Details: once a
+             ticket has become engineering work, "which issue, and where has it
+             got to" is what the agent needs at a glance. -->
+        <p v-if="ticket.jira_links && ticket.jira_links.length" class="atd-jira">
+          <span class="atd-jira-label">Escalated</span>
+          <a v-for="jl in ticket.jira_links" :key="jl.key" class="atd-jira-chip"
+             :href="jl.url" target="_blank" rel="noopener noreferrer"
+             :title="jl.summary || jl.key">
+            <span class="atd-jira-key">{{ jl.key }}</span>
+            <span v-if="jl.status" class="atd-jira-status"
+                  :class="`atd-jira-status--${jl.status_category || 'new'}`">{{ jl.status }}</span>
+            <span v-else class="atd-jira-status atd-jira-status--muted">status unavailable</span>
+          </a>
+        </p>
       </header>
 
       <p v-if="actionError" class="atd-action-error" role="alert">
@@ -69,6 +108,23 @@
                   <button class="btn-outline sm" :disabled="jiraSaving || !jiraDraft.trim()" @click="onJira('add', jiraDraft)">{{ jiraSaving ? '…' : 'Link' }}</button>
                 </div>
                 <p class="ctrl-hint">Read-only status from Jira, for internal tracking. Never shown to the customer.</p>
+              </div>
+              <div class="ctrl"><span>Watching (internal)</span>
+                <ul class="watch-list">
+                  <li v-for="a in agents" :key="a.id" class="watch-item">
+                    <label>
+                      <input type="checkbox" :value="a.id"
+                             :checked="watcherIds.includes(a.id)"
+                             :disabled="watchersSaving"
+                             @change="toggleWatcher(a.id)" />
+                      <span>{{ a.name || a.email }}</span>
+                    </label>
+                  </li>
+                </ul>
+                <p class="ctrl-hint">
+                  Agents who get follow-up email on this ticket. Internal — unlike CC,
+                  watchers are never shown to the customer.
+                </p>
               </div>
               <label class="ctrl"><span>CC</span>
                 <div class="ctrl-inline">
@@ -138,9 +194,11 @@ import { ref, watch, computed, nextTick } from 'vue'
 import { PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent } from 'reka-ui'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useTicketsStore } from '@/stores/tickets'
+import { useAuthStore } from '@/stores/auth'
 import EmailChipsInput from '@/components/support/EmailChipsInput.vue'
 import MessageThread from '@/components/support/MessageThread.vue'
 import StatusMenu from '@/components/support/StatusMenu.vue'
+import EscalateDialog from '@/components/support/EscalateDialog.vue'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
 import { statusLabel, fullDate, priorityLabel, priorityTone, PRIORITY_KEYS } from '@/lib/ticketStatus'
@@ -153,11 +211,14 @@ const props = defineProps({
 const emit = defineEmits(['back', 'updated', 'refreshed'])
 
 const store = useTicketsStore()
+const auth = useAuthStore()
 
 // Activity is a state-change AUDIT, not a second copy of the conversation:
 // replies and internal notes live in the thread, so they're excluded here.
 // What remains is what you can't see by reading the messages.
-const AUDIT_ACTIONS = new Set(['created', 'status_changed', 'priority_changed', 'jira_linked', 'jira_unlinked', 'cc_changed'])
+const AUDIT_ACTIONS = new Set(['created', 'status_changed', 'priority_changed',
+                               'jira_linked', 'jira_unlinked', 'cc_changed',
+                               'assigned', 'unassigned', 'watchers_changed'])
 const auditEvents = computed(() => (props.ticket?.activity || []).filter((a) => AUDIT_ACTIONS.has(a.action)))
 
 function activityLabel(a) {
@@ -178,6 +239,20 @@ function activityLabel(a) {
   }
   if (a.action === 'cc_changed') {
     return 'CC recipients updated'
+  }
+  // `auto` marks the implicit claim that happens when an unassigned agent
+  // replies — worth distinguishing from a deliberate assignment.
+  if (a.action === 'assigned') {
+    const who = a.detail?.assignee
+    if (!who) return 'Assigned'
+    return a.detail?.auto ? `Claimed by ${who} on reply` : `Assigned to ${who}`
+  }
+  if (a.action === 'unassigned') {
+    return 'Returned to the queue'
+  }
+  if (a.action === 'watchers_changed') {
+    const n = (a.detail?.watchers || []).length
+    return n ? `Watchers: ${a.detail.watchers.join(', ')}` : 'Watchers cleared'
   }
   return a.action
 }
@@ -296,6 +371,65 @@ watch(() => props.ticket?.number, (n, old) => {
   }
 })
 
+// Ownership. The agent list is small and rarely changes, so it's fetched once
+// on first use rather than per ticket.
+const agents = ref([])
+const assigneeSaving = ref(false)
+
+async function loadAgents() {
+  if (agents.value.length) return
+  try {
+    const res = await store.adminAgents()
+    agents.value = res.agents || []
+  } catch {
+    // Non-fatal: the picker stays empty, "Assign to me" still works.
+  }
+}
+loadAgents()
+
+async function setAssignee(payload) {
+  if (!props.ticket) return
+  assigneeSaving.value = true
+  actionError.value = ''
+  try {
+    const res = await store.adminSetAssignee(props.ticket.number, payload)
+    emit('updated', { assignee: res.assignee })
+  } catch (e) {
+    actionError.value = e.message || 'Could not change the assignee.'
+  } finally {
+    assigneeSaving.value = false
+  }
+}
+
+// The new Jira link carries live status, so surface it straight away rather
+// than waiting for the next poll.
+function onEscalated(res) {
+  if (res?.jira_links) emit('updated', { jira_links: res.jira_links })
+}
+
+const claim = () => setAssignee({ assign_to_me: true })
+const onAssigneeChange = (id) => setAssignee({ assignee_id: id ? Number(id) : null })
+
+const watchersSaving = ref(false)
+const watcherIds = computed(() => (props.ticket?.watchers || []).map(w => w.id))
+
+async function toggleWatcher(id) {
+  if (!props.ticket) return
+  const next = watcherIds.value.includes(id)
+    ? watcherIds.value.filter(w => w !== id)
+    : [...watcherIds.value, id]
+  watchersSaving.value = true
+  actionError.value = ''
+  try {
+    const res = await store.adminSetWatchers(props.ticket.number, next)
+    emit('updated', { watchers: res.watchers })
+  } catch (e) {
+    actionError.value = e.message || 'Could not update watchers.'
+  } finally {
+    watchersSaving.value = false
+  }
+}
+
 const statusSaving = ref(false)
 const prioritySaving = ref(false)
 async function onStatusChange(key) {
@@ -339,6 +473,9 @@ async function onJira(action, key) {
     const res = await store.adminJiraLink(props.ticket.number, action, key)
     if (action === 'add') jiraDraft.value = ''
     emit('updated', { jira_links: res.jira_links })
+    // The link was recorded but Jira couldn't confirm it — worth saying, since
+    // the status chip will read "unavailable" for reasons that aren't the key.
+    if (res.warning) actionError.value = res.warning
   } catch (e) {
     actionError.value = e.message || 'Could not update Jira links.'
   } finally {
@@ -375,7 +512,8 @@ async function onSendReply() {
     replyBody.value = ''
     replyInternal.value = false
     pending.value = []
-    emit('updated', { message: res.message, status: res.status })
+    // res.assignee reflects the auto-claim when this reply picked the ticket up.
+    emit('updated', { message: res.message, status: res.status, assignee: res.assignee })
     nextTick(() => threadRef.value?.scrollToBottom(true))
   } catch (e) {
     pending.value = []
@@ -403,7 +541,10 @@ function onComposerKeydown(e) {
 .atd-back:hover { color: var(--foreground); background: var(--muted); }
 .atd-back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .atd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.atd-head-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* Six things live here now (assignee, claim, escalate, priority, status, and
+   the SLA target), so this wraps rather than squashing them on a narrow
+   split-pane. */
+.atd-head-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 /* The target is context, not a control — quiet unless it has been missed. */
 .atd-sla { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
 .atd-sla--breached { color: var(--destructive); font-weight: 650; }
@@ -422,6 +563,33 @@ function onComposerKeydown(e) {
 .atd-priority-select.prio--info { color: var(--info); border-color: color-mix(in srgb, var(--info) 40%, var(--border)); }
 .atd-number { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 700; color: var(--muted-foreground); margin: 0; }
 .atd-subject-h { font-family: var(--font-ui); font-size: 1.2rem; font-weight: 650; letter-spacing: -0.01em; color: var(--foreground); margin: 0; }
+
+/* Ownership controls in the header. */
+.atd-assignee { height: 28px; max-width: 190px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); font-family: var(--font-ui); font-size: 0.78rem; cursor: pointer; }
+.atd-assignee:disabled { opacity: 0.6; cursor: default; }
+
+/* Internal watcher checkboxes. */
+.watch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto; }
+.watch-item label { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; cursor: pointer; }
+.watch-item input { cursor: pointer; }
+
+/* Who an on-behalf ticket is for. */
+.atd-requester { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; font-size: 0.82rem; color: var(--muted-foreground); }
+.atd-requester strong { font-weight: 600; color: var(--foreground); }
+.atd-requester-email { color: var(--muted-foreground); }
+/* Linked Jira issues, surfaced in the header. */
+.atd-jira { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; font-size: 0.82rem; }
+.atd-jira-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
+.atd-jira-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; text-decoration: none; background: var(--background); }
+.atd-jira-chip:hover { background: var(--muted); }
+.atd-jira-key { font-family: var(--font-ui); font-size: 12.5px; font-weight: 650; color: var(--brand-accent, var(--primary)); }
+.atd-jira-status { padding: 0 6px; border-radius: 999px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.atd-jira-status--new { color: var(--muted-foreground); background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); }
+.atd-jira-status--indeterminate { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.atd-jira-status--done { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); }
+.atd-jira-status--muted { color: var(--muted-foreground); font-weight: 400; font-style: italic; text-transform: none; }
+
+.atd-requester-warn { padding: 1px 7px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, transparent); border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent); }
 
 .atd-action-error { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 28px; font-size: 0.82rem; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-bottom: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); flex-shrink: 0; }
 .atd-action-error-x { margin-left: auto; flex-shrink: 0; border: none; background: none; color: var(--destructive); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px; }

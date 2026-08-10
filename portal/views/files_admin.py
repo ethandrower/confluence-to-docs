@@ -20,7 +20,7 @@ _ZIP_SPOOL = 64 * 1024 * 1024   # keep ≤64 MB in RAM, then spill to disk
 from portal import file_storage, file_notify
 from portal.decorators import require_portal_admin
 from portal.models import Company, Bucket, SharedFile, ChecklistItem, FileActivity, FileComment, FileComment
-from portal.serializers import BucketSerializer, SharedFileSerializer, ChecklistItemSerializer
+from portal.serializers import BucketSerializer, ChecklistItemSerializer
 from portal.views.files import get_general_bucket, log_activity
 
 
@@ -40,17 +40,24 @@ def _parse_due(value):
 
 @require_portal_admin
 def companies(request):
+    """The client list, and the only place "who has sent us something new" is
+    answered now that the cross-client inbox is gone. `unseen_count` is what
+    makes this list scannable — without it an agent would have to open every
+    client to find the one that uploaded this morning."""
+    ready = {'deleted_at__isnull': True, 'state': SharedFile.STATE_READY}
     out = []
     for c in Company.objects.all().order_by('name'):
-        file_count = SharedFile.objects.filter(
-            company=c, deleted_at__isnull=True, state=SharedFile.STATE_READY,
-        ).count()
-        open_requests = Bucket.objects.filter(
-            company=c, kind=Bucket.KIND_REQUEST,
-        ).exclude(status='complete').count()
+        files = SharedFile.objects.filter(company=c, **ready)
         out.append({
             'id': c.id, 'name': c.name,
-            'file_count': file_count, 'open_request_count': open_requests,
+            'file_count': files.count(),
+            'unseen_count': files.filter(processed=False).count(),
+            'open_request_count': Bucket.objects.filter(
+                company=c, kind=Bucket.KIND_REQUEST,
+            ).exclude(status='complete').count(),
+            'required_open_count': Bucket.objects.filter(
+                company=c, kind=Bucket.KIND_REQUEST, required=True,
+            ).exclude(status='complete').count(),
         })
     return JsonResponse({'companies': out})
 
@@ -138,6 +145,9 @@ def create_request(request):
         company=company, kind=Bucket.KIND_REQUEST, title=title,
         description=data.get('description', ''), due_at=_parse_due(data.get('due_at')),
         status=status, requested_by=request.portal_user,
+        # Defaults to false: a request has to be argued INTO the customer's
+        # "needed from you" list, not out of it.
+        required=bool(data.get('required')),
     )
     log_activity(company, 'request_created', actor=request.portal_user, bucket=b, title=title)
     try:
@@ -167,6 +177,8 @@ def update_request(request, bucket_id):
         b.description = data.get('description', '')
     if 'due_at' in data:
         b.due_at = _parse_due(data.get('due_at'))
+    if 'required' in data:
+        b.required = bool(data.get('required'))
     became_complete = False
     if 'status' in data and data.get('status') in ('open', 'partial', 'complete'):
         became_complete = data['status'] == 'complete' and b.status != 'complete'
@@ -178,52 +190,6 @@ def update_request(request, bucket_id):
         except Exception:
             pass
     return JsonResponse(BucketSerializer(b).data)
-
-
-@require_portal_admin
-def inbox(request):
-    """Cross-client review queue: recent uploads across ALL companies.
-
-    Keyed on the customer-facing review status (not an internal flag), so
-    resolving a file (Approve / Needs revision) is exactly what the customer
-    sees and removes it from the queue. Filters: ?status=awaiting|all
-    (default awaiting), ?company=<id>, ?limit=<n> (default 100, max 300).
-    """
-    AWAITING = ['pending', 'review']  # uploaded, no decision yet
-    status = request.GET.get('status', 'awaiting')
-    qs = (
-        SharedFile.objects
-        .filter(deleted_at__isnull=True, state=SharedFile.STATE_READY)
-        .select_related('company', 'bucket', 'uploaded_by')
-    )
-    if status == 'awaiting':
-        qs = qs.filter(review_status__in=AWAITING)
-    company_id = request.GET.get('company')
-    if company_id:
-        qs = qs.filter(company_id=company_id)
-    try:
-        limit = min(int(request.GET.get('limit', 100)), 300)
-    except (TypeError, ValueError):
-        limit = 100
-
-    items = []
-    for f in qs.order_by('-uploaded_at')[:limit]:
-        items.append({
-            'id': f.id,
-            'original_name': f.original_name,
-            'size_bytes': f.size_bytes,
-            'uploaded_at': f.uploaded_at.isoformat(),
-            'uploaded_by_name': (f.uploaded_by.name or f.uploaded_by.email) if f.uploaded_by else None,
-            'company': {'id': f.company_id, 'name': f.company.name},
-            'bucket': {'id': f.bucket_id, 'title': f.bucket.title, 'kind': f.bucket.kind},
-            'review_status': f.review_status,
-            'review_notes': f.review_notes,
-            'comment_count': f.comments.count(),
-        })
-    awaiting_total = SharedFile.objects.filter(
-        deleted_at__isnull=True, state=SharedFile.STATE_READY, review_status__in=AWAITING,
-    ).count()
-    return JsonResponse({'items': items, 'awaiting_total': awaiting_total})
 
 
 @require_portal_admin
@@ -242,43 +208,6 @@ def set_processed(request, file_id):
     log_activity(f.company, 'processed' if processed else 'unprocessed',
                  actor=request.portal_user, file=f, name=f.original_name)
     return JsonResponse({'ok': True, 'processed': f.processed})
-
-
-REVIEW_STATES = ('pending', 'review', 'approved', 'revision')
-
-
-@require_portal_admin
-@require_http_methods(['PATCH'])
-def set_review(request, file_id):
-    """Set a file's review status + notes. Emails the customer on 'revision'."""
-    f = SharedFile.objects.filter(id=file_id, deleted_at__isnull=True).select_related('company').first()
-    if not f:
-        return JsonResponse({'error': 'File not found.'}, status=404)
-    data = json.loads(request.body or '{}')
-    from django.utils import timezone
-
-    new_status = data.get('review_status')
-    status_changed = new_status in REVIEW_STATES and new_status != f.review_status
-    notes_changed = 'notes' in data and (data.get('notes') or '').strip() != f.review_notes
-    if not status_changed and not notes_changed:
-        return JsonResponse(SharedFileSerializer(f, context={'staff': True}).data)
-
-    if status_changed:
-        f.review_status = new_status
-    if 'notes' in data:
-        f.review_notes = (data.get('notes') or '').strip()
-    f.reviewed_by = request.portal_user
-    f.reviewed_at = timezone.now()
-    f.save(update_fields=['review_status', 'review_notes', 'reviewed_by', 'reviewed_at'])
-
-    if status_changed:
-        log_activity(f.company, 'status_change', actor=request.portal_user, file=f, to=f.review_status)
-        if f.review_status == 'revision':
-            try:
-                file_notify.notify_revision(f)
-            except Exception:
-                pass
-    return JsonResponse(SharedFileSerializer(f, context={'staff': True}).data)
 
 
 @require_portal_admin

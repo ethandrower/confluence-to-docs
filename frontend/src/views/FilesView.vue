@@ -4,19 +4,21 @@
       <div class="fs" :class="{ 'has-preview': preview }">
         <!-- Sidebar -->
         <aside class="fs-side" aria-label="File buckets">
-          <div class="fs-group">
+          <!-- Only the requests that genuinely block progress get this slot.
+               An empty section is worse than no section: a standing "Requests
+               from CiteMed" header teaches the customer to scroll past it. -->
+          <div v-if="store.requiredRequests.length" class="fs-group">
             <div class="fs-group-head">
-              <h2 class="fs-group-title">Requests from CiteMed</h2>
+              <h2 class="fs-group-title">Needed from you</h2>
               <button class="refresh-mini" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh requests" @click="store.load()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
                 Refresh
               </button>
             </div>
-            <p v-if="!store.requests.length && !store.loading" class="fs-group-empty">Nothing requested yet.</p>
             <button
-              v-for="b in store.requests"
+              v-for="b in store.requiredRequests"
               :key="b.id"
-              class="b-card"
+              class="b-card b-card--required"
               :class="{ 'is-active': b.id === store.activeBucketId }"
               @click="store.select(b.id)"
             >
@@ -31,18 +33,102 @@
           </div>
 
           <div class="fs-group">
-            <h2 class="fs-group-title">Your files</h2>
+            <div class="fs-group-head">
+              <h2 class="fs-group-title">Your files</h2>
+              <button class="refresh-mini" title="New folder" aria-label="New top-level folder" @click="promptFolder(null)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 11v5"/><path d="M9.5 13.5h5"/></svg>
+                New folder
+              </button>
+            </div>
+
+            <!-- General uploads is a drop target too: it's where files go to
+                 leave a folder without being deleted. -->
             <button
               v-if="store.generalBucket"
               class="b-card"
-              :class="{ 'is-active': store.generalBucket.id === store.activeBucketId }"
+              :class="{ 'is-active': store.generalBucket.id === store.activeBucketId, 'is-drop': dropTarget === store.generalBucket.id }"
               @click="store.select(store.generalBucket.id)"
+              @dragover.prevent="dropTarget = store.generalBucket.id"
+              @dragleave="dropTarget = null"
+              @drop.prevent="onDropOn(store.generalBucket.id, $event)"
             >
               <span class="b-title">{{ store.generalBucket.title }}</span>
               <span class="b-meta">
                 <span class="status status--muted"><span class="dot" /> {{ store.generalBucket.files.length }} file{{ store.generalBucket.files.length === 1 ? '' : 's' }}</span>
               </span>
             </button>
+
+            <!-- Only the top-level input lives out here; subfolder inputs
+                 render inside the tree, under the folder being added to. -->
+            <div v-if="creatingIn === null" class="fs-newfolder">
+              <input
+                ref="newFolderInput"
+                v-model="newFolderName"
+                class="fs-newfolder-input"
+                placeholder="Folder name"
+                @keydown.enter="submitFolder"
+                @keydown.esc="cancelCreate"
+              />
+              <div class="fs-newfolder-actions">
+                <button class="refresh-mini" @click="submitFolder">Create</button>
+                <button class="refresh-mini" @click="cancelCreate">Cancel</button>
+              </div>
+            </div>
+
+            <ul v-if="store.folderTree.length" class="fs-tree">
+              <FolderNode
+                v-for="node in store.folderTree"
+                :key="node.id"
+                :node="node"
+                :active-id="store.activeBucketId"
+                :creating-in="creatingIn"
+                @select="store.select($event)"
+                @drop-files="onDropFiles"
+                @move-folder="onMoveFolder"
+                @add-child="promptFolder"
+                @create-submit="submitChildFolder"
+                @create-cancel="cancelCreate"
+              />
+            </ul>
+            <p v-else-if="!store.loading" class="fs-group-empty">
+              No folders yet — make one to organise your uploads.
+            </p>
+
+            <!-- Root drop zone: the only way to drag a nested folder back to
+                 the top level, which has no row of its own to drop onto. -->
+            <div
+              v-if="store.folderTree.length"
+              class="fs-root-drop"
+              :class="{ 'is-drop': dropTarget === 'root' }"
+              @dragover.prevent="dropTarget = 'root'"
+              @dragleave="dropTarget = null"
+              @drop.prevent="onDropRoot"
+            >Drop here to move to the top level</div>
+
+            <p v-if="folderError" class="fs-folder-err">{{ folderError }}</p>
+
+            <!-- Everything CiteMed has asked for that isn't blocking. Present
+                 and findable, but sitting alongside the customer's own
+                 structure rather than presented as a to-do list. -->
+            <div v-if="store.otherRequests.length" class="fs-other">
+              <button class="fs-other-head" @click="showOther = !showOther">
+                <svg class="fs-other-twisty" :class="showOther && 'is-open'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                Also shared with CiteMed
+                <span class="fs-other-count">{{ store.otherRequests.length }}</span>
+              </button>
+              <ul v-if="showOther" class="fs-other-list">
+                <li v-for="b in store.otherRequests" :key="b.id">
+                  <button
+                    class="fs-other-item"
+                    :class="{ 'is-active': b.id === store.activeBucketId }"
+                    @click="store.select(b.id)"
+                  >
+                    <span class="fs-other-title">{{ b.title }}</span>
+                    <span v-if="b.files.length" class="fs-other-n">{{ b.files.length }}</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
         </aside>
 
@@ -57,17 +143,49 @@
           <template v-else-if="active">
             <header class="fs-head">
               <div>
-                <h1>{{ active.title }}</h1>
+                <nav v-if="breadcrumb.length > 1" class="fs-crumbs" aria-label="Folder path">
+                  <template v-for="(c, i) in breadcrumb.slice(0, -1)" :key="c.id">
+                    <button class="fs-crumb" @click="store.select(c.id)">{{ c.title }}</button>
+                    <span class="fs-crumb-sep" aria-hidden="true">/</span>
+                  </template>
+                </nav>
+                <input
+                  v-if="renamingFolder && active.kind === 'folder'"
+                  ref="renameFolderInput"
+                  v-model="renameFolderName"
+                  class="fs-rename-h1"
+                  @keydown.enter="submitFolderRename(active)"
+                  @keydown.esc="renamingFolder = false"
+                  @blur="submitFolderRename(active)"
+                />
+                <h1 v-else>{{ active.title }}</h1>
+                <p v-if="active.kind === 'folder'" class="fs-submeta">
+                  <!-- Both numbers, because "0 files" in a folder that holds
+                       forty in subfolders reads as an empty folder. -->
+                  {{ active.files.length }} file{{ active.files.length === 1 ? '' : 's' }} here
+                  <span v-if="deepCount > active.files.length"> · {{ deepCount }} including subfolders</span>
+                </p>
                 <p v-if="active.kind === 'request'" class="fs-submeta">
                   <span v-if="active.requested_by_name">Requested by {{ active.requested_by_name }}</span>
                   <span v-if="active.created_at"> · {{ relDate(active.created_at) }}</span>
                   <span v-if="duePill(active)" class="fs-due" :class="`due--${duePill(active).tone}`"> · Due {{ shortDate(active.due_at) }}</span>
                 </p>
               </div>
-              <button class="refresh-btn" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh" @click="store.load()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
-                {{ store.loading ? 'Refreshing…' : 'Refresh' }}
-              </button>
+              <div class="fs-head-actions">
+                <template v-if="active.kind === 'folder'">
+                  <button class="refresh-btn" @click="promptRename(active)">Rename</button>
+                  <button
+                    class="refresh-btn"
+                    :class="confirmDeleteFolder && 'is-danger'"
+                    @click="removeFolder(active)"
+                    @blur="confirmDeleteFolder = false"
+                  >{{ confirmDeleteFolder ? 'Confirm delete' : 'Delete' }}</button>
+                </template>
+                <button class="refresh-btn" :class="store.loading && 'is-spinning'" :disabled="store.loading" title="Refresh" aria-label="Refresh" @click="store.load()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
+                  {{ store.loading ? 'Refreshing…' : 'Refresh' }}
+                </button>
+              </div>
             </header>
 
             <p v-if="active.description" class="fs-desc">{{ active.description }}</p>
@@ -96,18 +214,24 @@
               </div>
 
               <ul v-if="filtered.length" class="rows">
-                <li v-for="f in filtered" :key="f.id" class="row" :class="{ flash: flash.has(f.original_name), 'row-active': preview && preview.id === f.id }">
+                <li
+                  v-for="f in filtered"
+                  :key="f.id"
+                  class="row"
+                  :class="{ flash: flash.has(f.original_name), 'row-active': preview && preview.id === f.id }"
+                  :draggable="true"
+                  @dragstart="onFileDragStart(f, $event)"
+                >
                   <span class="tile" :data-cat="cat(f.original_name)">{{ ext(f.original_name) }}</span>
                   <div class="row-main">
                     <template v-if="editingId === f.id">
                       <input ref="renameInput" v-model="editName" class="rename" @keydown.enter="saveRename(f)" @keydown.esc="cancelRename" @blur="saveRename(f)" />
                     </template>
                     <span v-else class="row-name" :title="f.original_name">{{ f.original_name }}</span>
+                    <!-- No review badge: uploading is just uploading. -->
                     <span class="row-sub">
                       {{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}
-                      <span v-if="f.review_status" class="rv-badge" :class="`rv-badge--${f.review_status}`">{{ reviewLabel(f.review_status) }}</span>
                     </span>
-                    <span v-if="f.review_notes" class="rv-note">{{ f.review_notes }}</span>
                   </div>
                   <span class="row-actions">
                     <button v-if="previewable(f.original_name)" class="ico" :class="preview && preview.id === f.id && 'ico--on'" :title="preview && preview.id === f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f)">
@@ -127,7 +251,7 @@
               </ul>
               <div v-else class="empty">
                 <p v-if="q">No files match “{{ q }}”.</p>
-                <p v-else-if="isFirstRun">Welcome! Upload documents for the CiteMed team using the box above. If CiteMed asks you for specific files, those requests will appear under <strong>“Requests from CiteMed”</strong> on the left.</p>
+                <p v-else-if="isFirstRun">Welcome! Upload documents for the CiteMed team using the box above, and make folders on the left to organise them. If CiteMed needs something specific from you, it’ll appear under <strong>“Needed from you”</strong>.</p>
                 <p v-else>Nothing here yet — drop files above to send them to CiteMed.</p>
               </div>
             </div>
@@ -164,6 +288,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FileUploader from '@/components/files/FileUploader.vue'
 import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
+import FolderNode from '@/components/files/FolderNode.vue'
 import { useFilesStore } from '@/stores/files'
 
 const store = useFilesStore()
@@ -184,6 +309,127 @@ function openPreview(f) {
 
 onMounted(store.load)
 
+// ── Folders ─────────────────────────────────────────────────────────────
+const folderError = ref('')
+const dropTarget = ref(null)
+
+const breadcrumb = computed(() =>
+  store.activeBucketId ? store.pathTo(store.activeBucketId) : []
+)
+const deepCount = computed(() =>
+  store.activeBucketId ? store.fileCount(store.activeBucketId, true) : 0
+)
+
+/** Server messages are the useful ones here ("a folder with that name is
+ *  already here"), so surface them verbatim rather than a generic failure. */
+async function guard(fn) {
+  folderError.value = ''
+  try {
+    await fn()
+  } catch (e) {
+    folderError.value = e.message
+  }
+}
+
+// Inline rather than window.prompt/confirm: a native dialog blocks the whole
+// page, can't be styled, and reads as a browser warning rather than part of
+// the app.
+const showOther = ref(false)
+const creatingIn = ref(undefined)   // undefined = idle, null = top level, id = subfolder
+const newFolderName = ref('')
+const newFolderInput = ref(null)
+const renamingFolder = ref(false)
+const renameFolderName = ref('')
+const renameFolderInput = ref(null)
+const confirmDeleteFolder = ref(false)
+
+function promptFolder(parentId) {
+  folderError.value = ''
+  creatingIn.value = parentId ?? null
+  newFolderName.value = ''
+  if (creatingIn.value === null) nextTick(() => newFolderInput.value?.focus())
+}
+
+/** Submitted from a node's inline input inside the tree. */
+function submitChildFolder({ title, parentId }) {
+  guard(async () => {
+    const f = await store.createFolder(title, parentId)
+    cancelCreate()
+    if (f) store.select(f.id)
+  })
+}
+
+function cancelCreate() {
+  creatingIn.value = undefined
+  newFolderName.value = ''
+}
+
+function submitFolder() {
+  const title = newFolderName.value.trim()
+  if (!title) return cancelCreate()
+  const parentId = creatingIn.value
+  guard(async () => {
+    const f = await store.createFolder(title, parentId)
+    cancelCreate()
+    if (f) store.select(f.id)
+  })
+}
+
+function promptRename(folder) {
+  folderError.value = ''
+  renameFolderName.value = folder.title
+  renamingFolder.value = true
+  // Focus AND select: the field is pre-filled with the current name, so
+  // without the select you have to clear it by hand before typing.
+  nextTick(() => {
+    renameFolderInput.value?.focus()
+    renameFolderInput.value?.select()
+  })
+}
+
+function submitFolderRename(folder) {
+  const title = renameFolderName.value.trim()
+  renamingFolder.value = false
+  if (!title || title === folder.title) return
+  guard(() => store.renameFolder(folder.id, title))
+}
+
+function removeFolder(folder) {
+  // Two-step rather than a warning: the API refuses a non-empty folder, so
+  // nothing is ever at stake here beyond the empty folder itself.
+  if (!confirmDeleteFolder.value) {
+    confirmDeleteFolder.value = true
+    return
+  }
+  confirmDeleteFolder.value = false
+  guard(() => store.deleteFolder(folder.id))
+}
+
+function onFileDragStart(f, e) {
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('application/x-file-ids', JSON.stringify([f.id]))
+}
+
+function onDropFiles({ ids, bucketId }) {
+  guard(() => store.moveFiles(ids, bucketId))
+}
+
+function onMoveFolder({ id, parentId }) {
+  guard(() => store.moveFolder(id, parentId))
+}
+
+function onDropOn(bucketId, e) {
+  dropTarget.value = null
+  const raw = e.dataTransfer.getData('application/x-file-ids')
+  if (raw) onDropFiles({ ids: JSON.parse(raw), bucketId })
+}
+
+function onDropRoot(e) {
+  dropTarget.value = null
+  const folderId = e.dataTransfer.getData('application/x-folder-id')
+  if (folderId) onMoveFolder({ id: Number(folderId), parentId: null })
+}
+
 const active = computed(() => store.activeBucket)
 const uploadLabel = computed(() => (active.value?.kind === 'request' ? 'this request' : ''))
 const isFirstRun = computed(() =>
@@ -199,11 +445,14 @@ const filtered = computed(() => {
 // Customer-facing request status, derived from what's actually happened
 // (not the raw admin 'open' flag) so it never goes stale.
 function reqState(b) {
+  // Two states the customer can act on, and one they can't. There is no
+  // "awaiting review" any more — nothing was ever going to review it, and a
+  // request that sits on "awaiting review" forever teaches them to ignore the
+  // status entirely. Once they've sent something it's on us, and CiteMed
+  // marking the request complete is what closes it.
   if (b.status === 'complete') return ['Complete', 'success']
   if (!b.files.length) return ['Awaiting your upload', 'warning']
-  if (b.files.some((f) => f.review_status === 'revision')) return ['Action needed', 'danger']
-  if (b.files.every((f) => f.review_status === 'approved')) return ['Approved', 'success']
-  return ['Awaiting review', 'warning']  // files uploaded, not yet approved/revised
+  return ['Sent to CiteMed', 'muted']
 }
 function statusLabel(b) { return reqState(b)[0] }
 function statusTone(b) { return reqState(b)[1] }
@@ -260,8 +509,6 @@ function relDate(d) {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function shortDate(d) { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
-// Customer collapses both pre-decision states (pending / in-review) to "Awaiting review".
-function reviewLabel(s) { return { pending: 'Awaiting review', review: 'Awaiting review', approved: 'Approved', revision: 'Needs revision' }[s] || '' }
 function checklistReceived(b) { return (b.checklist || []).filter((c) => c.linked_file).length }
 function checklistPct(b) {
   const total = (b.checklist || []).length
@@ -317,6 +564,88 @@ function cat(name) {
   font-weight: 700; color: var(--muted-foreground); margin-bottom: 0.6rem;
 }
 .fs-group-empty { font-size: 0.83rem; color: var(--muted-foreground); }
+
+/* ── Folder tree ─────────────────────────────────────────────────────── */
+.fs-tree { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+
+/* Nested folders can only be dragged back to the top level by dropping
+   somewhere, and the top level has no row of its own to aim at. */
+.fs-root-drop {
+  margin-top: 0.4rem; padding: 7px 8px;
+  border: 1px dashed var(--border); border-radius: 7px;
+  font-size: 0.75rem; color: var(--muted-foreground); text-align: center;
+}
+.fs-root-drop.is-drop {
+  border-color: var(--primary); border-style: solid;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--foreground);
+}
+.b-card.is-drop {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.fs-folder-err {
+  margin-top: 0.5rem; font-size: 0.78rem; color: var(--destructive);
+}
+
+.fs-crumbs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 2px; }
+.fs-crumb {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font-family: var(--font-ui); font-size: 0.78rem; color: var(--muted-foreground);
+}
+.fs-crumb:hover { color: var(--foreground); text-decoration: underline; }
+.fs-crumb-sep { font-size: 0.78rem; color: var(--muted-foreground); }
+
+.fs-head-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.refresh-btn.is-danger { color: var(--destructive); border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); }
+
+.fs-newfolder {
+  margin-top: 0.5rem; padding: 8px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card);
+}
+.fs-newfolder-label { display: block; font-size: 0.72rem; color: var(--muted-foreground); margin-bottom: 4px; }
+.fs-newfolder-input {
+  width: 100%; height: 28px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--background); color: var(--foreground);
+  font-family: var(--font-ui); font-size: 0.83rem;
+}
+.fs-newfolder-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+/* A required request is the one thing on this screen the customer must act
+   on, so it gets the only accent border in the sidebar. */
+.b-card--required { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
+
+.fs-other { margin-top: 0.9rem; }
+.fs-other-head {
+  display: flex; align-items: center; gap: 5px; width: 100%;
+  border: 0; background: none; padding: 4px 2px; cursor: pointer;
+  font-family: var(--font-ui); font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.fs-other-twisty { width: 12px; height: 12px; transition: transform 0.12s ease; }
+.fs-other-twisty.is-open { transform: rotate(90deg); }
+.fs-other-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+.fs-other-list { list-style: none; margin: 2px 0 0; padding: 0; }
+.fs-other-item {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  border: 0; background: none; border-radius: 7px; cursor: pointer;
+  padding: 5px 8px 5px 20px;
+  font-family: var(--font-ui); font-size: 0.83rem; color: var(--foreground);
+  text-align: left;
+}
+.fs-other-item:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fs-other-item.is-active { background: var(--accent); }
+.fs-other-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-other-n { margin-left: auto; font-size: 0.72rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+
+.fs-rename-h1 {
+  width: 100%; max-width: 420px;
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 2px 8px; background: var(--background); color: var(--foreground);
+  font-family: var(--font-ui); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em;
+}
 .b-card {
   width: 100%; text-align: left; display: flex; flex-direction: column; gap: 0.45rem;
   padding: 0.7rem 0.8rem; margin-bottom: 0.4rem;
@@ -391,11 +720,6 @@ function cat(name) {
 .fs-check-recv { margin-left: auto; font-size: 0.68rem; font-weight: 700; color: var(--success); }
 
 /* Review status badge + note (customer) — colour carries the state */
-.rv-badge { display: inline-block; margin-left: 0.4rem; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 0.05rem 0.4rem; border-radius: 999px; color: var(--muted-foreground); background: var(--secondary); }
-.rv-badge--pending, .rv-badge--review { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
-.rv-badge--approved { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
-.rv-badge--revision { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 14%, transparent); }
-.rv-note { font-size: 0.76rem; color: var(--destructive); margin-top: 0.15rem; }
 
 /* ── File list ── */
 .files { margin-top: 1.5rem; }

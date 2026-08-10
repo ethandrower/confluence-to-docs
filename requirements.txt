@@ -13,6 +13,13 @@
 
 Django==4.2.30                  # 5.x is a breaking upgrade; also see anymail note
 djangorestframework==3.17.1
+# OpenAPI schema + Swagger UI for the read-only /api/v1/ integration API.
+# Pinned like everything else here: it generates the contract RevenueHub is
+# built against, so a silent minor bump could change the published schema
+# without anyone touching this repo.
+drf-spectacular==0.30.0
+inflection==0.5.1               # drf-spectacular dep, pinned for the same reason
+uritemplate==4.2.0              # drf-spectacular dep
 django-environ==0.14.0
 psycopg2-binary==2.9.12
 celery==5.6.3

@@ -27,6 +27,10 @@ def spa_index(request):
 
 urlpatterns = [
     path(f'{settings.ADMIN_PATH}/', admin.site.urls),
+    # Machine-to-machine, bearer-token, read-only. MUST come before the
+    # 'api/' include: Django stops at the first prefix match, so mounting it
+    # after would send /api/v1/... into portal.urls and 404 there.
+    path('api/v1/', include('portal.api_v1.urls')),
     path('api/', include('portal.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

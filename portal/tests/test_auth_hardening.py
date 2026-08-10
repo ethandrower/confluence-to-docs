@@ -224,4 +224,6 @@ class EveryUnsafeEndpointRequiresCsrfTest(TestCase):
         self.assertEqual(failures, [], f'endpoints not CSRF-protected: {failures}')
         # Guard the guard: if the discovery ever stops finding endpoints this
         # test would vacuously pass.
-        self.assertGreaterEqual(checked, 24)
+        # 28 as of the assignment/watchers/escalation endpoints; raise it when
+        # you add more, so a discovery regression can't hide behind a low bar.
+        self.assertGreaterEqual(checked, 28)
