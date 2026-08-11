@@ -39,6 +39,9 @@
           <button role="tab" :aria-selected="tab==='files'" class="tab" :class="tab==='files' && 'tab--active'" @click="tab='files'">
             Files
           </button>
+          <button role="tab" :aria-selected="tab==='notices'" class="tab" :class="tab==='notices' && 'tab--active'" @click="tab='notices'">
+            Notices
+          </button>
           <RouterLink to="/manage/tickets" role="tab" :aria-selected="false" class="tab tab--link">
             Tickets <span v-if="ticketsInboxCount" class="tab-count">{{ ticketsInboxCount }}</span>
             <svg class="tab-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 15.25V6.75H8.75M17 7 6.75 17.25" /></svg>
@@ -124,6 +127,9 @@
 
         <!-- FILES (extracted to its own component) -->
         <FilesAdmin v-if="tab==='files'" />
+
+        <!-- NOTICES -->
+        <NoticesAdmin v-if="tab==='notices'" />
       </div>
 
       <!-- Modal -->
@@ -188,6 +194,7 @@
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FilesAdmin from '@/components/files/FilesAdmin.vue'
+import NoticesAdmin from '@/components/notices/NoticesAdmin.vue'
 import { useAdminStore } from '@/stores/admin.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useTicketsStore } from '@/stores/tickets.js'

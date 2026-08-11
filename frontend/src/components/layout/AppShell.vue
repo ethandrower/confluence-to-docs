@@ -148,6 +148,11 @@
         <RouterLink v-else to="/login" class="topbar-btn-ghost hidden sm:inline-flex">Log in</RouterLink>
       </header>
 
+      <!-- Outside <main> and above it: a notice applies to the whole portal,
+           not to whichever view happens to be rendering, and it must not
+           scroll away with the content. -->
+      <SiteNoticeBanner />
+
       <main id="main-content" tabindex="-1" class="flex-1 min-w-0 overflow-y-auto">
         <slot name="content" />
       </main>
@@ -168,6 +173,7 @@ import { useTicketChannel } from '@/lib/useTicketChannel'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SearchCommand from './SearchCommand.vue'
+import SiteNoticeBanner from './SiteNoticeBanner.vue'
 import ThemeToggle from './ThemeToggle.vue'
 import ViewAsCustomer from './ViewAsCustomer.vue'
 

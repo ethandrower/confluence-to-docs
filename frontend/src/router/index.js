@@ -66,6 +66,14 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Incident + maintenance history. Behind auth like every other notice
+      // surface — EC-SOP-07 §5.2 commits to no PUBLIC status page.
+      path: '/notices',
+      component: () => import('@/views/NoticesView.vue'),
+      name: 'notices',
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/manage',
       component: () => import('@/views/AdminView.vue'),
       name: 'admin',
