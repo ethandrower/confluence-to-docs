@@ -6,11 +6,13 @@ customer-visible history survives the incident being resolved.
 """
 import json
 
+from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
+from portal import realtime
 from portal.decorators import require_portal_admin
 from portal.models import Company, SiteNotice
 from portal.views.notices import notice_dict
@@ -115,6 +117,10 @@ def notices(request):
         created_by=request.portal_user,
     )
     _set_companies(notice, payload)
+    # After _set_companies: the fan-out reads notice.companies to decide who to
+    # nudge, so notifying before the scoping is stored would broadcast a
+    # company-scoped notice to every tenant.
+    _notify(notice, 'raised')
     return JsonResponse({'notice': admin_notice_dict(notice)}, status=201)
 
 
@@ -129,6 +135,8 @@ def notice_detail(request, notice_id):
         # Retire, never delete — the customer-visible history depends on the row
         # surviving.
         notice.retire()
+        # So a resolved incident stops warning people without them reloading.
+        _notify(notice, 'retired')
         return JsonResponse({'notice': admin_notice_dict(notice)})
 
     try:
@@ -154,7 +162,14 @@ def notice_detail(request, notice_id):
 
     notice.save()
     _set_companies(notice, payload)
+    _notify(notice, 'updated')
     return JsonResponse({'notice': admin_notice_dict(notice)})
+
+
+def _notify(notice, event):
+    """On commit, so a client that refetches the instant it's nudged sees the
+    row — the same ordering the ticket nudges use."""
+    transaction.on_commit(lambda: realtime.notify_notice(notice, event))
 
 
 def _set_companies(notice, payload):
