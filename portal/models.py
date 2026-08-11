@@ -4,6 +4,9 @@ import secrets
 from django.db import models, connection
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+# Module-level because SiteNotice.starts_at uses `timezone.now` as a field
+# default, which is evaluated at class-definition time.
+from django.utils import timezone
 
 
 def _is_postgres():
@@ -758,3 +761,123 @@ class JiraTicketLink(models.Model):
 
     def __str__(self):
         return f'{self.key} → {self.ticket.display_number}'
+
+
+class SiteNotice(models.Model):
+    """An incident or maintenance notice shown in the portal (#49).
+
+    This SUPPLEMENTS the notification channel EC-SOP-07 §5.2 commits to
+    (email to the designated account contact) — it does not replace it. The
+    banner shares fate with the portal: one host, one web container, so it is
+    unreachable exactly when a SEV-1 is happening. Raising a notice here is
+    never sufficient on its own.
+
+    Deliberately NOT a public status page. §5.2 states we don't operate one, so
+    every read path is behind a portal session. If that decision is ever
+    revisited (the Engineering incident guide assumes a Statuspage and
+    contradicts the SLA — see #49), this model is compatible with either
+    outcome; only the gate on the read endpoint would move.
+    """
+    LEVEL_INFO = 'info'
+    LEVEL_WARNING = 'warning'
+    LEVEL_CRITICAL = 'critical'
+    LEVEL_CHOICES = [
+        (LEVEL_INFO, 'Info'),
+        (LEVEL_WARNING, 'Warning'),
+        (LEVEL_CRITICAL, 'Critical'),
+    ]
+
+    level = models.CharField(max_length=16, choices=LEVEL_CHOICES, default=LEVEL_INFO)
+    message = models.TextField()
+    # Optional "more detail" target — a docs page or a ticket thread.
+    link_url = models.URLField(blank=True)
+    link_label = models.CharField(max_length=64, blank=True)
+
+    # Active window. starts_at in the future schedules a notice, which is what
+    # the 72-hour maintenance notice in §3.2 needs. A null ends_at means
+    # open-ended: an incident has no known end when it is raised.
+    starts_at = models.DateTimeField(default=timezone.now)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    # Set instead of deleting, so the customer-visible history TG-421 asked for
+    # survives the incident being resolved.
+    retired_at = models.DateTimeField(null=True, blank=True)
+
+    # Empty = everyone. A SEV-2 frequently affects a subset of clients, and
+    # telling the rest they're affected is its own kind of incident.
+    companies = models.ManyToManyField(Company, blank=True, related_name='site_notices')
+    created_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='site_notices_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-starts_at']
+        indexes = [
+            models.Index(fields=['retired_at', 'starts_at']),
+        ]
+
+    def __str__(self):
+        return f'[{self.level}] {self.message[:60]}'
+
+    @property
+    def is_dismissible(self):
+        """Critical notices stay put. Enforced server-side too (the dismiss
+        endpoint refuses them) — a hidden button is not a rule."""
+        return self.level != self.LEVEL_CRITICAL
+
+    def retire(self):
+        self.retired_at = timezone.now()
+        self.save(update_fields=['retired_at', 'updated_at'])
+
+    @classmethod
+    def currently_visible(cls, now=None, queryset=None):
+        """Live notices: window open, not retired.
+
+        Takes an optional base queryset so callers can compose this with
+        `for_user` without restating the window rules — "what counts as live"
+        must have exactly one definition.
+        """
+        now = now or timezone.now()
+        base = cls.objects.all() if queryset is None else queryset
+        return base.filter(
+            retired_at__isnull=True, starts_at__lte=now,
+        ).filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now))
+
+    @classmethod
+    def for_user(cls, user):
+        """Tenant-isolation chokepoint — the same rule as Ticket.for_user and
+        Bucket.for_user. Read endpoints must query through here.
+
+        Two ways a notice reaches someone: it is unscoped (platform-wide), or it
+        names their company. Note that a user with no company (our own agents)
+        sees platform-wide notices only — a company-scoped notice is about that
+        client's data and isn't theirs to be told about via the banner.
+
+        distinct() matters: the OR spans an M2M join, so a notice naming several
+        companies would otherwise come back once per row.
+        """
+        if user is None or getattr(user, 'pk', None) is None:
+            return cls.objects.none()
+        unscoped = models.Q(companies__isnull=True)
+        company_id = getattr(user, 'company_id', None)
+        if company_id:
+            return cls.objects.filter(
+                unscoped | models.Q(companies__id=company_id)
+            ).distinct()
+        return cls.objects.filter(unscoped).distinct()
+
+
+class NoticeDismissal(models.Model):
+    """Per-user dismissal of a notice. Per-user rather than per-company: one
+    colleague clearing a banner must not clear it for everyone else."""
+    notice = models.ForeignKey(SiteNotice, on_delete=models.CASCADE, related_name='dismissals')
+    user = models.ForeignKey('PortalUser', on_delete=models.CASCADE, related_name='notice_dismissals')
+    dismissed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = (('notice', 'user'),)
+
+    def __str__(self):
+        return f'{self.user.email} dismissed {self.notice_id}'

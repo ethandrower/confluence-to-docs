@@ -1,8 +1,19 @@
 from django.urls import path
 from anymail.webhooks.mailgun import MailgunTrackingWebhookView, MailgunInboundWebhookView
-from portal.views import docs, auth, tickets, admin_api, files, files_admin, tickets_admin
+from portal.views import (
+    docs, auth, tickets, admin_api, files, files_admin, tickets_admin,
+    notices, notices_admin,
+)
 
 urlpatterns = [
+    # Incident + maintenance notices (#49). Session-gated on both sides: §5.2
+    # commits to no PUBLIC status page.
+    path('notices/', notices.notices, name='notices'),
+    path('notices/history/', notices.history, name='notices-history'),
+    path('notices/<int:notice_id>/dismiss', notices.dismiss, name='notices-dismiss'),
+    path('admin/notices/', notices_admin.notices, name='admin-notices'),
+    path('admin/notices/<int:notice_id>/', notices_admin.notice_detail, name='admin-notice'),
+
     # Admin (manage users + companies) — gated to portal admins
     path('admin/companies/', admin_api.companies, name='admin-companies'),
     path('admin/companies/<int:company_id>/', admin_api.company_detail, name='admin-company-detail'),
