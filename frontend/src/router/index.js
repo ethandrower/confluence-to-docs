@@ -86,6 +86,22 @@ const router = createRouter({
       name: 'manage-ticket',
       props: true,
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      // Catch-all, and it must stay last — vue-router matches in declaration
+      // order, so anything below this would be unreachable.
+      //
+      // Without it an unknown path matched no route at all and the app
+      // rendered a blank white page: it booted fine, found nothing to display,
+      // and displayed nothing. A stale link or a typo therefore looked
+      // identical to the portal being broken.
+      //
+      // No requiresAuth: a signed-out visitor following a dead link should be
+      // told the page doesn't exist, not bounced to a login screen that
+      // implies the page exists and they're merely not allowed to see it.
+      path: '/:pathMatch(.*)*',
+      component: () => import('@/views/NotFoundView.vue'),
+      name: 'not-found',
     }
   ]
 })
