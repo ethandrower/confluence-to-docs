@@ -4,13 +4,15 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-env = environ.Env(
-    DEBUG=(bool, False),
-)
+env = environ.Env()
 environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY', default='dev-secret-key-change-in-production')
-DEBUG = env.bool('DEBUG', default=True)
+# Default OFF, deliberately: debug is something you opt IN to for local work,
+# never something a deploy opts out of by accident. A missing DEBUG used to
+# mean a live app serving full stack traces (and, via the branches below,
+# insecure cookies and no HSTS). Local dev sets DEBUG=True in .env.
+DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 # Django admin URL path (without leading/trailing slashes). Override in
@@ -179,7 +181,9 @@ MEDIA_ROOT = env('MEDIA_ROOT', default=str(BASE_DIR / 'media'))
 # set STORAGES (with conditional inner backends) and never set the legacy
 # key, so dev + prod, S3 + non-S3 combinations all work without a clash.
 _S3_BUCKET = env('AWS_STORAGE_BUCKET_NAME', default='')
-_USE_WHITENOISE = not env.bool('DEBUG', default=True)
+# Derive from DEBUG above rather than re-reading the environment: a second read
+# carries its own default, so the two could disagree about which mode we're in.
+_USE_WHITENOISE = not DEBUG
 
 STORAGES = {
     'default': {
