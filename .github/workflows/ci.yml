@@ -35,6 +35,27 @@ jobs:
     timeout-minutes: 15
 
     services:
+      # Test against the engine production actually runs. Without this,
+      # DATABASE_URL falls back to sqlite (settings.py) and two things go
+      # untested: the _is_postgres() branch in portal/models.py, which then
+      # exists only in production, and every column-length constraint — a value
+      # too long for its column is a DataError on Postgres and silently accepted
+      # by SQLite, which is exactly how an over-length link_url reached #52.
+      #
+      # Major version should track production; confirm with
+      # `dokku postgres:info citemed-docs` and change here if it differs.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: citemed
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
       # Note what this container is and isn't for. test_channel_layer_config
       # only INSPECTS the channel-layer config, so it needs REDIS_URL set (see
       # env below) but not a reachable server — verified by pointing it at a
@@ -53,6 +74,9 @@ jobs:
           --health-retries 10
 
     env:
+      # Django's test runner creates and drops test_citemed itself; the service
+      # container's superuser has the rights for that.
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/citemed
       # DEBUG=True is required, not laziness: with it off, settings.py enables
       # SECURE_SSL_REDIRECT, and Django's test client speaks http — so every
       # request becomes a 301 and the suite fails ~240 tests on redirects alone.
