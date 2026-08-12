@@ -76,13 +76,16 @@ class MigrationProbeTests(TestCase):
     def test_reports_ok_when_every_migration_is_applied(self):
         self.assertEqual(health.check_migrations(), health.OK)
 
-    def test_reports_error_when_a_migration_is_unapplied(self):
-        """Catches the release that ships code ahead of its schema."""
+    def test_reports_pending_when_a_migration_is_unapplied(self):
+        """PENDING, not ERROR. `release: manage.py migrate` runs before the new
+        container is ever probed, so this is informational — and an unapplied
+        migration is not customers being unable to use the site, which is the
+        only thing that should wake someone up."""
         with mock.patch.object(
             MigrationExecutor, 'migration_plan',
             return_value=[('portal', '0001_initial')],
-        ), self.assertLogs('portal.health', level='ERROR') as logged:
-            self.assertEqual(health.check_migrations(), health.ERROR)
+        ), self.assertLogs('portal.health', level='WARNING') as logged:
+            self.assertEqual(health.check_migrations(), health.PENDING)
         self.assertIn('unapplied', ' '.join(logged.output))
 
 
@@ -96,6 +99,14 @@ class OverallStatusTests(SimpleTestCase):
     def test_ignores_skipped_probes(self):
         self.assertEqual(
             health.overall_status({'database': health.OK, 'redis': health.SKIPPED}),
+            health.STATUS_OK,
+        )
+
+    def test_ignores_pending_probes(self):
+        """PENDING is surfaced but must not degrade the endpoint — this function
+        is what decides whether a human gets paged."""
+        self.assertEqual(
+            health.overall_status({'database': health.OK, 'migrations': health.PENDING}),
             health.STATUS_OK,
         )
 
@@ -137,7 +148,7 @@ class HealthzViewTests(TestCase):
         payload = self.client.get(self.url).json()
         self.assertEqual(set(payload), {'status', 'checks'})
         self.assertTrue(
-            all(v in (health.OK, health.ERROR, health.SKIPPED)
+            all(v in (health.OK, health.ERROR, health.SKIPPED, health.PENDING)
                 for v in payload['checks'].values()),
             f'probe values must be a fixed vocabulary, got {payload["checks"]}',
         )
@@ -207,3 +218,38 @@ class HealthzRoutingTests(SimpleTestCase):
 def health_view():
     from portal.views import health as health_views
     return health_views.healthz
+
+
+class PagerSemanticsTests(TestCase):
+    """One endpoint serves two consumers: Dokku's deploy gate and an external
+    uptime monitor that can only see a status code. What returns 503 therefore
+    decides what wakes a human at 2am, and it must be "customers cannot use the
+    site" — nothing weaker."""
+    url = '/healthz/'
+
+    def test_a_pending_migration_does_not_page_anyone(self):
+        with mock.patch.object(
+            MigrationExecutor, 'migration_plan',
+            return_value=[('portal', '0001_initial')],
+        ), self.assertLogs('portal.health', level='WARNING'):
+            response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['checks']['migrations'], health.PENDING)
+
+    def test_a_pending_migration_is_still_reported_so_it_is_not_invisible(self):
+        with mock.patch.object(
+            MigrationExecutor, 'migration_plan',
+            return_value=[('portal', '0001_initial')],
+        ), self.assertLogs('portal.health', level='WARNING'):
+            body = self.client.get(self.url).json()
+        self.assertNotEqual(body['checks']['migrations'], health.OK)
+
+    def test_an_unreachable_database_still_pages(self):
+        """The case that genuinely means nobody can use the site."""
+        with mock.patch.object(health, 'check_database', return_value=health.ERROR):
+            self.assertEqual(self.client.get(self.url).status_code, 503)
+
+    def test_an_unreachable_redis_still_pages(self):
+        """Channels and the rate limiter both depend on it."""
+        with mock.patch.object(health, 'check_redis', return_value=health.ERROR):
+            self.assertEqual(self.client.get(self.url).status_code, 503)

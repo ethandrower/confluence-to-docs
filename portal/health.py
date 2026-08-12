@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 OK = 'ok'
 ERROR = 'error'
 SKIPPED = 'skipped'
+#: Reported, but does not fail the endpoint. See overall_status.
+PENDING = 'pending'
 
 STATUS_OK = 'ok'
 STATUS_DEGRADED = 'degraded'
@@ -78,16 +80,29 @@ def check_redis():
 
 
 def check_migrations():
-    """Flag a release whose code has shipped ahead of its schema."""
+    """Report a release whose code has shipped ahead of its schema.
+
+    PENDING rather than ERROR, deliberately. `release: manage.py migrate` in the
+    Procfile runs before the new container is ever probed, so pending migrations
+    should not happen at deploy time — and if they do occur later, the site is
+    still serving customers. Returning ERROR here would make the external uptime
+    monitor page a human at 2am for something that is not an outage, and a pager
+    that cries wolf gets muted.
+
+    Still surfaced, so it isn't invisible: it shows in the body and is logged.
+    """
     try:
         executor = MigrationExecutor(connections['default'])
         plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
     except Exception:
+        # Couldn't determine it. Whatever is wrong is almost certainly the
+        # database, which check_database reports on with the severity it
+        # deserves — so don't page twice for one fault.
         logger.exception('healthz: migration probe failed')
-        return ERROR
+        return PENDING
     if plan:
-        logger.error('healthz: %d unapplied migration(s)', len(plan))
-        return ERROR
+        logger.warning('healthz: %d unapplied migration(s)', len(plan))
+        return PENDING
     return OK
 
 
@@ -102,4 +117,12 @@ def run_checks():
 
 
 def overall_status(checks):
+    """Only ERROR degrades the endpoint.
+
+    This function decides what wakes someone up, because the external monitor
+    can see nothing but the status code. So the bar for a non-200 is "customers
+    cannot use the site" — an unreachable database or Redis. SKIPPED (a
+    dependency this configuration doesn't use) and PENDING (surfaced, not
+    serious) are both reported without failing.
+    """
     return STATUS_DEGRADED if ERROR in checks.values() else STATUS_OK

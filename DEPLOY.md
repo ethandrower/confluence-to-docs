@@ -286,11 +286,20 @@ curl -s https://support.citemed.com/healthz/ | python -m json.tool
 
 - `database` — runs an actual `SELECT 1`, not just a connection object
 - `redis` — a real `PING`; reports `skipped` when `REDIS_URL` is unset (local dev)
-- `migrations` — `error` when the release's code is ahead of the schema
+- `migrations` — `pending` when the code is ahead of the schema
 
-`200` when healthy, `503` when any check errors. It is unauthenticated (no
-checker carries a session) and deliberately says nothing else — no versions, no
-config, no counts. Failure reasons go to `dokku logs`, not to the response.
+`200` when healthy, `503` **only** when the database or Redis is unreachable. It
+is unauthenticated (no checker carries a session) and deliberately says nothing
+else — no versions, no config, no counts. Failure reasons go to `dokku logs`, not
+to the response.
+
+Pending migrations are reported but do **not** return `503`, which is a
+deliberate choice about who gets woken up. Two consumers share this one URL: the
+deploy gate, and an external monitor that can see nothing but the status code.
+`release: manage.py migrate` already runs before the new container is probed, so
+a `503` there would mostly mean paging a human for something that isn't an
+outage — and a pager that cries wolf gets muted. Watch for `"migrations":
+"pending"` in the body instead.
 
 `app.json` registers it as a `startup` healthcheck, so **a release that can't
 reach Postgres or Redis fails to promote instead of going live**. Before this

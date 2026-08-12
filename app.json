@@ -59,7 +59,7 @@
       {
         "type": "startup",
         "name": "dependencies reachable",
-        "description": "GET /healthz/ — fails the release if Postgres or Redis is unreachable, or migrations are unapplied. Without this Dokku only checks that something is listening on the port, which an app 500ing on every request would pass.",
+        "description": "GET /healthz/ — fails the release if Postgres or Redis is unreachable. Without this Dokku only checks that something is listening on the port, which an app 500ing on every request would pass. Pending migrations are reported in the body but do NOT fail the check: the release phase migrates before this runs, and an external monitor polls the same URL, so a non-outage must not page anyone.",
         "path": "/healthz/",
         "attempts": 3,
         "initialDelay": 5,
