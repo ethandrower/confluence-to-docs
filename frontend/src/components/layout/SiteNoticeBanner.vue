@@ -21,6 +21,15 @@
         rel="noopener"
       >{{ notice.link_label || 'More detail' }}</a>
 
+      <!-- Agent-only nudge. Nothing expires a notice, so without a prompt a
+           forgotten critical keeps telling customers about an outage that is
+           over. Guarded on is_admin: a customer must never see internal
+           housekeeping in their own outage banner. -->
+      <span
+        v-if="auth.user?.is_admin && staleHint(notice)"
+        class="notice-stale"
+      >live {{ staleHint(notice).label }} · retire if resolved</span>
+
       <!-- Once for the stack, not once per notice: repeated on every row it
            reads as part of each message rather than as navigation. -->
       <RouterLink v-if="notice.id === store.banner[0].id" to="/notices" class="notice-history-link">
@@ -49,7 +58,7 @@ import { onMounted, watch } from 'vue'
 import { useNoticesStore } from '@/stores/notices.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useTicketChannel } from '@/lib/useTicketChannel'
-import { noticeLevel, safeHref } from '@/lib/notices.js'
+import { noticeLevel, safeHref, noticeStaleness } from '@/lib/notices.js'
 
 const store = useNoticesStore()
 const auth = useAuthStore()
@@ -60,6 +69,13 @@ const auth = useAuthStore()
 // silently renders every notice as info. That shipped once and only turned up in
 // the browser, where a critical notice appeared as role="status" "Notice".
 const levelOf = (notice) => noticeLevel(notice.level)
+
+// Only surfaces once past the level's threshold — an agent seeing "live 3m" on
+// a notice they just raised would learn to ignore this.
+function staleHint(notice) {
+  const staleness = noticeStaleness(notice)
+  return staleness?.isStale ? staleness : null
+}
 
 // Signed-in only: /api/notices/ is session-gated, so calling it anonymously
 // just 401s. auth.user resolves asynchronously on boot, hence the watch as
@@ -149,6 +165,17 @@ useTicketChannel(
 .notice-history-link {
   margin-left: auto;
   color: var(--muted-foreground);
+}
+
+.notice-stale {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  white-space: nowrap;
 }
 
 .notice-link:hover,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LEVEL_RANK, orderNotices, noticeLevel, safeHref, historyStatus } from './notices'
+import { LEVEL_RANK, orderNotices, noticeLevel, safeHref, historyStatus, noticeStaleness } from './notices'
 
 const notice = (level, id, startsAt = '2026-08-01T00:00:00Z') => ({
   id, level, starts_at: startsAt, message: `${level} ${id}`,
@@ -177,5 +177,61 @@ describe('historyStatus', () => {
   it('prefers resolved over ended when both apply', () => {
     expect(historyStatus({ starts_at: ago(9), ends_at: ago(3), retired_at: ago(1) }).label)
       .toBe('Resolved')
+  })
+})
+
+describe('noticeStaleness', () => {
+  const HOUR = 3600 * 1000
+  const live = (level, hoursAgo, extra = {}) => ({
+    level,
+    starts_at: new Date(Date.now() - hoursAgo * HOUR).toISOString(),
+    ends_at: null,
+    retired_at: null,
+    ...extra,
+  })
+
+  it('reports how long a notice has been live', () => {
+    expect(noticeStaleness(live('warning', 6)).label).toBe('6h')
+    expect(noticeStaleness(live('warning', 0.5)).label).toBe('30m')
+    expect(noticeStaleness(live('warning', 72)).label).toBe('3d')
+  })
+
+  it('flags a critical notice left up for hours', () => {
+    // The failure mode this exists for: an agent forgets to retire it, and
+    // customers keep seeing a red banner claiming an outage that is over.
+    // A permanent critical banner is the in-portal version of a stale status
+    // page — worse than none, because people stop believing it.
+    expect(noticeStaleness(live('critical', 1)).isStale).toBe(false)
+    expect(noticeStaleness(live('critical', 6)).isStale).toBe(true)
+  })
+
+  it('gives lower levels a longer leash', () => {
+    // A warning about a slow sync can legitimately stand all day; a critical
+    // cannot. Same threshold for both would train agents to ignore the flag.
+    expect(noticeStaleness(live('warning', 6)).isStale).toBe(false)
+    expect(noticeStaleness(live('warning', 30)).isStale).toBe(true)
+    expect(noticeStaleness(live('info', 30)).isStale).toBe(false)
+    expect(noticeStaleness(live('info', 100)).isStale).toBe(true)
+  })
+
+  it('says nothing about a retired notice', () => {
+    // Already dealt with. Nagging about it is noise that devalues the flag.
+    expect(noticeStaleness(live('critical', 99, { retired_at: new Date().toISOString() }))).toBeNull()
+  })
+
+  it('says nothing about a notice whose window has ended', () => {
+    const ended = live('critical', 99, { ends_at: new Date(Date.now() - HOUR).toISOString() })
+    expect(noticeStaleness(ended)).toBeNull()
+  })
+
+  it('says nothing about a notice that has not started yet', () => {
+    const scheduled = { level: 'critical', starts_at: new Date(Date.now() + HOUR).toISOString() }
+    expect(noticeStaleness(scheduled)).toBeNull()
+  })
+
+  it('treats an unknown level with the most cautious threshold', () => {
+    // Unknown levels render as info, but for nagging purposes err toward
+    // telling the agent rather than staying quiet.
+    expect(noticeStaleness(live('apocalyptic', 6)).isStale).toBe(true)
   })
 })

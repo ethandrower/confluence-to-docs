@@ -37,6 +37,17 @@
             </td>
             <td class="ta-c">
               <span class="status" :class="statusOf(notice).tone">{{ statusOf(notice).label }}</span>
+              <!-- Age of a live notice, flagged once it has stood longer than
+                   its level warrants. This is the only prompt an agent gets to
+                   retire something: nothing expires a notice automatically. -->
+              <span
+                v-if="staleness(notice)"
+                class="age"
+                :class="staleness(notice).isStale && 'age--stale'"
+                :title="staleness(notice).isStale
+                  ? `Live for ${staleness(notice).label}. Retire it if this is resolved — customers still see it.`
+                  : `Live for ${staleness(notice).label}`"
+              >{{ staleness(notice).label }}</span>
             </td>
             <td class="ta-r">
               <div class="row-actions">
@@ -141,9 +152,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { apiFetch } from '../../lib/http.js'
+import { noticeStaleness } from '@/lib/notices.js'
 import { useAdminStore } from '@/stores/admin.js'
 
 const admin = useAdminStore()
+
+const staleness = (notice) => noticeStaleness(notice)
 
 const notices = ref([])
 const loading = ref(true)
@@ -411,6 +425,19 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 
 .status--live { color: var(--success); background: color-mix(in srgb, var(--success) 14%, var(--card)); }
+
+.age {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.age--stale {
+  font-weight: 650;
+  color: var(--destructive);
+}
 .status--pending { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, var(--card)); }
 
 .modal-backdrop {

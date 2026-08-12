@@ -80,6 +80,41 @@ export function historyStatus(notice) {
   return { label: 'Ongoing', tone: 'ongoing' }
 }
 
+// How long a notice of each level may reasonably stand before an agent should
+// be reminded about it. A critical banner nobody retires is the in-portal
+// version of a stale status page: it keeps claiming an outage that is over, and
+// people stop believing the banner at all. A warning about a slow sync can
+// legitimately stand all day, so the thresholds differ — one threshold for
+// everything would train agents to ignore the flag.
+const STALE_AFTER_HOURS = { critical: 4, warning: 24, info: 72 }
+// Unknown levels render as info but nag like a critical: erring toward telling
+// someone is the safer direction for a thing whose whole job is being noticed.
+const UNKNOWN_STALE_AFTER_HOURS = 4
+
+/**
+ * Agent-facing staleness for a LIVE notice: how long it has been up, and
+ * whether that is long enough to be worth a nudge.
+ *
+ * Returns null when there is nothing to nag about — retired, ended, or not yet
+ * started. Nagging about those is noise, and noise devalues the flag.
+ */
+export function noticeStaleness(notice, now = new Date()) {
+  if (notice.retired_at) return null
+  const started = new Date(notice.starts_at)
+  if (started > now) return null
+  if (notice.ends_at && new Date(notice.ends_at) <= now) return null
+
+  const hours = (now - started) / 3_600_000
+  const threshold = STALE_AFTER_HOURS[notice.level] ?? UNKNOWN_STALE_AFTER_HOURS
+  return { hours, label: humanizeHours(hours), isStale: hours >= threshold }
+}
+
+function humanizeHours(hours) {
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m`
+  if (hours < 48) return `${Math.round(hours)}h`
+  return `${Math.round(hours / 24)}d`
+}
+
 /** Level metadata, falling back to the info treatment for anything unknown. */
 export function noticeLevel(level) {
   return LEVELS[level] || LEVELS.info
