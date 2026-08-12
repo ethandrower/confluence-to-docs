@@ -9,6 +9,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Re-run a flake, or a run whose service container failed to come up, without
+  # pushing an empty commit to do it.
+  workflow_dispatch:
 
 # One run per branch: a force-push supersedes the run it replaces instead of
 # queueing behind it.
@@ -23,6 +26,11 @@ jobs:
   backend:
     name: Django tests
     runs-on: ubuntu-latest
+    # The default is 360 minutes. A job that hangs — a service container that
+    # never reports healthy, or an async test blocking on a socket — would burn
+    # six hours of runner time and leave the PR stuck "in progress". The suite
+    # takes about a minute, so this is generous.
+    timeout-minutes: 15
 
     services:
       redis:
@@ -77,6 +85,7 @@ jobs:
   frontend:
     name: Frontend tests and build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     defaults:
       run:
