@@ -15,8 +15,8 @@
       <p class="notice-message">{{ notice.message }}</p>
 
       <a
-        v-if="notice.link_url"
-        :href="notice.link_url"
+        v-if="safeHref(notice.link_url)"
+        :href="safeHref(notice.link_url)"
         class="notice-link"
         rel="noopener"
       >{{ notice.link_label || 'More detail' }}</a>
@@ -49,7 +49,7 @@ import { onMounted, watch } from 'vue'
 import { useNoticesStore } from '@/stores/notices.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useTicketChannel } from '@/lib/useTicketChannel'
-import { noticeLevel } from '@/lib/notices.js'
+import { noticeLevel, safeHref } from '@/lib/notices.js'
 
 const store = useNoticesStore()
 const auth = useAuthStore()

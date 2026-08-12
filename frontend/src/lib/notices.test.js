@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LEVEL_RANK, orderNotices, noticeLevel } from './notices'
+import { LEVEL_RANK, orderNotices, noticeLevel, safeHref } from './notices'
 
 const notice = (level, id, startsAt = '2026-08-01T00:00:00Z') => ({
   id, level, starts_at: startsAt, message: `${level} ${id}`,
@@ -75,5 +75,54 @@ describe('LEVEL_RANK', () => {
   it('ranks critical ahead of warning ahead of info', () => {
     expect(LEVEL_RANK.critical).toBeLessThan(LEVEL_RANK.warning)
     expect(LEVEL_RANK.warning).toBeLessThan(LEVEL_RANK.info)
+  })
+})
+
+describe('safeHref', () => {
+  // The server validates link_url on the way in, so this is the second layer.
+  // It matters because the server is not the only writer: the Django admin and
+  // a shell both reach the same column, and this is the sink that turns a
+  // stored string into something the customer can click.
+  it('passes an ordinary link through', () => {
+    expect(safeHref('https://support.citemed.com/support')).toBe('https://support.citemed.com/support')
+    expect(safeHref('http://example.com')).toBe('http://example.com')
+  })
+
+  it('refuses a javascript: URL', () => {
+    expect(safeHref('javascript:alert(1)')).toBe('')
+  })
+
+  it('refuses regardless of case or leading whitespace', () => {
+    // Browsers tolerate both when resolving a scheme, so a naive
+    // startsWith('javascript:') check would miss these.
+    expect(safeHref('JavaScript:alert(1)')).toBe('')
+    expect(safeHref('  javascript:alert(1)')).toBe('')
+    expect(safeHref('java\tscript:alert(1)')).toBe('')
+  })
+
+  it('refuses data: and vbscript:', () => {
+    expect(safeHref('data:text/html,<script>alert(1)</script>')).toBe('')
+    expect(safeHref('vbscript:msgbox(1)')).toBe('')
+  })
+
+  it('returns empty for nothing at all', () => {
+    expect(safeHref('')).toBe('')
+    expect(safeHref(null)).toBe('')
+    expect(safeHref(undefined)).toBe('')
+  })
+})
+
+describe('safeHref against scheme obfuscation', () => {
+  it('refuses a NUL-obfuscated scheme', () => {
+    // Browsers strip NUL while resolving a scheme; \\s in a regex does not match it.
+    expect(safeHref('java\u0000script:alert(1)')).toBe('')
+  })
+
+  it('refuses a newline-obfuscated scheme', () => {
+    expect(safeHref('java\nscript:alert(1)')).toBe('')
+  })
+
+  it('still allows a relative link', () => {
+    expect(safeHref('/support')).toBe('/support')
   })
 })

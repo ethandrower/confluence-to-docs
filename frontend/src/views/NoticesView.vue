@@ -35,7 +35,7 @@
 
             <p class="message">{{ notice.message }}</p>
 
-            <a v-if="notice.link_url" :href="notice.link_url" class="link" rel="noopener">
+            <a v-if="safeHref(notice.link_url)" :href="safeHref(notice.link_url)" class="link" rel="noopener">
               {{ notice.link_label || 'More detail' }}
             </a>
 
@@ -53,7 +53,7 @@
 import { ref, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useNoticesStore } from '@/stores/notices.js'
-import { noticeLevel } from '@/lib/notices.js'
+import { noticeLevel, safeHref } from '@/lib/notices.js'
 
 const store = useNoticesStore()
 const loading = ref(true)

@@ -1,8 +1,8 @@
 // Presentation rules for incident/maintenance notices (#49).
 //
-// Kept out of the component so the ordering and the accessibility mapping are
-// unit-testable — the project has no component-test harness, and these are the
-// two parts with real logic in them.
+// Kept out of the component so the ordering, the accessibility mapping and the
+// href guard are unit-testable — the project has no component-test harness, and
+// these are the parts with real logic in them.
 
 /** Lower sorts first. Mirrors SiteNotice.LEVEL_CHOICES on the server. */
 export const LEVEL_RANK = { critical: 0, warning: 1, info: 2 }
@@ -33,6 +33,33 @@ const LEVELS = {
     role: 'status',
     ariaLive: 'polite',
   },
+}
+
+/**
+ * An href safe to bind, or '' if the URL isn't one we will link to.
+ *
+ * Vue escapes text but does NOT sanitize a bound href, so `javascript:` in
+ * link_url would run script in the reader's session. The admin API rejects
+ * those on the way in; this is the second layer, because the API is not the
+ * only writer — the Django admin and a shell reach the same column.
+ *
+ * Allowlist, not blocklist, and the scheme is normalised first: browsers ignore
+ * case and strip whitespace and control characters (including NUL) while
+ * resolving a scheme, so `JavaScript:`, `java\tscript:` and a NUL-obfuscated
+ * variant all execute where a naive startsWith('javascript:') sees nothing.
+ */
+export function safeHref(url) {
+  if (!url) return ''
+  // Keep only characters that may legally appear in a scheme, so anything the
+  // browser would discard is discarded here first.
+  const head = String(url)
+    .trim()
+    .slice(0, 32)
+    .toLowerCase()
+    .replace(/[^a-z0-9+.:-]/g, '')
+  // No scheme at all means a relative link, which is safe.
+  if (!/^[a-z][a-z0-9+.-]*:/.test(head)) return url
+  return /^https?:/.test(head) ? url : ''
 }
 
 /** Level metadata, falling back to the info treatment for anything unknown. */

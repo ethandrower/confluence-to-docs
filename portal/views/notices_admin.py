@@ -6,6 +6,8 @@ customer-visible history survives the incident being resolved.
 """
 import json
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
@@ -75,6 +77,28 @@ def _clean_message(payload, current=None):
     return message
 
 
+#: http(s) only. The value lands in an href the customer clicks, and Vue does
+#: not sanitize a bound href, so `javascript:` there is script execution in
+#: their session. Note URLField does NOT protect us: its validators run on
+#: full_clean(), which objects.create() and save() never call.
+_validate_link = URLValidator(schemes=['http', 'https'])
+
+
+def _clean_link_url(payload, current=''):
+    if 'link_url' not in payload:
+        return current
+    url = (payload.get('link_url') or '').strip()
+    if not url:
+        return ''
+    try:
+        _validate_link(url)
+    except DjangoValidationError:
+        # Deliberately not "sanitised and stored anyway": an agent who typed a
+        # bad URL should be told, not silently given a notice with no link.
+        raise ValidationError('link_url must be an http(s) URL')
+    return url
+
+
 def _clean_level(payload, current=SiteNotice.LEVEL_INFO):
     if 'level' not in payload:
         return current
@@ -103,6 +127,7 @@ def notices(request):
         if message is None:
             raise ValidationError('message is required')
         level = _clean_level(payload)
+        link_url = _clean_link_url(payload)
         starts_at, ends_at = _parse_window(payload, current_start=timezone.now())
     except ValidationError as exc:
         return JsonResponse({'error': str(exc)}, status=400)
@@ -110,7 +135,7 @@ def notices(request):
     notice = SiteNotice.objects.create(
         level=level,
         message=message,
-        link_url=(payload.get('link_url') or '').strip(),
+        link_url=link_url,
         link_label=(payload.get('link_label') or '').strip(),
         starts_at=starts_at,
         ends_at=ends_at,
@@ -149,11 +174,12 @@ def notice_detail(request, notice_id):
         notice.level = _clean_level(payload, current=notice.level)
         notice.starts_at, notice.ends_at = _parse_window(
             payload, current_start=notice.starts_at, current_end=notice.ends_at)
+        notice.link_url = _clean_link_url(payload, current=notice.link_url)
     except ValidationError as exc:
+        # Before any save(): a rejected edit must leave the stored notice
+        # exactly as it was.
         return JsonResponse({'error': str(exc)}, status=400)
 
-    if 'link_url' in payload:
-        notice.link_url = (payload.get('link_url') or '').strip()
     if 'link_label' in payload:
         notice.link_label = (payload.get('link_label') or '').strip()
     if 'retired_at' in payload and payload['retired_at'] is None:

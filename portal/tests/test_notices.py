@@ -289,6 +289,44 @@ class AdminNoticeEndpointTests(TestCase):
     def test_rejects_an_unknown_level(self):
         self.assertEqual(self._post({'message': 'x', 'level': 'apocalyptic'}).status_code, 400)
 
+    def test_refuses_a_javascript_url(self):
+        """link_url is rendered into an href the customer clicks, and Vue does
+        not sanitize a bound href. URLField's validators do NOT run on
+        objects.create() — only full_clean() applies them — so without an
+        explicit check an agent could store javascript: and run script in a
+        customer's session. Agents are trusted with customer data, not with
+        code execution in a customer's browser.
+        """
+        for hostile in ('javascript:alert(1)', 'JavaScript:alert(1)',
+                        ' javascript:alert(1)', 'data:text/html,<script>alert(1)</script>',
+                        'vbscript:msgbox(1)'):
+            with self.subTest(url=hostile):
+                response = self._post({'message': 'x', 'link_url': hostile})
+                self.assertEqual(response.status_code, 400, hostile)
+        self.assertEqual(SiteNotice.objects.count(), 0)
+
+    def test_refuses_a_javascript_url_on_edit_too(self):
+        """The create path is not the only way in."""
+        notice = make_notice()
+        response = self.client.patch(
+            f'{self.url}{notice.id}/',
+            data=json.dumps({'link_url': 'javascript:alert(1)'}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        notice.refresh_from_db()
+        self.assertEqual(notice.link_url, '')
+
+    def test_still_accepts_an_ordinary_link(self):
+        response = self._post({
+            'message': 'x', 'link_url': 'https://support.citemed.com/support'})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            SiteNotice.objects.get(pk=response.json()['notice']['id']).link_url,
+            'https://support.citemed.com/support')
+
+    def test_still_accepts_no_link_at_all(self):
+        self.assertEqual(self._post({'message': 'x', 'link_url': ''}).status_code, 201)
+
     def test_records_an_explicit_maintenance_window(self):
         """§3.2 maintenance notices are written ahead of the window they describe."""
         starts = timezone.now() + timedelta(hours=72)
