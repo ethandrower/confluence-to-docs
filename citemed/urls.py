@@ -5,6 +5,8 @@ from django.conf.urls.static import static
 from django.http import HttpResponse, Http404
 from django.views.decorators.cache import never_cache
 
+from portal.views import health
+
 
 @never_cache
 def spa_index(request):
@@ -26,6 +28,10 @@ def spa_index(request):
 
 
 urlpatterns = [
+    # Deploy gate + uptime monitoring (#50). Deliberately outside 'api/': it is
+    # infrastructure, not part of the customer-facing API surface, and its path
+    # is baked into app.json and an external monitor.
+    path('healthz/', health.healthz, name='healthz'),
     path(f'{settings.ADMIN_PATH}/', admin.site.urls),
     # Machine-to-machine, bearer-token, read-only. MUST come before the
     # 'api/' include: Django stops at the first prefix match, so mounting it
@@ -38,5 +44,5 @@ urlpatterns = [
 # paths that are handled by Django so we don't shadow them.
 _admin_prefix = settings.ADMIN_PATH.replace('.', r'\.')
 urlpatterns += [
-    re_path(rf'^(?!api/|{_admin_prefix}/|static/|media/).*$', spa_index),
+    re_path(rf'^(?!api/|healthz/|{_admin_prefix}/|static/|media/).*$', spa_index),
 ]

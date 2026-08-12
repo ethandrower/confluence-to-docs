@@ -2,16 +2,45 @@ import environ
 import os
 from pathlib import Path
 
+from citemed.env_config import resolve_secret_key
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-env = environ.Env(
-    DEBUG=(bool, False),
-)
+env = environ.Env()
 environ.Env.read_env(BASE_DIR / '.env')
 
-SECRET_KEY = env('SECRET_KEY', default='dev-secret-key-change-in-production')
-DEBUG = env.bool('DEBUG', default=True)
+# Default OFF, deliberately: debug is something you opt IN to for local work,
+# never something a deploy opts out of by accident. A missing DEBUG used to
+# mean a live app serving full stack traces (and, via the branches below,
+# insecure cookies and no HSTS). Local dev sets DEBUG=True in .env.
+DEBUG = env.bool('DEBUG', default=False)
+
+# Resolved AFTER DEBUG, which decides what an absent key means: a generated
+# ephemeral one in local dev, or a refusal to start in production. See
+# citemed/env_config.py for why that split, and portal/tests/test_secret_key.py.
+SECRET_KEY = resolve_secret_key(env('SECRET_KEY', default=''), debug=DEBUG)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
+
+# Let the container answer a request addressed to itself (#50). Dokku's
+# zero-downtime check probes http://<container-ip>:5000/healthz/, so the
+# container's own IP arrives as the Host header — and with ALLOWED_HOSTS set to
+# the public domain alone, Django replies 400 DisallowedHost. The check then
+# fails and a healthy release is rolled back for a reason unrelated to health.
+#
+# Safe to add: the value is resolved locally, never user-supplied, and a private
+# container IP is unroutable from outside the host's network. Skipped under
+# DEBUG, where Django already relaxes host checking and a DNS lookup on every
+# dev-server start would be pure cost.
+if not DEBUG:
+    import socket as _socket
+    try:
+        _own_ip = _socket.gethostbyname(_socket.gethostname())
+    except OSError:
+        # Degraded, not fatal: an unresolvable hostname must not stop the app
+        # booting. The check then fails loudly, which is the visible outcome.
+        _own_ip = ''
+    if _own_ip and _own_ip not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_own_ip)
 
 # Django admin URL path (without leading/trailing slashes). Override in
 # production with something unguessable to keep the admin out of bot scans
@@ -64,6 +93,15 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = 'same-origin'
 
+# /healthz/ must answer over plain HTTP. Dokku's zero-downtime check and any
+# in-network monitor probe the container directly, where there is no TLS
+# terminator — so with SECURE_SSL_REDIRECT on and no exemption, a completely
+# healthy app answers the check with a 301 and the release fails to promote.
+# Set unconditionally: harmless while DEBUG is on (no redirect happens anyway)
+# and it keeps the exemption next to the reason it exists.
+# Matched against request.path WITHOUT the leading slash — see SecurityMiddleware.
+SECURE_REDIRECT_EXEMPT = [r'^healthz/$']
+
 INSTALLED_APPS = [
     'daphne',
     'django.contrib.admin',
@@ -114,9 +152,15 @@ WSGI_APPLICATION = 'citemed.wsgi.application'
 
 ASGI_APPLICATION = 'citemed.asgi.application'
 
+# Read once and exposed as a setting: the channel layer, Celery and the
+# /healthz/ probe all need to know whether Redis is configured, and three
+# independent env reads could disagree. Empty means "not configured", which is
+# a supported local-dev mode (in-memory channel layer), not a misconfiguration.
+REDIS_URL = env('REDIS_URL', default='')
+
 # Channels channel layer: Redis in prod (cross-worker broadcast), in-memory
 # locally so dev/tests need no Redis.
-if env('REDIS_URL', default=None):
+if REDIS_URL:
     # socket_timeout MUST exceed channels_redis's brpop_timeout (5s).
     #
     # The receive loop issues `bzpopmin(channel, timeout=5)` — a blocking read
@@ -135,7 +179,7 @@ if env('REDIS_URL', default=None):
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
             'CONFIG': {'hosts': [{
-                'address': env('REDIS_URL'),
+                'address': REDIS_URL,
                 'socket_timeout': env.int('REDIS_SOCKET_TIMEOUT', default=20),
             }]},
         }
@@ -179,7 +223,9 @@ MEDIA_ROOT = env('MEDIA_ROOT', default=str(BASE_DIR / 'media'))
 # set STORAGES (with conditional inner backends) and never set the legacy
 # key, so dev + prod, S3 + non-S3 combinations all work without a clash.
 _S3_BUCKET = env('AWS_STORAGE_BUCKET_NAME', default='')
-_USE_WHITENOISE = not env.bool('DEBUG', default=True)
+# Derive from DEBUG above rather than re-reading the environment: a second read
+# carries its own default, so the two could disagree about which mode we're in.
+_USE_WHITENOISE = not DEBUG
 
 STORAGES = {
     'default': {
@@ -286,8 +332,9 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Celery
-CELERY_BROKER_URL = env('REDIS_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = env('REDIS_URL', default='redis://localhost:6379/0')
+_CELERY_REDIS = REDIS_URL or 'redis://localhost:6379/0'
+CELERY_BROKER_URL = _CELERY_REDIS
+CELERY_RESULT_BACKEND = _CELERY_REDIS
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'

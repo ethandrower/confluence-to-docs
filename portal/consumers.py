@@ -82,3 +82,36 @@ class CustomerListConsumer(AsyncJsonWebsocketConsumer):
     async def list_changed(self, event):
         await self.send_json({'type': 'list.changed',
                               'number': event['number'], 'event': event['event']})
+
+
+class SiteNoticeConsumer(AsyncJsonWebsocketConsumer):
+    """Incident/maintenance nudges (#49). Any signed-in portal user may listen —
+    including agents, who have no company — but nothing is public: §5.2 commits
+    to no public status page, so an unauthenticated socket is refused like any
+    other.
+
+    Joins the platform-wide group, plus the caller's company group when they
+    have one, so a scoped notice reaches exactly the tenants it names.
+    """
+    async def connect(self):
+        user = self.scope.get('portal_user')
+        if user is None:
+            await self.close(code=4403)
+            return
+        from portal.realtime import NOTICE_GROUP_ALL, notice_group_for_company
+
+        self.groups_joined = [NOTICE_GROUP_ALL]
+        if user.company_id:
+            self.groups_joined.append(notice_group_for_company(user.company_id))
+        for group in self.groups_joined:
+            await self.channel_layer.group_add(group, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, code):
+        # Guard like the other consumers: a rejected connection closes before
+        # any group_add ran.
+        for group in getattr(self, 'groups_joined', []):
+            await self.channel_layer.group_discard(group, self.channel_name)
+
+    async def notice_changed(self, event):
+        await self.send_json({'type': 'notice.changed', 'event': event['event']})

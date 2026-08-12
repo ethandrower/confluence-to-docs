@@ -274,6 +274,72 @@ In a browser:
 - Check Mailgun dashboard for delivered event
 - Click magic link → arrives back at `/docs/`
 
+## Health checks and uptime monitoring
+
+`GET /healthz/` reports on the three things that make this app work, and is what
+the deploy gates on:
+
+```bash
+curl -s https://support.citemed.com/healthz/ | python -m json.tool
+# {"status": "ok", "checks": {"database": "ok", "redis": "ok", "migrations": "ok"}}
+```
+
+- `database` — runs an actual `SELECT 1`, not just a connection object
+- `redis` — a real `PING`; reports `skipped` when `REDIS_URL` is unset (local dev)
+- `migrations` — `pending` when the code is ahead of the schema
+
+`200` when healthy, `503` **only** when the database or Redis is unreachable. It
+is unauthenticated (no checker carries a session) and deliberately says nothing
+else — no versions, no config, no counts. Failure reasons go to `dokku logs`, not
+to the response.
+
+Pending migrations are reported but do **not** return `503`, which is a
+deliberate choice about who gets woken up. Two consumers share this one URL: the
+deploy gate, and an external monitor that can see nothing but the status code.
+`release: manage.py migrate` already runs before the new container is probed, so
+a `503` there would mostly mean paging a human for something that isn't an
+outage — and a pager that cries wolf gets muted. Watch for `"migrations":
+"pending"` in the body instead.
+
+`app.json` registers it as a `startup` healthcheck, so **a release that can't
+reach Postgres or Redis fails to promote instead of going live**. Before this
+existed, every push printed `No healthchecks found in app.json for web process
+type` and the only check was "is something listening on port 5000".
+
+Verify the gate actually works — don't assume:
+
+```bash
+# Break a dependency on purpose and confirm the deploy REFUSES to promote.
+dokku config:set citemed-docs REDIS_URL=redis://127.0.0.1:1/0
+git commit --allow-empty -m "test healthcheck gate" && git push dokku main
+#   expect: the deploy fails at the healthcheck step and the old release keeps serving
+dokku redis:link citemed-redis citemed-docs   # restore (re-sets REDIS_URL)
+```
+
+> **Unverified on first deploy:** Dokku probes the container by its own IP, so
+> that IP arrives as the `Host` header. `settings.py` appends the container's
+> resolved IP to `ALLOWED_HOSTS` when `DEBUG=False` for exactly this reason. If
+> the first deploy after this change fails its healthcheck, check
+> `dokku logs citemed-docs` for `Invalid HTTP_HOST header` — the fallback is to
+> add the internal host to `ALLOWED_HOSTS` explicitly.
+
+### External uptime monitoring — still to be set up
+
+The healthcheck only runs at deploy time. **Nothing yet watches production
+between deploys**, so an outage at 2am is still found by a customer emailing in.
+This needs a console action; it can't be done from the repo:
+
+1. Create a monitor at [BetterStack](https://betterstack.com/better-uptime),
+   UptimeRobot, or a Cloudflare health check — **anything except this host**. A
+   monitor on the same box goes down with the thing it monitors.
+2. Point it at `https://support.citemed.com/healthz/`, every 1–3 minutes.
+3. Alert on a non-200 (the endpoint returns `503` when a dependency is down, so
+   no keyword matching is needed).
+4. Route alerts somewhere a human sees **out of hours** — phone/SMS or a paged
+   Slack channel, not email alone.
+5. Once it's collecting, the monthly uptime figure EC-SOP-07 §3.3 promises
+   clients on request becomes reportable. It isn't today.
+
 ## Rollback
 
 ```bash
