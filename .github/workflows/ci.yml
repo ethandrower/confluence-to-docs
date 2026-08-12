@@ -42,10 +42,23 @@ jobs:
       # too long for its column is a DataError on Postgres and silently accepted
       # by SQLite, which is exactly how an over-length link_url reached #52.
       #
+      # NOT -alpine, deliberately, even though docker-compose.yml uses it.
+      # Alpine is musl-based and collates text by byte value, while the official
+      # Debian image (what dokku-postgres runs) uses real glibc locale
+      # collation. Both report datcollate=en_US.utf8, so the difference is
+      # invisible to inspection: ('apple','Banana','acme') sorts as
+      # Banana,acme,apple on alpine and acme,apple,Banana on Debian.
+      #
+      # That reaches ORDER BY on every text column — DocPage.Meta.ordering
+      # (page tree order), Company.Meta.ordering, and most sharply
+      # CompanyCursorPagination.ordering = ('name','pk'), the keyset boundaries
+      # the /api/v1/ integration consumer pages through. Testing those against a
+      # different collation than production would prove nothing about them.
+      #
       # Major version should track production; confirm with
       # `dokku postgres:info citemed-docs` and change here if it differs.
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: citemed
