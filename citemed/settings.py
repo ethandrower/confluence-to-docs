@@ -2,17 +2,23 @@ import environ
 import os
 from pathlib import Path
 
+from citemed.env_config import resolve_secret_key
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / '.env')
 
-SECRET_KEY = env('SECRET_KEY', default='dev-secret-key-change-in-production')
 # Default OFF, deliberately: debug is something you opt IN to for local work,
 # never something a deploy opts out of by accident. A missing DEBUG used to
 # mean a live app serving full stack traces (and, via the branches below,
 # insecure cookies and no HSTS). Local dev sets DEBUG=True in .env.
 DEBUG = env.bool('DEBUG', default=False)
+
+# Resolved AFTER DEBUG, which decides what an absent key means: a generated
+# ephemeral one in local dev, or a refusal to start in production. See
+# citemed/env_config.py for why that split, and portal/tests/test_secret_key.py.
+SECRET_KEY = resolve_secret_key(env('SECRET_KEY', default=''), debug=DEBUG)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 # Let the container answer a request addressed to itself (#50). Dokku's

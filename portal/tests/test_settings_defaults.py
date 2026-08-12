@@ -22,15 +22,42 @@ from django.test import SimpleTestCase
 
 
 def load_settings(**env_overrides):
-    """Execute citemed/settings.py with `env_overrides` as the whole environment."""
+    """Execute citemed/settings.py with `env_overrides` as the whole environment.
+
+    A SECRET_KEY is supplied by default so these tests stay about the setting
+    each one names: without it, settings.py now refuses to load whenever DEBUG
+    is off (see test_secret_key.py), and every case here would fail for that
+    reason instead of the one under test. Pass SECRET_KEY explicitly to exercise
+    that refusal.
+    """
     scrubbed = {
         k: v for k, v in os.environ.items()
         if k not in ('DEBUG', 'SECRET_KEY')
     }
+    scrubbed.setdefault('SECRET_KEY', 'test-key-not-the-placeholder')
     scrubbed.update(env_overrides)
     with mock.patch.dict(os.environ, scrubbed, clear=True), \
          mock.patch.object(environ.Env, 'read_env', lambda *a, **kw: None):
         return importlib.reload(importlib.import_module('citemed.settings'))
+
+
+class SecretKeyWiringTests(SimpleTestCase):
+    """test_secret_key.py covers the resolution rules; this proves settings.py
+    actually calls them, and in the right order — the key's behaviour depends on
+    DEBUG, so a future edit that resolved the key first would silently restore
+    the old exposure."""
+    def setUp(self):
+        self.addCleanup(lambda: importlib.reload(importlib.import_module('citemed.settings')))
+
+    def test_settings_refuse_to_load_without_a_key_when_debug_is_off(self):
+        from django.core.exceptions import ImproperlyConfigured
+        with self.assertRaises(ImproperlyConfigured):
+            load_settings(SECRET_KEY='')
+
+    def test_settings_load_with_a_generated_key_in_local_dev(self):
+        module = load_settings(SECRET_KEY='', DEBUG='True')
+        self.assertTrue(module.SECRET_KEY)
+        self.assertNotEqual(module.SECRET_KEY, 'dev-secret-key-change-in-production')
 
 
 class AllowedHostsTests(SimpleTestCase):
