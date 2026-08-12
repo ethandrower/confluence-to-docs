@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LEVEL_RANK, orderNotices, noticeLevel, safeHref } from './notices'
+import { LEVEL_RANK, orderNotices, noticeLevel, safeHref, historyStatus } from './notices'
 
 const notice = (level, id, startsAt = '2026-08-01T00:00:00Z') => ({
   id, level, starts_at: startsAt, message: `${level} ${id}`,
@@ -124,5 +124,58 @@ describe('safeHref against scheme obfuscation', () => {
 
   it('still allows a relative link', () => {
     expect(safeHref('/support')).toBe('/support')
+  })
+})
+
+describe('safeHref against padding that pushes the scheme out of view', () => {
+  // Regression: the guard used to slice to 32 characters BEFORE stripping the
+  // characters browsers discard, so padding the front with enough NULs moved
+  // `javascript:` past the inspected window. What was left looked schemeless,
+  // was treated as a relative link, and the raw URL was handed back — while a
+  // browser, which strips those bytes first, still executed it.
+  const NUL = String.fromCharCode(0)
+
+  it('refuses a hostile scheme padded past the inspection window', () => {
+    expect(safeHref(NUL.repeat(35) + 'javascript:alert(1)')).toBe('')
+  })
+
+  it('refuses padding with other C0 control characters', () => {
+    expect(safeHref(String.fromCharCode(1).repeat(40) + 'javascript:alert(1)')).toBe('')
+    expect(safeHref('\t'.repeat(40) + 'javascript:alert(1)')).toBe('')
+  })
+
+  it('still passes a long legitimate URL', () => {
+    const long = 'https://support.citemed.com/docs/' + 'a'.repeat(120)
+    expect(safeHref(long)).toBe(long)
+  })
+})
+
+describe('historyStatus', () => {
+  const HOUR = 3600 * 1000
+  const ago = (h) => new Date(Date.now() - h * HOUR).toISOString()
+
+  it('reports a retired notice as resolved', () => {
+    expect(historyStatus({ starts_at: ago(5), retired_at: ago(1) }).label).toBe('Resolved')
+  })
+
+  it('reports an open-ended live notice as ongoing', () => {
+    expect(historyStatus({ starts_at: ago(2), ends_at: null }).label).toBe('Ongoing')
+  })
+
+  it('reports a window that has passed as ended, not ongoing', () => {
+    // A maintenance window with an end date was reading "Ongoing" forever once
+    // it lapsed, because only retired_at was consulted. Telling a customer that
+    // finished maintenance is still in progress is worse than saying nothing.
+    expect(historyStatus({ starts_at: ago(5), ends_at: ago(1) }).label).toBe('Ended')
+  })
+
+  it('treats a window that has not lapsed yet as ongoing', () => {
+    const future = new Date(Date.now() + HOUR).toISOString()
+    expect(historyStatus({ starts_at: ago(1), ends_at: future }).label).toBe('Ongoing')
+  })
+
+  it('prefers resolved over ended when both apply', () => {
+    expect(historyStatus({ starts_at: ago(9), ends_at: ago(3), retired_at: ago(1) }).label)
+      .toBe('Resolved')
   })
 })

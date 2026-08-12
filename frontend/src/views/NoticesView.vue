@@ -28,9 +28,9 @@
             <div class="row-head">
               <span class="tag">{{ levelOf(notice).label }}</span>
               <span class="when">{{ formatted(notice.starts_at) }}</span>
-              <span v-if="notice.retired_at" class="resolved">Resolved</span>
-              <span v-else-if="isFuture(notice.starts_at)" class="upcoming">Scheduled</span>
-              <span v-else class="ongoing">Ongoing</span>
+              <span class="pill" :class="`pill--${historyStatus(notice).tone}`">
+                {{ historyStatus(notice).label }}
+              </span>
             </div>
 
             <p class="message">{{ notice.message }}</p>
@@ -53,7 +53,7 @@
 import { ref, onMounted } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useNoticesStore } from '@/stores/notices.js'
-import { noticeLevel, safeHref } from '@/lib/notices.js'
+import { noticeLevel, safeHref, historyStatus } from '@/lib/notices.js'
 
 const store = useNoticesStore()
 const loading = ref(true)
@@ -68,10 +68,6 @@ function formatted(value) {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
-}
-
-function isFuture(value) {
-  return new Date(value) > new Date()
 }
 
 async function load() {
@@ -179,9 +175,9 @@ onMounted(load)
   font-variant-numeric: tabular-nums;
 }
 
-.resolved,
-.ongoing,
-.upcoming {
+/* Named distinctly from `.state` above, which is the loading/error panel — a
+   shared class name would have given the pill that panel's padding and border. */
+.pill {
   font-size: 11px;
   font-weight: 600;
   padding: 1px 8px;
@@ -190,7 +186,7 @@ onMounted(load)
   color: var(--muted-foreground);
 }
 
-.ongoing {
+.pill--ongoing {
   background: color-mix(in srgb, var(--notice-accent) 14%, var(--card));
   color: var(--notice-accent);
 }

@@ -84,6 +84,10 @@ def _clean_message(payload, current=None):
 _validate_link = URLValidator(schemes=['http', 'https'])
 
 
+def _field_max_length(name):
+    return SiteNotice._meta.get_field(name).max_length
+
+
 def _clean_link_url(payload, current=''):
     if 'link_url' not in payload:
         return current
@@ -96,7 +100,24 @@ def _clean_link_url(payload, current=''):
         # Deliberately not "sanitised and stored anyway": an agent who typed a
         # bad URL should be told, not silently given a notice with no link.
         raise ValidationError('link_url must be an http(s) URL')
+    # Length is checked here for the same reason the scheme is: create()/save()
+    # never call full_clean(), so an over-length value reaches the column and
+    # Postgres raises DataError — a 500 in production, where SQLite in tests
+    # would have accepted it quietly.
+    limit = _field_max_length('link_url')
+    if len(url) > limit:
+        raise ValidationError(f'link_url must be at most {limit} characters')
     return url
+
+
+def _clean_link_label(payload, current=''):
+    if 'link_label' not in payload:
+        return current
+    label = (payload.get('link_label') or '').strip()
+    limit = _field_max_length('link_label')
+    if len(label) > limit:
+        raise ValidationError(f'link_label must be at most {limit} characters')
+    return label
 
 
 def _clean_level(payload, current=SiteNotice.LEVEL_INFO):
@@ -128,6 +149,7 @@ def notices(request):
             raise ValidationError('message is required')
         level = _clean_level(payload)
         link_url = _clean_link_url(payload)
+        link_label = _clean_link_label(payload)
         starts_at, ends_at = _parse_window(payload, current_start=timezone.now())
     except ValidationError as exc:
         return JsonResponse({'error': str(exc)}, status=400)
@@ -136,7 +158,7 @@ def notices(request):
         level=level,
         message=message,
         link_url=link_url,
-        link_label=(payload.get('link_label') or '').strip(),
+        link_label=link_label,
         starts_at=starts_at,
         ends_at=ends_at,
         created_by=request.portal_user,
@@ -175,27 +197,32 @@ def notice_detail(request, notice_id):
         notice.starts_at, notice.ends_at = _parse_window(
             payload, current_start=notice.starts_at, current_end=notice.ends_at)
         notice.link_url = _clean_link_url(payload, current=notice.link_url)
+        notice.link_label = _clean_link_label(payload, current=notice.link_label)
     except ValidationError as exc:
         # Before any save(): a rejected edit must leave the stored notice
         # exactly as it was.
         return JsonResponse({'error': str(exc)}, status=400)
 
-    if 'link_label' in payload:
-        notice.link_label = (payload.get('link_label') or '').strip()
     if 'retired_at' in payload and payload['retired_at'] is None:
         # Un-retire, for the case where an incident was closed too early.
         notice.retired_at = None
 
+    # Captured BEFORE the scope changes: an edit that narrows or widens who a
+    # notice applies to has to nudge the old audience as well as the new one,
+    # or the people it was withdrawn from keep showing it until they reload.
+    previous_companies = list(notice.companies.values_list('id', flat=True))
+
     notice.save()
     _set_companies(notice, payload)
-    _notify(notice, 'updated')
+    _notify(notice, 'updated', also_companies=previous_companies)
     return JsonResponse({'notice': admin_notice_dict(notice)})
 
 
-def _notify(notice, event):
+def _notify(notice, event, also_companies=None):
     """On commit, so a client that refetches the instant it's nudged sees the
     row — the same ordering the ticket nudges use."""
-    transaction.on_commit(lambda: realtime.notify_notice(notice, event))
+    transaction.on_commit(
+        lambda: realtime.notify_notice(notice, event, also_companies=also_companies))
 
 
 def _set_companies(notice, payload):

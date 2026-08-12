@@ -327,6 +327,19 @@ class AdminNoticeEndpointTests(TestCase):
     def test_still_accepts_no_link_at_all(self):
         self.assertEqual(self._post({'message': 'x', 'link_url': ''}).status_code, 201)
 
+    def test_rejects_a_link_too_long_for_the_column(self):
+        """URLField is 200 chars and create()/save() never call full_clean(),
+        so an over-length paste reaches the database unchecked: a DataError 500
+        on Postgres (production), silently truncated-free on SQLite. Either way
+        the agent gets no useful answer."""
+        response = self._post({
+            'message': 'x', 'link_url': 'https://example.com/' + 'a' * 300})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_a_link_label_too_long_for_the_column(self):
+        response = self._post({'message': 'x', 'link_label': 'l' * 100})
+        self.assertEqual(response.status_code, 400)
+
     def test_records_an_explicit_maintenance_window(self):
         """§3.2 maintenance notices are written ahead of the window they describe."""
         starts = timezone.now() + timedelta(hours=72)

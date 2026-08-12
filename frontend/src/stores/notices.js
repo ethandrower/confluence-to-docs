@@ -53,8 +53,16 @@ export const useNoticesStore = defineStore('notices', () => {
     // be wrong in — better a notice shown twice than one silently suppressed.
     const previous = notices.value
     notices.value = notices.value.filter((n) => n.id !== id)
-    const response = await apiFetch(api(`/notices/${id}/dismiss`), { method: 'POST' })
-    if (!response.ok) notices.value = previous
+    try {
+      const response = await apiFetch(api(`/notices/${id}/dismiss`), { method: 'POST' })
+      if (!response.ok) notices.value = previous
+    } catch {
+      // A thrown fetch (offline, DNS, connection reset) has to restore the
+      // notice too. Checking response.ok alone leaves the banner hidden with
+      // nothing recorded server-side, and the rejection unhandled — during an
+      // outage, which is exactly when the request is most likely to fail.
+      notices.value = previous
+    }
   }
 
   return { notices, history, loading, loaded, banner, load, loadHistory, dismiss }

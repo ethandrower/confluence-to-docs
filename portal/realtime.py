@@ -27,7 +27,7 @@ def notify_ticket(ticket, event, *, to_ticket=True, to_admins=True, to_company=T
             f'co-{company_id}', {'type': 'list.changed', 'number': number, 'event': event})
 
 
-def notify_notice(notice, event):
+def notify_notice(notice, event, also_companies=None):
     """Nudge whoever a notice applies to, so a banner appears (or clears)
     without a reload — during an incident nobody thinks to refresh.
 
@@ -39,14 +39,33 @@ def notify_notice(notice, event):
     companies it names, an unscoped one to everybody. The arrival of even a
     content-free nudge signals that something happened, so scoping has to hold
     here too and not just in REST.
+
+    `also_companies` covers an edit that CHANGED the scope. Nudging only where a
+    notice now applies leaves the audience it was withdrawn from still showing a
+    banner that no longer concerns them, so the caller passes the previous scope
+    and both sides are told.
+
+    None (the default) means "there is no previous scope" — a create or a
+    retire. An empty LIST is different: it means the notice was platform-wide
+    before this edit, so the far side is everyone. Collapsing those two is how
+    an earlier version of this leaked every newly-created scoped notice to the
+    global group; the tenant-scoping test caught it.
     """
     layer = get_channel_layer()
     if layer is None:
         return
     payload = {'type': 'notice.changed', 'event': event}
-    company_ids = list(notice.companies.values_list('id', flat=True))
-    if company_ids:
-        for company_id in company_ids:
-            async_to_sync(layer.group_send)(notice_group_for_company(company_id), payload)
-    else:
-        async_to_sync(layer.group_send)(NOTICE_GROUP_ALL, payload)
+
+    scopes = [set(notice.companies.values_list('id', flat=True))]
+    if also_companies is not None:
+        scopes.append(set(also_companies))
+
+    groups = set()
+    for scope in scopes:
+        if scope:
+            groups.update(notice_group_for_company(cid) for cid in scope)
+        else:
+            groups.add(NOTICE_GROUP_ALL)
+
+    for group in groups:
+        async_to_sync(layer.group_send)(group, payload)

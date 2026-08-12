@@ -155,3 +155,37 @@ class NoticeChannelTests(TransactionTestCase):
             await communicator.disconnect()
 
         async_to_sync(scenario)()
+
+    def test_narrowing_a_notice_nudges_the_audience_it_no_longer_applies_to(self):
+        """A platform-wide notice narrowed to one company must nudge everyone
+        else, not just the company it now names.
+
+        Fanning out to the notice's CURRENT companies alone leaves the people it
+        was withdrawn from showing a banner that no longer applies to them,
+        until something else makes them reload. During an incident that is
+        exactly the wrong direction to be wrong in.
+        """
+        outsider = _connect('/ws/notices/', self.globex_user.id)
+
+        async def scenario():
+            connected, _ = await outsider.connect()
+            assert connected
+            notice_id = await database_sync_to_async(
+                self._raise_notice({'message': 'Affects everyone'}))()
+            await outsider.receive_json_from(timeout=2)  # the 'raised' nudge
+
+            def narrow_it():
+                import json
+                response = self.client.patch(
+                    f'/api/admin/notices/{notice_id}/',
+                    data=json.dumps({'company_ids': [self.acme.id]}),
+                    content_type='application/json')
+                assert response.status_code == 200, response.content
+
+            await database_sync_to_async(narrow_it)()
+            got = await outsider.receive_json_from(timeout=2)
+            assert got['type'] == 'notice.changed', got
+
+            await outsider.disconnect()
+
+        async_to_sync(scenario)()

@@ -43,9 +43,11 @@ def notices(request):
     this user."""
     user = request.portal_user
     dismissed = NoticeDismissal.objects.filter(user=user).values_list('notice_id', flat=True)
+    # No prefetch of `companies`: notice_dict never reads it, and this endpoint
+    # runs for every signed-in user on every app boot.
     live = SiteNotice.currently_visible(
         queryset=SiteNotice.for_user(user)
-    ).exclude(pk__in=dismissed).prefetch_related('companies')
+    ).exclude(pk__in=dismissed)
     return JsonResponse({'notices': [notice_dict(n) for n in live]})
 
 

@@ -50,16 +50,34 @@ const LEVELS = {
  */
 export function safeHref(url) {
   if (!url) return ''
-  // Keep only characters that may legally appear in a scheme, so anything the
-  // browser would discard is discarded here first.
+  // Strip BEFORE slicing, and never the other way round. Slicing first lets a
+  // long enough run of padding push the scheme past the inspected window: what
+  // remains looks schemeless, gets treated as a relative link, and is returned
+  // unchanged — while the browser, which discards those bytes first, still sees
+  // javascript: and runs it. `trim()` is no help; it does not remove NUL.
   const head = String(url)
-    .trim()
-    .slice(0, 32)
     .toLowerCase()
     .replace(/[^a-z0-9+.:-]/g, '')
+    .slice(0, 32)
   // No scheme at all means a relative link, which is safe.
   if (!/^[a-z][a-z0-9+.-]*:/.test(head)) return url
   return /^https?:/.test(head) ? url : ''
+}
+
+/**
+ * How a notice reads in the history list.
+ *
+ * `ends_at` is consulted, not just `retired_at`: a maintenance window that has
+ * simply lapsed is over, and labelling finished maintenance "Ongoing" tells the
+ * customer something untrue. There is no "Scheduled" state here because the
+ * history endpoint excludes notices whose window hasn't opened.
+ */
+export function historyStatus(notice) {
+  if (notice.retired_at) return { label: 'Resolved', tone: 'resolved' }
+  if (notice.ends_at && new Date(notice.ends_at) <= new Date()) {
+    return { label: 'Ended', tone: 'ended' }
+  }
+  return { label: 'Ongoing', tone: 'ongoing' }
 }
 
 /** Level metadata, falling back to the info treatment for anything unknown. */
