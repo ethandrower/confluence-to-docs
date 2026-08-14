@@ -201,6 +201,12 @@ def _send_threaded(ticket, message, recipients, *, heading, body,
     ctx = {
         'product_name': PRODUCT_NAME, 'heading': heading, 'body': body,
         'note': note, 'cta_label': cta_label, 'cta_url': cta_url,
+        # These are the only emails that carry a ticket Reply-To (set in
+        # _thread_headers below), so they are the only ones a customer can
+        # actually reply to. Every other user of this template — magic links,
+        # file notices, staff notices — sends from the noreply address and
+        # keeps the "do not reply" footer, which is true for them.
+        'can_reply': True,
     }
     try:
         headers = _thread_headers(ticket, message)
