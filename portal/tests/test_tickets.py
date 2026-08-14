@@ -155,6 +155,47 @@ class TicketNotifyTests(TestCase):
         m.refresh_from_db()
         self.assertTrue(m.esp_message_id)
 
+    def test_customer_email_invites_a_reply_it_can_actually_accept(self):
+        """The footer must agree with the headers.
+
+        These emails carry a ticket Reply-To that the Mailgun inbound route
+        turns back into a ticket message (ECD-2250), so telling the customer
+        "do not reply" would be talking them out of a feature we shipped —
+        and out of the reliable threading this whole epic exists to provide.
+        """
+        m = TicketMessage.objects.create(
+            ticket=self.t, author=self.staff, author_email=self.staff.email,
+            body='We fixed it', origin='staff')
+        from portal import ticket_notify
+        ticket_notify.notify_staff_reply(self.t, m)
+        sent = mail.outbox[0]
+        bodies = [sent.body] + [b for b, _ in sent.alternatives]
+        m.refresh_from_db()
+        for body in bodies:
+            self.assertIn('reply directly to this email', body)
+            self.assertNotIn('do not reply', body)
+        # The invitation is only honest because a working Reply-To backs it.
+        self.assertIn(f'ticket-{self.t.number}+{m.reply_token}@',
+                      sent.extra_headers.get('Reply-To', ''))
+
+    def test_magic_link_email_still_says_do_not_reply(self):
+        """The opposite case, which shares the same template.
+
+        Magic-link, file and staff notices all send from the noreply address
+        with no Reply-To, so for them "do not reply" is the true statement and
+        must survive the change above.
+        """
+        from portal import file_notify
+        file_notify._send(
+            'Subject', ['cust@acme.com'], heading='H', body='B',
+            cta_label='Open', cta_url='https://example.test/files')
+        sent = mail.outbox[0]
+        bodies = [sent.body] + [b for b, _ in sent.alternatives]
+        for body in bodies:
+            self.assertIn('do not reply', body)
+            self.assertNotIn('reply directly to this email', body)
+        self.assertNotIn('Reply-To', sent.extra_headers)
+
     def test_delivery_webhook_marks_delivered(self):
         from anymail.signals import tracking, AnymailTrackingEvent
         m = TicketMessage.objects.create(
