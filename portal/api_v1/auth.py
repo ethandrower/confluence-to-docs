@@ -94,6 +94,21 @@ class IsApiClient(BasePermission):
         return isinstance(request.auth, ApiClient) and request.auth.enabled
 
 
+class CanProvision(BasePermission):
+    """`IsApiClient`, plus the explicit write capability.
+
+    Kept as a separate class rather than a flag checked inside the view so that
+    "which endpoints can write" is answerable by grepping for this name.
+    """
+
+    message = 'This API token is not permitted to provision.'
+
+    def has_permission(self, request, view):
+        client = request.auth
+        return (isinstance(client, ApiClient) and client.enabled
+                and client.can_provision)
+
+
 class IsApiClientOrAdminSession(BasePermission):
     """Gate for the schema and Swagger UI only.
 

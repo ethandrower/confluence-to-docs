@@ -705,6 +705,16 @@ class ApiClient(models.Model):
     name = models.CharField(max_length=128, unique=True)
     token_hash = models.CharField(max_length=64, unique=True, editable=False)
     enabled = models.BooleanField(default=True)
+    # Write capability, off by default and granted per client. The /api/v1/
+    # namespace was read-only for its whole life, so every token that exists
+    # today was issued on that understanding; a shared permission would have
+    # silently upgraded all of them the moment the provisioning endpoints
+    # shipped. Read access and the ability to create customer logins are not
+    # the same grant and should not be carried by the same flag.
+    can_provision = models.BooleanField(
+        default=False,
+        help_text='Allow this client to POST to /api/v1/provisioning/ '
+                  '(create companies and portal users).')
     created_at = models.DateTimeField(auto_now_add=True)
     # Last successful authentication. Its own justification: a sync that
     # silently stops is otherwise invisible from this side of the integration.

@@ -1,6 +1,7 @@
-"""Mint a bearer token for the read-only /api/v1/ integration API.
+"""Mint a bearer token for the /api/v1/ integration API.
 
     manage.py create_api_client "RevenueHub"
+    manage.py create_api_client "RevenueHub provisioning" --can-provision
 
 The token is printed ONCE and then only its SHA-256 exists. If it is lost,
 revoke the client in the Django admin and mint a new one — there is no recovery
@@ -16,6 +17,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('name', help='Consumer name, e.g. "RevenueHub".')
+        parser.add_argument(
+            '--can-provision', action='store_true',
+            help='Also allow POST to /api/v1/provisioning/ (create companies and '
+                 'portal users). Off unless asked for: read access and the ability '
+                 'to create customer logins are different grants.')
 
     def handle(self, *args, **options):
         name = options['name'].strip()
@@ -27,8 +33,15 @@ class Command(BaseCommand):
                 f'or revoke the existing one in the admin first.')
 
         client, raw_token = ApiClient.issue(name)
+        if options['can_provision']:
+            client.can_provision = True
+            client.save(update_fields=['can_provision'])
 
         self.stdout.write(self.style.SUCCESS(f'Created API client {client.name!r}.'))
+        if client.can_provision:
+            self.stdout.write(self.style.WARNING(
+                '  This token CAN provision: it may create companies and portal '
+                'users.'))
         self.stdout.write('')
         self.stdout.write('  Token (shown once — copy it now):')
         self.stdout.write(f'    {raw_token}')
