@@ -125,3 +125,62 @@ def notify_upload(file):
              'Review it in Manage → Files.',
         cta_label='Review in the portal', cta_url=f'{_site()}/manage',
     )
+
+
+def _share_label(bucket, item):
+    return item.original_name if item else bucket.title
+
+
+def _share_cta(bucket):
+    """Deep-link straight to the folder rather than the files root. The whole
+    point of a push is that there is one specific thing to look at, and
+    dropping someone on a file list they then have to search is how a
+    delivery goes unopened."""
+    return f'{_site()}/files?folder={bucket.id}'
+
+
+def notify_share(bucket, item, recipient):
+    """Tell ONE person that we have shared something with them.
+
+    Sent per-recipient rather than to a combined To: line — the list of who
+    else was notified is not something a customer needs, and a per-person send
+    is what lets the reminder loop follow up with just one of them later.
+
+    Goes from the noreply address with no Reply-To, so the template's "do not
+    reply" footer is accurate for these; only ticket mail sets `can_reply`.
+    """
+    label = _share_label(bucket, item)
+    if item is None:
+        body = (f'We’ve shared the folder “{bucket.title}” with you. '
+                'Everything inside stays available in your portal.')
+    elif item.is_link:
+        body = (f'We’ve added a link, “{item.original_name}”, to “{bucket.title}” '
+                'in your portal.')
+    else:
+        body = f'We’ve shared “{item.original_name}” with you in “{bucket.title}”.'
+    _send(
+        f'CiteMed shared {label} with you',
+        [recipient.email],
+        heading=f'{label} is ready in your portal',
+        body=body,
+        cta_label='Open in portal', cta_url=_share_cta(bucket),
+    )
+
+
+def notify_share_reminder(notice):
+    """Nudge one person who hasn't opened what we sent them.
+
+    Capped at ShareNotice.MAX_REMINDERS by the caller. The copy stays plain on
+    purpose: this is the second or third time they've heard from us about the
+    same thing, and escalating the tone is how a useful reminder turns into
+    something people filter.
+    """
+    label = _share_label(notice.bucket, notice.file)
+    _send(
+        f'Reminder: {label} is waiting in your portal',
+        [notice.recipient.email],
+        heading=f'You haven’t opened {label} yet',
+        body=(f'We shared “{label}” with you and it’s still waiting in your portal. '
+              'It stays there — you can open it whenever suits.'),
+        cta_label='Open in portal', cta_url=_share_cta(notice.bucket),
+    )

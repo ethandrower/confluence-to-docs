@@ -74,6 +74,26 @@
             </ul>
           </div>
 
+          <!-- What CiteMed has sent THEM. Above their own files because it's
+               the half of the relationship they didn't create and might not
+               know is there; a deliverable they never find is the same as one
+               we never sent. Read-only, so no new-folder control. -->
+          <div v-if="store.hasShared" class="fs-group">
+            <div class="fs-group-head">
+              <h2 class="fs-group-title">From CiteMed</h2>
+            </div>
+            <ul class="fs-tree">
+              <FolderNode
+                v-for="node in store.sharedTree"
+                :key="node.id"
+                :node="node"
+                :active-id="store.activeBucketId"
+                :read-only="true"
+                @select="store.select($event)"
+              />
+            </ul>
+          </div>
+
           <div class="fs-group">
             <div class="fs-group-head">
               <h2 class="fs-group-title">Your files</h2>
@@ -176,7 +196,7 @@
                   </template>
                 </nav>
                 <input
-                  v-if="renamingFolder && active.kind === 'folder'"
+                  v-if="renamingFolder && active.kind === 'folder' && !isSharedFolder"
                   ref="renameFolderInput"
                   v-model="renameFolderName"
                   class="fs-rename-h1"
@@ -198,7 +218,7 @@
                 </p>
               </div>
               <div class="fs-head-actions">
-                <template v-if="active.kind === 'folder'">
+                <template v-if="active.kind === 'folder' && !isSharedFolder">
                   <button class="refresh-btn" @click="promptRename(active)">Rename</button>
                   <button
                     class="refresh-btn"
@@ -231,7 +251,12 @@
               </ul>
             </div>
 
-            <FileUploader :bucket-id="active.id" :label="uploadLabel" :key="active.id" @uploaded="onUploaded" />
+            <p v-if="isSharedFolder" class="fs-shared-note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+              Shared with you by CiteMed. Everything here stays available — open
+              it whenever you need it.
+            </p>
+            <FileUploader v-else :bucket-id="active.id" :label="uploadLabel" :key="active.id" @uploaded="onUploaded" />
 
             <div class="files">
               <div class="files-bar">
@@ -245,10 +270,13 @@
                   :key="f.id"
                   class="row"
                   :class="{ flash: flash.has(f.original_name), 'row-active': preview && preview.id === f.id }"
-                  :draggable="true"
+                  :draggable="!isSharedFolder"
                   @dragstart="onFileDragStart(f, $event)"
                 >
-                  <span class="tile" :data-cat="cat(f.original_name)">{{ ext(f.original_name) }}</span>
+                  <span v-if="f.item_type === 'link'" class="tile tile--link" title="External link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  </span>
+                  <span v-else class="tile" :data-cat="cat(f.original_name)">{{ ext(f.original_name) }}</span>
                   <div class="row-main">
                     <template v-if="editingId === f.id">
                       <input ref="renameInput" v-model="editName" class="rename" @keydown.enter="saveRename(f)" @keydown.esc="cancelRename" @blur="saveRename(f)" />
@@ -256,27 +284,46 @@
                     <span v-else class="row-name" :title="f.original_name">{{ f.original_name }}</span>
                     <!-- No review badge: uploading is just uploading. -->
                     <span class="row-sub">
-                      {{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}
+                      <template v-if="f.item_type === 'link'">{{ f.external_url }}</template>
+                      <template v-else>{{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}</template>
                     </span>
                   </div>
                   <span class="row-actions">
-                    <button v-if="previewable(f.original_name)" class="ico" :class="preview && preview.id === f.id && 'ico--on'" :title="preview && preview.id === f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
-                    <a class="ico" :href="store.downloadUrl(f.id)" title="Download" aria-label="Download">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <!-- A link is opened by the browser navigating away, so
+                         nothing would reach Django; report the open ourselves
+                         so "have they looked at it" stays answerable. -->
+                    <a
+                      v-if="f.item_type === 'link'"
+                      class="ico" :href="f.external_url" target="_blank" rel="noopener noreferrer"
+                      title="Open link" aria-label="Open link" @click="markOpened(f)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>
-                    <button class="ico" title="Rename" aria-label="Rename" @click="startRename(f)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                    </button>
-                    <button class="ico ico--danger" title="Delete" aria-label="Delete" @click="confirmId = f.id">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
+                    <template v-else>
+                      <button v-if="previewable(f.original_name)" class="ico" :class="preview && preview.id === f.id && 'ico--on'" :title="preview && preview.id === f.id ? 'Close preview' : 'Preview'" aria-label="Preview" @click="openPreview(f)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      </button>
+                      <a class="ico" :href="store.downloadUrl(f.id)" title="Download" aria-label="Download">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      </a>
+                    </template>
+                    <!-- Renaming or deleting a delivered document is refused by
+                         the API; not drawing the buttons is the honest version
+                         of that rather than an error after the click. -->
+                    <template v-if="!isSharedFolder">
+                      <button class="ico" title="Rename" aria-label="Rename" @click="startRename(f)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                      </button>
+                      <button class="ico ico--danger" title="Delete" aria-label="Delete" @click="confirmId = f.id">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
+                    </template>
                   </span>
                 </li>
               </ul>
               <div v-else class="empty">
                 <p v-if="q">No files match “{{ q }}”.</p>
+                <p v-else-if="isSharedFolder">Nothing in this folder yet.</p>
                 <p v-else-if="isFirstRun">Welcome! Upload documents for the CiteMed team using the box above, and make folders on the left to organise them. If CiteMed needs something specific from you, it’ll appear under <strong>“Needed from you”</strong>.</p>
                 <p v-else>Nothing here yet — drop files above to send them to CiteMed.</p>
               </div>
@@ -316,6 +363,8 @@ import FileUploader from '@/components/files/FileUploader.vue'
 import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
 import FolderNode from '@/components/files/FolderNode.vue'
 import { useFilesStore } from '@/stores/files'
+import { originOf } from '@/lib/folders.js'
+import { apiFetch } from '@/lib/http.js'
 
 const store = useFilesStore()
 const q = ref('')
@@ -482,6 +531,28 @@ function onDropRoot(e) {
 }
 
 const active = computed(() => store.activeBucket)
+
+/** A folder CiteMed pushed to us. Read-only: the API refuses every write on
+ *  these, so the UI hides the controls rather than offering a button that
+ *  fails. */
+const isSharedFolder = computed(
+  () => !!active.value && originOf(active.value) === 'staff'
+)
+
+/** Report that a link was opened.
+ *
+ *  Downloads and previews mark themselves server-side, but following an
+ *  external link navigates the browser away without touching Django, so the
+ *  open would go unrecorded and the reminder loop would keep nudging somebody
+ *  who has already looked. Fire-and-forget: this must never delay or block
+ *  the navigation the customer actually asked for.
+ */
+function markOpened(f) {
+  apiFetch(`/api/files/${f.id}/opened`, {
+    method: 'POST',
+    credentials: 'include',
+  }).catch(() => {})
+}
 const uploadLabel = computed(() => (active.value?.kind === 'request' ? 'this request' : ''))
 const isFirstRun = computed(() =>
   !store.requests.length && store.buckets.every((b) => !b.files.length)
@@ -884,4 +955,17 @@ function cat(name) {
 @media (prefers-reduced-motion: reduce) {
   .row, .row.flash, .skeleton-head, .skeleton-drop, .skeleton-row, .toast-enter-active, .toast-leave-active, .row-actions { animation: none; transition: none; }
 }
+
+/* A folder CiteMed pushed. Says what it is and why there's no upload box,
+   which is otherwise a conspicuous absence on this page. */
+.fs-shared-note {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin: 0 0 18px; padding: 11px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--muted);
+  font-size: 0.83rem; line-height: 1.5; color: var(--muted-foreground);
+}
+.fs-shared-note svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+.tile--link { display: grid; place-items: center; }
+.tile--link svg { width: 16px; height: 16px; }
 </style>

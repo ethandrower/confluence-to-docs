@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiFetch } from '../lib/http.js'
-import { buildFolderTree, folderPath } from '../lib/folders.js'
+import { buildFolderTree, folderPath, originOf } from '../lib/folders.js'
 
 const api = (p) => `/api${p}`
 
@@ -31,11 +31,26 @@ export const useFilesStore = defineStore('files', () => {
   )
   const generalBucket = computed(() => buckets.value.find((b) => b.kind === 'general') || null)
   const activeBucket = computed(() => buckets.value.find((b) => b.id === activeBucketId.value) || null)
-  const folders = computed(() => buckets.value.filter((b) => b.kind === 'folder'))
+  const folders = computed(() =>
+    buckets.value.filter((b) => b.kind === 'folder' && originOf(b) === 'customer')
+  )
 
   // Derived from the flat list via the shared helper, so the customer's tree
   // and the agent's client view are literally the same construction.
-  const folderTree = computed(() => buildFolderTree(buckets.value))
+  //
+  // Two trees, not one. `folderTree` is the customer's own filing, which they
+  // can rearrange; `sharedTree` is what CiteMed has pushed to them, which they
+  // can only read. Merging them would put an editable and a read-only branch
+  // side by side with nothing to tell them apart until an action failed.
+  const folderTree = computed(() => buildFolderTree(buckets.value, 'customer'))
+  const sharedTree = computed(() => buildFolderTree(buckets.value, 'staff'))
+  const hasShared = computed(() => sharedTree.value.length > 0)
+
+  /** True when a bucket is one of ours — every write affordance hangs off this. */
+  const isShared = (id) => {
+    const b = buckets.value.find((x) => x.id === id)
+    return !!b && originOf(b) === 'staff'
+  }
 
   /** Breadcrumb path to a folder, root first. Empty for a non-folder. */
   const pathTo = (id) => folderPath(buckets.value, id)
@@ -182,7 +197,7 @@ export const useFilesStore = defineStore('files', () => {
   return {
     buckets, loading, activeBucketId, requests, generalBucket, activeBucket,
     requiredRequests, optionalRequests, doneRequests,
-    folders, folderTree, pathTo, fileCount,
+    folders, folderTree, sharedTree, hasShared, isShared, pathTo, fileCount,
     load, select, upload, rename, remove, downloadUrl,
     createFolder, renameFolder, moveFolder, deleteFolder, moveFiles,
   }

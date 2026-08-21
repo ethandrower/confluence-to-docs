@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+from datetime import timedelta
 
 from django.db import models, connection
 from django.db.models.signals import post_save
@@ -183,6 +184,9 @@ class Bucket(models.Model):
     KIND_CHOICES = [
         (KIND_REQUEST, 'Request'), (KIND_GENERAL, 'General'), (KIND_FOLDER, 'Folder'),
     ]
+    ORIGIN_CUSTOMER = 'customer'
+    ORIGIN_STAFF = 'staff'
+    ORIGIN_CHOICES = [(ORIGIN_CUSTOMER, 'Customer'), (ORIGIN_STAFF, 'CiteMed')]
     STATUS_CHOICES = [
         ('open', 'Open'), ('partial', 'Partial'),
         ('complete', 'Complete'), ('general', 'General'),
@@ -193,6 +197,12 @@ class Bucket(models.Model):
 
     company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='buckets')
     kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_GENERAL)
+    # WHO the folder belongs to, which is a different question from `kind`.
+    # A 'folder' the customer made is theirs to rename, move and delete; a
+    # 'folder' we pushed to them is a deliverable they may read but must not
+    # reorganise or destroy. Defaulting to 'customer' makes every existing
+    # row correct at migration time with no data pass.
+    origin = models.CharField(max_length=16, choices=ORIGIN_CHOICES, default=ORIGIN_CUSTOMER)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     # CASCADE, not PROTECT: a company delete must be able to take its whole
@@ -243,6 +253,19 @@ class Bucket(models.Model):
         return f'{self.company.name} — {self.title}'
 
     @classmethod
+    def for_company(cls, company_id):
+        """Every bucket belonging to one company.
+
+        Staff endpoints scope through here with a company_id taken from the
+        request: choosing which client to act on IS the staff job, so that is
+        a legitimate parameter rather than a leak. Customer endpoints must go
+        through for_user() instead, which pins the company to the session.
+        """
+        if not company_id:
+            return cls.objects.none()
+        return cls.objects.filter(company_id=company_id)
+
+    @classmethod
     def for_user(cls, user):
         """Tenant-isolation chokepoint for buckets — the same rule as
         SharedFile.for_user. Folder endpoints must query through here so a
@@ -254,10 +277,16 @@ class Bucket(models.Model):
         `company_id` check on the object being moved. The target has to be
         resolved through this method too.
         """
-        company_id = getattr(user, 'company_id', None)
-        if not company_id:
-            return cls.objects.none()
-        return cls.objects.filter(company_id=company_id)
+        return cls.for_company(getattr(user, 'company_id', None))
+
+    @property
+    def is_staff_origin(self):
+        """Pushed to the customer by us. Read-only on the customer side: they
+        may open and download what is inside, but not rename, move, delete or
+        upload into it. One field answers every permission question about a
+        folder, which is why customer uploads are kept out of these rather
+        than tracked per-file."""
+        return self.origin == self.ORIGIN_STAFF
 
     @property
     def level(self):
@@ -326,6 +355,9 @@ class SharedFile(models.Model):
     """
     STATE_UPLOADING = 'uploading'
     STATE_READY = 'ready'
+    ITEM_FILE = 'file'
+    ITEM_LINK = 'link'
+    ITEM_TYPE_CHOICES = [(ITEM_FILE, 'File'), (ITEM_LINK, 'Link')]
     # Retained only so the retired columns keep valid choices; unused.
     REVIEW_CHOICES = [
         ('pending', 'Pending'), ('review', 'In review'),
@@ -339,6 +371,13 @@ class SharedFile(models.Model):
         related_name='uploaded_files',
     )
     original_name = models.CharField(max_length=512)
+    # A 'link' is a first-class row with no bytes behind it: an external URL
+    # (QA results, a dashboard) that lives in the folder tree beside real
+    # files so it sorts, moves, renames and permissions identically.
+    # `storage_key` is empty and size/mime are null for these, so every
+    # download path must branch on item_type before it presigns anything.
+    item_type = models.CharField(max_length=8, choices=ITEM_TYPE_CHOICES, default=ITEM_FILE)
+    external_url = models.URLField(max_length=2048, blank=True)
     storage_key = models.CharField(max_length=1024)
     size_bytes = models.BigIntegerField(null=True, blank=True)
     mime_type = models.CharField(max_length=255, blank=True)
@@ -373,15 +412,25 @@ class SharedFile(models.Model):
         return self.original_name
 
     @classmethod
+    def for_company(cls, company_id):
+        """Non-deleted files belonging to one company. The staff-side entry
+        point; see Bucket.for_company for why a company_id parameter is
+        legitimate there and not on the customer side."""
+        if not company_id:
+            return cls.objects.none()
+        return cls.objects.filter(company_id=company_id, deleted_at__isnull=True)
+
+    @classmethod
     def for_user(cls, user):
         """Non-deleted files the given portal user may access — scoped to THEIR
         company only. The single chokepoint for customer-side tenant isolation:
         customer endpoints must query through here, never `objects` directly,
         so a forgotten `.filter(company_id=...)` can't leak across clients."""
-        company_id = getattr(user, 'company_id', None)
-        if not company_id:
-            return cls.objects.none()
-        return cls.objects.filter(company_id=company_id, deleted_at__isnull=True)
+        return cls.for_company(getattr(user, 'company_id', None))
+
+    @property
+    def is_link(self):
+        return self.item_type == self.ITEM_LINK
 
 
 class ChecklistItem(models.Model):
@@ -428,6 +477,114 @@ class FileActivity(models.Model):
         indexes = [
             models.Index(fields=['company', '-created_at']),
         ]
+
+
+class ShareNotice(models.Model):
+    """One row per (push, person): who we told about a folder or file we
+    pushed to a customer, and whether they ever opened it.
+
+    FileActivity cannot answer this. It is an append-only record of who DID
+    act, and the question a reminder loop has to ask is who did NOT — which
+    needs the intended audience recorded at push time. Nothing else stores
+    that, so "notified but never opened" is unanswerable without this table.
+
+    Recipients are PortalUser rows rather than free-text addresses on purpose:
+    a share notification is a link into the portal, so notifying somebody who
+    cannot sign in there is a dead email by construction. If staff want to
+    reach a new person, the answer is to provision them, not to email past
+    the access model.
+
+    Pushing the same folder again creates NEW rows rather than resetting the
+    old ones. A second push is a second thing to have missed, and it should
+    get its own nudge cycle instead of quietly rearming the first.
+    """
+    # Two nudges, then it stays quiet for good. A third automated email was
+    # never going to be the thing that worked; past that point staff chase it
+    # themselves, which is what the per-person status panel exists for.
+    MAX_REMINDERS = 2
+    # Days after the push, measured from sent_at, at which each nudge fires.
+    # Indexed by reminder_count, so it must hold exactly MAX_REMINDERS entries.
+    REMINDER_AFTER_DAYS = [3, 7]
+
+    bucket = models.ForeignKey(Bucket, on_delete=models.CASCADE, related_name='notices')
+    # Set when a single file or link was pushed; null when the whole folder was.
+    file = models.ForeignKey(
+        SharedFile, null=True, blank=True, on_delete=models.CASCADE,
+        related_name='notices',
+    )
+    recipient = models.ForeignKey(
+        'PortalUser', on_delete=models.CASCADE, related_name='share_notices')
+    sent_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='sent_share_notices',
+    )
+    sent_at = models.DateTimeField(auto_now_add=True)
+    first_opened_at = models.DateTimeField(null=True, blank=True)
+    last_reminder_at = models.DateTimeField(null=True, blank=True)
+    reminder_count = models.IntegerField(default=0)
+    # Staff can push without arming the nudge loop at all.
+    remind = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-sent_at']
+        indexes = [
+            # Powers the reminder sweep: unopened, still armed, under the cap.
+            models.Index(fields=['first_opened_at', 'remind', 'reminder_count', 'sent_at']),
+            # Powers the per-person status panel on one folder.
+            models.Index(fields=['bucket', 'recipient']),
+        ]
+
+    def __str__(self):
+        return f'{self.bucket.title} → {self.recipient.email}'
+
+    @property
+    def opened(self):
+        return self.first_opened_at is not None
+
+    @property
+    def exhausted(self):
+        return self.reminder_count >= self.MAX_REMINDERS
+
+    def due_for_reminder(self, now=None):
+        """Whether this notice has earned its next nudge.
+
+        Both thresholds are measured from `sent_at`, not from the previous
+        reminder: the question is how long this has gone unopened in total,
+        and chaining off last_reminder_at would let a late first nudge drag
+        the second one out indefinitely.
+        """
+        now = now or timezone.now()
+        if self.opened or not self.remind or self.exhausted:
+            return False
+        return (now - self.sent_at) >= timedelta(
+            days=self.REMINDER_AFTER_DAYS[self.reminder_count])
+
+    @classmethod
+    def mark_opened(cls, user, file, now=None):
+        """Record that `user` opened `file`, satisfying every notice covering
+        it — the notice for that exact file, and any for a folder above it.
+
+        Walking ancestors matters: we push a folder, they open something two
+        levels down inside it, and that is plainly them having opened what we
+        sent. Only the first open is kept; re-opening doesn't move the mark.
+        """
+        now = now or timezone.now()
+        bucket_ids, node, seen = [], file.bucket, set()
+        # Bounded like Bucket.depth, so a cycle introduced outside the API
+        # can't spin here on what is a read path.
+        while node is not None and len(seen) <= Bucket.MAX_DEPTH + 1:
+            if node.pk in seen:
+                break
+            seen.add(node.pk)
+            bucket_ids.append(node.pk)
+            node = node.parent
+        return (
+            cls.objects
+            .filter(recipient=user, first_opened_at__isnull=True)
+            .filter(models.Q(file=file)
+                    | models.Q(file__isnull=True, bucket_id__in=bucket_ids))
+            .update(first_opened_at=now)
+        )
 
 
 class Ticket(models.Model):
