@@ -63,6 +63,10 @@ class SharedFileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'original_name', 'size_bytes', 'mime_type', 'state',
             'uploaded_at', 'uploaded_by_name', 'comment_count', 'seen',
+            # A link has no bytes: size/mime are null and external_url is
+            # where it actually points. The client switches on item_type to
+            # decide between a download and an outbound anchor.
+            'item_type', 'external_url',
         ]
 
     def get_comment_count(self, obj):
@@ -106,6 +110,9 @@ class BucketSerializer(serializers.ModelSerializer):
             # The client builds the tree from a flat list — one request, and
             # re-parenting a folder doesn't invalidate a nested payload.
             'parent', 'required',
+            # Drives both the "From CiteMed" section split and every
+            # read-only affordance on the customer side.
+            'origin',
         ]
 
     def get_files(self, obj):
