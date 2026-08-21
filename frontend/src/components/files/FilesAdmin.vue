@@ -142,7 +142,114 @@
             </div>
           </section>
 
-          <!-- 2. THE CLIENT'S OWN FILING, exactly as they see it. -->
+          <!-- 2. WHAT WE'VE SENT THEM. The mirror of the section above:
+               deliverables that stay put in the portal instead of being an
+               email attachment somebody has to go digging for. Read-only to
+               the customer, so every control here is ours alone. -->
+          <section class="fd-shared">
+            <div class="fd-shared-head">
+              <h4 class="fd-section-title">Shared with this client</h4>
+              <button class="btn-ghost sm" @click="openShareFolder">+ New shared folder</button>
+            </div>
+
+            <div v-if="sharedTree.length" class="fd-browser">
+              <div class="fd-tree">
+                <ul class="fs-tree">
+                  <FolderNode
+                    v-for="node in sharedTree"
+                    :key="node.id"
+                    :node="node"
+                    :active-id="sharedBucketId"
+                    :read-only="true"
+                    @select="selectShared"
+                  />
+                </ul>
+              </div>
+
+              <div class="fd-folder">
+                <template v-if="sharedBucket">
+                  <div class="fd-folder-head">
+                    <h5>{{ sharedBucket.title }}</h5>
+                    <div class="fd-shared-acts">
+                      <button class="btn-ghost sm" :disabled="sharedUploading" @click="pickSharedFiles">
+                        {{ sharedUploading ? 'Uploading…' : 'Upload' }}
+                      </button>
+                      <button class="btn-ghost sm" @click="openLinkModal">Add link</button>
+                      <button class="btn-primary sm" @click="openNotify">Notify…</button>
+                    </div>
+                    <input ref="sharedFileInput" type="file" multiple hidden @change="uploadShared" />
+                  </div>
+                  <p v-if="sharedError" class="form-error">{{ sharedError }}</p>
+
+                  <ul v-if="sharedBucket.files.length" class="fd-rows">
+                    <li v-for="f in sharedBucket.files" :key="f.id" class="fd-row">
+                      <span class="fr-file">
+                        <span class="fr-name">
+                          <svg v-if="f.item_type === 'link'" class="fr-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                          <svg v-else class="fr-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          {{ f.original_name }}
+                        </span>
+                        <span class="fr-sub">
+                          <template v-if="f.item_type === 'link'">{{ f.external_url }}</template>
+                          <template v-else>{{ fmtSize(f.size_bytes) }} · {{ fmtFileDate(f.uploaded_at) }} · {{ f.uploaded_by_name || '—' }}</template>
+                        </span>
+                      </span>
+                      <span class="row-acts">
+                        <a
+                          v-if="f.item_type === 'link'"
+                          class="act" :href="f.external_url" target="_blank" rel="noopener noreferrer"
+                          title="Open link" aria-label="Open link"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        </a>
+                        <a
+                          v-else class="act" :href="`/api/admin/files/${f.id}/download`"
+                          title="Download" aria-label="Download"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </a>
+                        <button class="act" title="Remove from this folder" aria-label="Remove" @click="removeSharedItem(f)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                        </button>
+                      </span>
+                    </li>
+                  </ul>
+                  <p v-else class="bucket-empty">Nothing shared here yet.</p>
+
+                  <!-- Per-person, not an aggregate count: "two of five opened
+                       it" tells you to chase someone but not who. -->
+                  <div v-if="shareStatus.length" class="share-status">
+                    <h6 class="ss-title">
+                      Who’s been told
+                      <span class="ss-tally">{{ shareOpened }} of {{ shareStatus.length }} opened</span>
+                    </h6>
+                    <div v-for="r in shareStatus" :key="r.user_id" class="ss-row">
+                      <span class="ss-dot" :class="r.opened_at ? 'ss-dot--open' : 'ss-dot--wait'" />
+                      <span class="ss-who">{{ r.name || r.email }}</span>
+                      <span class="ss-when">
+                        <template v-if="r.opened_at">opened {{ fmtWhen(r.opened_at) }}</template>
+                        <template v-else>sent {{ fmtWhen(r.sent_at) }} · not opened</template>
+                      </span>
+                      <span v-if="!r.opened_at" class="ss-nudge">
+                        <template v-if="!r.reminding && r.reminders_sent >= MAX_REMINDERS">
+                          {{ r.reminders_sent }} reminders sent — chase manually
+                        </template>
+                        <template v-else-if="!r.reminding">reminders off</template>
+                        <template v-else-if="r.reminders_sent">{{ r.reminders_sent }} of {{ MAX_REMINDERS }} reminders sent</template>
+                        <template v-else>reminder armed</template>
+                      </span>
+                    </div>
+                  </div>
+                </template>
+                <p v-else class="bucket-empty">Pick a shared folder.</p>
+              </div>
+            </div>
+            <p v-else class="fd-tree-empty">
+              Nothing shared with this client yet. Make a folder to send them files or links they can always get back to.
+            </p>
+          </section>
+
+          <!-- 3. THE CLIENT'S OWN FILING, exactly as they see it. -->
           <section class="fd-files">
             <h4 class="fd-section-title">Files</h4>
             <div class="fd-browser">
@@ -271,6 +378,105 @@
         </div>
       </div>
     </Transition>
+
+    <!-- New shared folder -->
+    <Transition name="modal">
+      <div v-if="folderModal" class="modal-overlay" @click.self="folderModal=false">
+        <div class="modal" role="dialog" aria-modal="true">
+          <h2 class="modal-title">New shared folder</h2>
+          <p v-if="folderError" class="form-error">{{ folderError }}</p>
+          <p class="modal-hint">
+            {{ selectedCompany?.name }} will see this in their portal and can open
+            everything inside it, but can’t rename, move or delete it.
+          </p>
+          <label class="field"><span>Folder name</span>
+            <input v-model="folderForm.title" type="text" placeholder="e.g. Q3 CER deliverables" @keydown.enter="saveShareFolder" />
+          </label>
+          <label class="field"><span>Put it inside (optional)</span>
+            <select v-model="folderForm.parent_id">
+              <option :value="''">Top level</option>
+              <option v-for="b in sharedFolders" :key="b.id" :value="b.id">{{ b.title }}</option>
+            </select>
+          </label>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="folderModal=false">Cancel</button>
+            <button class="btn-primary" :disabled="folderSaving" @click="saveShareFolder">
+              {{ folderSaving ? 'Creating…' : 'Create folder' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Add a link -->
+    <Transition name="modal">
+      <div v-if="linkModal" class="modal-overlay" @click.self="linkModal=false">
+        <div class="modal" role="dialog" aria-modal="true">
+          <h2 class="modal-title">Add a link</h2>
+          <p v-if="linkError" class="form-error">{{ linkError }}</p>
+          <p class="modal-hint">
+            A link sits in the folder beside real files — for things that live
+            somewhere else, like QA test results or a dashboard.
+          </p>
+          <label class="field"><span>Name</span>
+            <input v-model="linkForm.name" type="text" placeholder="e.g. QA test results" />
+          </label>
+          <label class="field"><span>URL</span>
+            <input v-model="linkForm.url" type="url" placeholder="https://…" @keydown.enter="saveLink" />
+          </label>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="linkModal=false">Cancel</button>
+            <button class="btn-primary" :disabled="linkSaving" @click="saveLink">
+              {{ linkSaving ? 'Adding…' : 'Add link' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Notify specific people -->
+    <Transition name="modal">
+      <div v-if="notifyModal" class="modal-overlay" @click.self="notifyModal=false">
+        <div class="modal" role="dialog" aria-modal="true">
+          <h2 class="modal-title">Notify about “{{ sharedBucket?.title }}”</h2>
+          <p v-if="notifyError" class="form-error">{{ notifyError }}</p>
+          <p class="modal-hint">
+            Only people with portal access at this client can be notified — a
+            link into the portal is no use to someone who can’t sign in.
+          </p>
+          <div class="recip-list">
+            <label v-for="m in members" :key="m.id" class="recip">
+              <input v-model="notifyForm.recipient_ids" type="checkbox" :value="m.id" />
+              <span class="recip-who">
+                <span class="recip-name">{{ m.name || m.email }}</span>
+                <span class="recip-email">{{ m.email }}</span>
+              </span>
+            </label>
+            <p v-if="!members.length" class="recip-empty">
+              Nobody at this client has portal access yet. Add them under Users first.
+            </p>
+          </div>
+          <label class="field-check">
+            <input v-model="notifyForm.remind" type="checkbox" />
+            <span>
+              <strong>Remind them if they don’t open it</strong>
+              <em>Up to {{ MAX_REMINDERS }} reminders, {{ REMINDER_DAYS }} days after sending. Then it stops
+              and you chase it yourself.</em>
+            </span>
+          </label>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="notifyModal=false">Cancel</button>
+            <button
+              class="btn-primary"
+              :disabled="notifySaving || !notifyForm.recipient_ids.length"
+              @click="sendNotify"
+            >
+              {{ notifySaving ? 'Sending…' : `Notify ${notifyForm.recipient_ids.length || ''}`.trim() }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -313,7 +519,7 @@ const generalBucket = computed(() =>
 
 // Built with the SAME helper the customer page uses, so "the structure your
 // client sees" is a fact rather than a claim.
-const adminTree = computed(() => buildFolderTree(companyBuckets.value))
+const adminTree = computed(() => buildFolderTree(companyBuckets.value, 'customer'))
 
 const adminBucketId = ref(null)
 const adminBucket = computed(() =>
@@ -536,6 +742,13 @@ async function selectCompany(id) {
       .sort((a, b) => unseenIn(b) - unseenIn(a))[0]
     const general = data.buckets.find((b) => b.kind === 'general')
     adminBucketId.value = (withNew || general || data.buckets[0] || {}).id ?? null
+    // Open the first shared folder so the panel isn't blank when there is
+    // plainly something in it.
+    const firstShared = data.buckets.find(
+      (b) => b.kind === 'folder' && b.origin === 'staff' && b.parent == null
+    )
+    sharedBucketId.value = firstShared ? firstShared.id : null
+    await loadShareStatus()
   }
 }
 function fmtSize(b) {
@@ -594,6 +807,245 @@ async function saveRequest() {
     reqError.value = e.message
   } finally {
     reqSaving.value = false
+  }
+}
+
+
+// ── Push: what we've shared with this client ─────────────────────────────
+// Mirrors ShareNotice.MAX_REMINDERS / REMINDER_AFTER_DAYS on the server. Shown
+// to staff so the promise in the notify dialog matches what actually happens.
+const MAX_REMINDERS = 2
+const REMINDER_DAYS = '3 and 7'
+
+const sharedTree = computed(() => buildFolderTree(companyBuckets.value, 'staff'))
+const sharedFolders = computed(() =>
+  companyBuckets.value
+    .filter((b) => b.kind === 'folder' && b.origin === 'staff')
+    .slice()
+    .sort((a, b) => a.title.localeCompare(b.title))
+)
+const sharedBucketId = ref(null)
+const sharedBucket = computed(() =>
+  companyBuckets.value.find((b) => b.id === sharedBucketId.value) || null
+)
+const sharedError = ref('')
+
+const shareStatus = ref([])
+const shareOpened = computed(() => shareStatus.value.filter((r) => r.opened_at).length)
+
+async function selectShared(id) {
+  sharedBucketId.value = id
+  await loadShareStatus()
+}
+
+async function loadShareStatus() {
+  shareStatus.value = []
+  if (!sharedBucketId.value) return
+  const r = await apiFetch(`/api/admin/files/share/${sharedBucketId.value}/`, {
+    credentials: 'include',
+  })
+  if (r.ok) shareStatus.value = (await r.json()).recipients
+}
+
+/** Reload the open company and stay on the same shared folder. */
+async function refreshShared() {
+  const keep = sharedBucketId.value
+  await selectCompany(selectedCompanyId.value)
+  if (keep && companyBuckets.value.some((b) => b.id === keep)) {
+    sharedBucketId.value = keep
+    await loadShareStatus()
+  }
+}
+
+// ── New shared folder ────────────────────────────────────────────────────
+const folderModal = ref(false)
+const folderSaving = ref(false)
+const folderError = ref('')
+const folderForm = ref({ title: '', parent_id: '' })
+
+function openShareFolder() {
+  folderForm.value = { title: '', parent_id: sharedBucketId.value || '' }
+  folderError.value = ''
+  folderModal.value = true
+}
+
+async function saveShareFolder() {
+  if (!folderForm.value.title.trim()) {
+    folderError.value = 'Give the folder a name.'
+    return
+  }
+  folderSaving.value = true
+  folderError.value = ''
+  try {
+    const r = await apiFetch('/api/admin/files/folders/', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_id: selectedCompanyId.value,
+        title: folderForm.value.title,
+        parent_id: folderForm.value.parent_id || null,
+      }),
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not create folder')
+    const created = (await r.json()).folder
+    folderModal.value = false
+    await selectCompany(selectedCompanyId.value)
+    sharedBucketId.value = created.id
+    await loadShareStatus()
+  } catch (e) {
+    folderError.value = e.message
+  } finally {
+    folderSaving.value = false
+  }
+}
+
+// ── Uploading into a shared folder ───────────────────────────────────────
+const sharedFileInput = ref(null)
+const sharedUploading = ref(false)
+
+function pickSharedFiles() {
+  sharedError.value = ''
+  sharedFileInput.value?.click()
+}
+
+async function uploadShared(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ''  // let the same file be picked again after a failure
+  if (!files.length || !sharedBucketId.value) return
+  sharedUploading.value = true
+  sharedError.value = ''
+  try {
+    for (const file of files) {
+      const init = await apiFetch('/api/admin/files/upload-init', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bucket_id: sharedBucketId.value,
+          name: file.name, size: file.size, mime: file.type,
+        }),
+      })
+      if (!init.ok) throw new Error((await init.json().catch(() => ({}))).error || 'Upload failed')
+      const { file_id, upload_url } = await init.json()
+
+      // Straight to storage, same as the customer path — Django issues the
+      // signed URL and records metadata but never streams the bytes.
+      const put = await fetch(upload_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      })
+      if (!put.ok) throw new Error('Upload to storage failed')
+
+      const done = await apiFetch('/api/admin/files/upload-complete', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id }),
+      })
+      if (!done.ok) throw new Error((await done.json().catch(() => ({}))).error || 'Could not finish upload')
+    }
+    await refreshShared()
+  } catch (err) {
+    sharedError.value = err.message
+  } finally {
+    sharedUploading.value = false
+  }
+}
+
+// ── Links ────────────────────────────────────────────────────────────────
+const linkModal = ref(false)
+const linkSaving = ref(false)
+const linkError = ref('')
+const linkForm = ref({ name: '', url: '' })
+
+function openLinkModal() {
+  linkForm.value = { name: '', url: '' }
+  linkError.value = ''
+  linkModal.value = true
+}
+
+async function saveLink() {
+  linkSaving.value = true
+  linkError.value = ''
+  try {
+    const r = await apiFetch('/api/admin/files/links/', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bucket_id: sharedBucketId.value,
+        name: linkForm.value.name,
+        url: linkForm.value.url,
+      }),
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not add link')
+    linkModal.value = false
+    await refreshShared()
+  } catch (e) {
+    linkError.value = e.message
+  } finally {
+    linkSaving.value = false
+  }
+}
+
+async function removeSharedItem(f) {
+  sharedError.value = ''
+  const r = await apiFetch(`/api/admin/files/items/${f.id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  if (!r.ok) {
+    sharedError.value = (await r.json().catch(() => ({}))).error || 'Could not remove that.'
+    return
+  }
+  await refreshShared()
+}
+
+// ── Notifying specific people ────────────────────────────────────────────
+const members = ref([])
+const notifyModal = ref(false)
+const notifySaving = ref(false)
+const notifyError = ref('')
+const notifyForm = ref({ recipient_ids: [], remind: true })
+
+async function openNotify() {
+  notifyError.value = ''
+  // Default to everyone with access: the common case is telling the whole
+  // team, and unticking is easier than remembering who to tick.
+  const r = await apiFetch(`/api/admin/files/companies/${selectedCompanyId.value}/members`, {
+    credentials: 'include',
+  })
+  members.value = r.ok ? (await r.json()).members : []
+  notifyForm.value = {
+    recipient_ids: members.value.map((m) => m.id),
+    remind: true,
+  }
+  notifyModal.value = true
+}
+
+async function sendNotify() {
+  notifySaving.value = true
+  notifyError.value = ''
+  try {
+    const r = await apiFetch('/api/admin/files/share/', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bucket_id: sharedBucketId.value,
+        recipient_ids: notifyForm.value.recipient_ids,
+        remind: notifyForm.value.remind,
+      }),
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not notify')
+    notifyModal.value = false
+    await loadShareStatus()
+  } catch (e) {
+    notifyError.value = e.message
+  } finally {
+    notifySaving.value = false
   }
 }
 
@@ -861,5 +1313,69 @@ tbody tr:hover td { background: var(--accent); }
   .sk-bar { animation: none; }
   .pane-enter-active, .pane-leave-active { transition: none; }
   .pane-enter-from, .pane-leave-to { max-width: 680px; transform: none; }
+}
+
+/* ── Push: shared-with-client section ─────────────────────────────────── */
+.fd-shared { margin-bottom: 26px; }
+.fd-shared-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px;
+}
+.fd-shared-head .fd-section-title { margin: 0; }
+.fd-shared-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.btn-primary.sm { font-size: 0.76rem; padding: 4px 11px; }
+
+.fr-ico { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted-foreground); }
+
+/* Per-person delivery state. Deliberately a list of names rather than a
+   progress bar: the useful output is "chase Raj", which an aggregate can't
+   give you. */
+.share-status {
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.ss-title {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 8px; font-family: var(--font-ui);
+  font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted-foreground);
+}
+.ss-tally { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.ss-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0; font-size: 0.82rem;
+}
+.ss-dot { width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
+.ss-dot--open { background: var(--success, #16a34a); }
+.ss-dot--wait { background: var(--muted-foreground); opacity: 0.5; }
+.ss-who { color: var(--foreground); font-weight: 500; }
+.ss-when { color: var(--muted-foreground); }
+.ss-nudge {
+  margin-left: auto; font-size: 0.74rem;
+  color: var(--muted-foreground); font-style: italic;
+}
+
+/* ── Modals ───────────────────────────────────────────────────────────── */
+.modal-hint {
+  margin: -4px 0 14px; font-size: 0.8rem; line-height: 1.5;
+  color: var(--muted-foreground);
+}
+.recip-list {
+  max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px; margin-bottom: 14px;
+}
+.recip {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 9px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.recip:hover { background: var(--muted); }
+.recip input { flex-shrink: 0; }
+.recip-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.recip-name { font-size: 0.85rem; color: var(--foreground); }
+.recip-email { font-size: 0.75rem; color: var(--muted-foreground); }
+.recip-empty {
+  padding: 14px 10px; font-size: 0.82rem;
+  color: var(--muted-foreground); text-align: center;
 }
 </style>

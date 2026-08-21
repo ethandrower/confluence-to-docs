@@ -6,8 +6,19 @@
 // the customer store — but the two views have to agree on the shape, or the
 // "same structure your client sees" promise quietly stops being true.
 
+/** A bucket's origin, tolerating payloads written before the field existed. */
+export function originOf(bucket) {
+  return bucket?.origin || 'customer'
+}
+
 /**
  * Build the folder tree from a flat bucket list.
+ *
+ * `origin` picks which tree: 'customer' for the folders they made, 'staff' for
+ * the ones we pushed to them, null for both. The two are built separately and
+ * rendered as separate sections rather than merged — they answer different
+ * questions ("where did I file that" vs "what has CiteMed sent me") and only
+ * one of them is editable.
  *
  * Each node carries three counts, because they answer different questions:
  *   ownCount   — files sitting directly here
@@ -15,12 +26,18 @@
  *   deepUnseen — of those, how many nobody has opened yet (staff only; the
  *                customer payload has seen === null, so this is always 0)
  */
-export function buildFolderTree(buckets) {
-  const folders = buckets.filter((b) => b.kind === 'folder')
+export function buildFolderTree(buckets, origin = null) {
+  const folders = buckets.filter(
+    (b) => b.kind === 'folder' && (origin === null || originOf(b) === origin)
+  )
   const byId = new Map(folders.map((f) => [f.id, { ...f, children: [] }]))
 
   const roots = []
   for (const node of byId.values()) {
+    // byId only holds the requested origin, so a node whose parent belongs to
+    // the other tree resolves to undefined here and becomes a root of this
+    // one. That is what keeps a filtered tree complete rather than silently
+    // dropping every branch whose parent was filtered out.
     const parent = node.parent != null ? byId.get(node.parent) : null
     ;(parent ? parent.children : roots).push(node)
   }
