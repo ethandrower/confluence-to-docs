@@ -1325,6 +1325,16 @@ tbody tr:hover td { background: var(--accent); }
 .fd-shared-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .btn-primary.sm { font-size: 0.76rem; padding: 4px 11px; }
 
+.fr-file { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.fr-name {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--font-ui); font-size: 0.88rem; color: var(--foreground);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fr-sub {
+  font-size: 0.76rem; color: var(--muted-foreground);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .fr-ico { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted-foreground); }
 
 /* Per-person delivery state. Deliberately a list of names rather than a
