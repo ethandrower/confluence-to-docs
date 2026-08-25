@@ -230,12 +230,25 @@ def verify_magic_link(request):
 
     from portal.models import MagicLinkToken
 
+    # Log every attempt with source IP + user agent. The scanner-consumed-token
+    # incident (Jenna Lowe, 2026-08) took a prod DB query to diagnose because
+    # this endpoint was silent; with these lines it's a log grep, and the UA
+    # makes an email-scanner's sandbox visibly distinct from a human browser.
+    ip = client_ip(request)
+    ua = request.META.get('HTTP_USER_AGENT', '')
+
     try:
         token = MagicLinkToken.objects.select_related('user').get(token=token_str)
     except MagicLinkToken.DoesNotExist:
+        logger.warning('Magic-link verify failed (unknown token) ip=%s ua=%s', ip, ua)
         return JsonResponse({'error': 'Invalid token'}, status=401)
 
     if not token.is_valid():
+        reason = 'already used' if token.used else 'expired'
+        logger.warning(
+            'Magic-link verify failed (%s) user=%s ip=%s ua=%s',
+            reason, token.user.email, ip, ua,
+        )
         return JsonResponse({'error': 'Token expired or already used'}, status=401)
 
     user = token.user
@@ -254,6 +267,8 @@ def verify_magic_link(request):
     user.save(update_fields=['last_login'])
 
     _start_authenticated_session(request, user)
+
+    logger.info('Magic-link verify OK user=%s ip=%s ua=%s', user.email, ip, ua)
 
     return JsonResponse({'user': _user_payload(user, request)})
 
