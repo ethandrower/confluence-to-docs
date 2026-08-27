@@ -9,6 +9,8 @@ const api = (p) => `/api${p}`
 export const useFilesStore = defineStore('files', () => {
   const buckets = ref([])
   const loading = ref(false)
+  // Server-authoritative; the uploader uses it only to report skips early.
+  const allowedExt = ref(new Set())
   const activeBucketId = ref(null)
 
   const requests = computed(() => buckets.value.filter((b) => b.kind === 'request'))
@@ -58,7 +60,13 @@ export const useFilesStore = defineStore('files', () => {
     loading.value = true
     try {
       const r = await apiFetch(api('/files/buckets/'), { credentials: 'include' })
-      buckets.value = r.ok ? (await r.json()).buckets : []
+      if (r.ok) {
+        const body = await r.json()
+        buckets.value = body.buckets
+        if (body.allowed_ext) allowedExt.value = new Set(body.allowed_ext)
+      } else {
+        buckets.value = []
+      }
       // Keep the selection valid, and when there isn't one, land somewhere
       // worth landing: a request that actually blocks them, else their own
       // files. Never an optional request — opening on "Old IFU versions (if
@@ -126,6 +134,24 @@ export const useFilesStore = defineStore('files', () => {
     }
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Upload failed')
     return r.json()
+  }
+
+  /**
+   * Turn relative folder paths into bucket ids, creating what's missing.
+   *
+   * One call for the whole batch: doing it per file would race, since two
+   * files in the same new subfolder would each try to create it.
+   */
+  async function ensurePaths(paths, rootId) {
+    if (!paths.length) return { '': rootId || null }
+    const r = await apiFetch(api('/files/folders/ensure-path'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root_id: rootId || null, paths }),
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not create folders')
+    return (await r.json()).folders
   }
 
   /**
@@ -218,6 +244,7 @@ export const useFilesStore = defineStore('files', () => {
     requiredRequests, optionalRequests, doneRequests,
     folders, folderTree, pathTo, fileCount,
     load, select, upload, rename, remove, downloadUrl,
+    allowedExt, ensurePaths,
     createFolder, renameFolder, moveFolder, deleteFolder, moveFiles,
   }
 })

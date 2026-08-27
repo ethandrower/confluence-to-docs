@@ -13,6 +13,10 @@
     @keydown.space.prevent="open"
   >
     <input ref="input" type="file" multiple hidden @change="onPick" />
+    <!-- webkitdirectory is a separate input on purpose: one input cannot offer
+         both "pick files" and "pick a folder", and browsers show a different
+         picker for each. -->
+    <input ref="dirInput" type="file" multiple webkitdirectory hidden @change="onPick" />
 
     <span class="dz-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -23,6 +27,14 @@
     </span>
     <p class="dz-title"><strong>Drop files</strong> to upload<span v-if="label"> to {{ label }}</span></p>
     <p class="dz-sub">or click to browse · PDF, Office, CSV, RIS/ENW/NBIB/XML, images, zip</p>
+    <button type="button" class="dz-folder" @click.stop="openFolder">
+      Upload a folder <span class="dz-folder-note">(keeps its structure)</span>
+    </button>
+
+    <p v-if="skipped.length" class="dz-skipped" @click.stop>
+      Skipped {{ skipped.length }} unsupported {{ skipped.length === 1 ? 'file' : 'files' }} —
+      <span class="dz-skip-names">{{ skipped.slice(0, 4).join(', ') }}<span v-if="skipped.length > 4"> and {{ skipped.length - 4 }} more</span></span>
+    </p>
 
     <p v-if="pausedFor" class="dz-paused" @click.stop>
       Upload limit reached — resuming in {{ pausedFor }}s<span v-if="pending"> · {{ pending }} waiting</span>
@@ -46,6 +58,7 @@
 import { ref, reactive, computed } from 'vue'
 import { useFilesStore } from '@/stores/files'
 import { createGate, runPool, RateLimited, UPLOAD_CONCURRENCY } from '@/lib/uploadQueue'
+import { filesFromDrop, filesFromInput, partitionByExtension, pathsIn } from '@/lib/folderDrop'
 
 const props = defineProps({
   bucketId: { type: Number, default: null },
@@ -64,19 +77,36 @@ const dragging = ref(false)
 const active = ref([])
 const pausedFor = ref(0)
 const busy = ref(false)
+const dirInput = ref(null)
+const skipped = ref([])
 
 const pending = computed(() => active.value.filter((a) => !a.error && a.pct < 1).length)
+
+// Where a dropped tree's top-level folders should be created.
+//
+// Only a folder can contain a folder. The active bucket is usually "General
+// uploads" or a document request, and neither may parent one — a tree dropped
+// while looking at those belongs at the top level of the customer's own tree.
+// Loose files still land in whatever bucket is open, which is why this is
+// separate from props.bucketId rather than a replacement for it.
+const folderRoot = computed(() => {
+  const b = store.buckets.find((x) => x.id === props.bucketId)
+  return b && b.kind === 'folder' ? b.id : null
+})
 
 function open() {
   input.value?.click()
 }
+function openFolder() {
+  dirInput.value?.click()
+}
 
 /** Upload one file, sitting out any rate-limit pause rather than failing. */
-async function runOne(gate, file, entry) {
+async function runOne(gate, file, entry, bucketId) {
   for (let waits = 0; ; waits++) {
     await gate.pass()
     try {
-      await store.upload(file, props.bucketId, (p) => (entry.pct = p))
+      await store.upload(file, bucketId, (p) => (entry.pct = p))
       entry.pct = 1
       return file.name
     } catch (e) {
@@ -93,21 +123,37 @@ async function runOne(gate, file, entry) {
   }
 }
 
-async function handle(fileList) {
-  const files = Array.from(fileList)
-  if (!files.length) return
+async function handle(items) {
+  if (!items.length) return
 
-  const entries = files.map((f) => {
-    const entry = reactive({ name: f.name, pct: 0, error: '' })
+  // Report what we won't take up front, rather than as a wall of red rows the
+  // customer can do nothing about. The server is still the authority.
+  const { ok, skipped: rejected } = partitionByExtension(items, store.allowedExt)
+  skipped.value = rejected
+  if (!ok.length) return
+
+  busy.value = true
+  let folders
+  try {
+    // Every folder in the batch, resolved in one call before any upload starts.
+    folders = await store.ensurePaths(pathsIn(ok), folderRoot.value)
+  } catch (e) {
+    busy.value = false
+    skipped.value = []
+    active.value.push(reactive({ name: 'Folders', pct: 0, error: e.message || 'Failed' }))
+    return
+  }
+
+  const entries = ok.map((it) => {
+    const entry = reactive({ name: it.path ? `${it.path}/${it.file.name}` : it.file.name, pct: 0, error: '' })
     active.value.push(entry)
     return entry
   })
 
-  busy.value = true
   const gate = createGate((secs) => (pausedFor.value = secs))
   const results = await runPool(
-    files,
-    (file, i) => runOne(gate, file, entries[i]),
+    ok,
+    (it, i) => runOne(gate, it.file, entries[i], folders[it.path] ?? props.bucketId),
     UPLOAD_CONCURRENCY,
   )
   busy.value = false
@@ -124,12 +170,14 @@ async function handle(fileList) {
   }, 1600)
 }
 
-function onDrop(e) {
+async function onDrop(e) {
   dragging.value = false
-  handle(e.dataTransfer.files)
+  // Must be awaited: filesFromDrop walks the directory tree asynchronously,
+  // but it grabs every entry handle synchronously first (see folderDrop.js).
+  handle(await filesFromDrop(e.dataTransfer))
 }
 function onPick(e) {
-  handle(e.target.files)
+  handle(filesFromInput(e.target.files))
   e.target.value = ''
 }
 </script>
@@ -176,6 +224,33 @@ function onPick(e) {
 .dz-title { font-size: 0.95rem; color: var(--foreground); }
 .dz-title strong { font-weight: 650; }
 .dz-sub { font-size: 0.76rem; color: var(--muted-foreground); }
+
+.dz-folder {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  font-family: var(--font-ui);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.dz-folder:hover { border-color: var(--brand-accent); }
+.dz-folder-note { color: var(--muted-foreground); }
+
+.dz-skipped {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  text-align: left;
+  cursor: default;
+}
+.dz-skip-names { color: var(--foreground); }
 
 .dz-paused {
   width: 100%;

@@ -9,6 +9,7 @@ import json
 import logging
 
 from django.conf import settings
+from django.db import transaction
 from django.http import JsonResponse, HttpResponseRedirect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -57,11 +58,19 @@ def _own_file(request, file_id):
 @require_http_methods(['GET'])
 def buckets_list(request):
     user = request.portal_user
+    # `allowed_ext` travels with the listing so the uploader can report what a
+    # dropped folder will skip BEFORE uploading it. Duplicating the list in JS
+    # would let the two drift, and the drift would show up as a file the UI
+    # promised to take and the server then refused.
+    allowed = sorted(settings.FILESHARE_ALLOWED_EXT)
     if not user.company_id:
-        return JsonResponse({'buckets': []})
+        return JsonResponse({'buckets': [], 'allowed_ext': allowed})
     get_general_bucket(user.company)  # ensure it exists
     buckets = Bucket.objects.filter(company_id=user.company_id)
-    return JsonResponse({'buckets': BucketSerializer(buckets, many=True).data})
+    return JsonResponse({
+        'buckets': BucketSerializer(buckets, many=True).data,
+        'allowed_ext': allowed,
+    })
 
 
 # ── Folders ───────────────────────────────────────────────────────────────
@@ -140,6 +149,95 @@ def folder_create(request):
     log_activity(user.company, 'folder_create', actor=user, bucket=folder,
                  title=title, parent_id=parent.id if parent else None)
     return JsonResponse({'folder': BucketSerializer(folder).data}, status=201)
+
+
+# A dropped folder tree is bounded so one gesture can't mint thousands of rows.
+MAX_ENSURE_PATHS = 500
+
+
+@require_portal_user
+@require_http_methods(['POST'])
+def folders_ensure_path(request):
+    """Resolve each relative path to a folder id, creating what's missing.
+
+    Folder upload needs this to be one server-side call. A dropped tree is N
+    files each carrying a path like "2024/q1", and walking that client-side
+    would be a round trip per segment *and* racy: two files in the same new
+    subfolder would each try to create it and one would lose to the duplicate
+    check. Deciding reuse-or-create exactly once per path, in a transaction,
+    is what makes the tree come out right.
+
+    Returns {path: bucket_id}. The empty path maps to the root the upload was
+    dropped on, so callers can treat loose files and nested ones identically.
+    """
+    user = request.portal_user
+    if not user.company_id:
+        return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
+
+    data = json.loads(request.body or '{}')
+    root, err = _resolve_parent(user, data.get('root_id'))
+    if err:
+        return err
+
+    paths = data.get('paths') or []
+    if not isinstance(paths, list):
+        return JsonResponse({'error': 'paths must be a list.'}, status=400)
+    if len(paths) > MAX_ENSURE_PATHS:
+        return JsonResponse(
+            {'error': f'Too many folders at once (limit {MAX_ENSURE_PATHS}).'}, status=400)
+
+    base_level = root.level if root else 0
+    resolved = {'': root.id if root else None}
+    # Keyed by (parent_id, lowercased title) so repeated segments across paths
+    # resolve to the same row without re-querying.
+    seen = {}
+
+    with transaction.atomic():
+        for raw in paths:
+            if not isinstance(raw, str):
+                return JsonResponse({'error': 'paths must be strings.'}, status=400)
+            # Normalise: strip slashes, drop empty segments ("a//b") and any
+            # "." / ".." a zip or odd filesystem might produce.
+            segments = [s.strip() for s in raw.split('/')]
+            segments = [s for s in segments if s and s not in ('.', '..')]
+            if not segments:
+                continue
+
+            key = '/'.join(segments)
+            if key in resolved:
+                continue
+            if base_level + len(segments) > Bucket.MAX_DEPTH:
+                return JsonResponse(
+                    {'error': f'“{key}” nests deeper than {Bucket.MAX_DEPTH} levels.'},
+                    status=400)
+
+            parent = root
+            walked = []
+            for segment in segments:
+                title, terr = _clean_title(segment)
+                if terr:
+                    return terr
+                walked.append(title)
+                cache_key = (parent.id if parent else None, title.lower())
+                folder = seen.get(cache_key)
+                if folder is None:
+                    # Reuse an existing folder of that name rather than making
+                    # a second one — re-uploading a tree must merge, not fork.
+                    folder = Bucket.for_user(user).filter(
+                        kind=Bucket.KIND_FOLDER, parent=parent, title__iexact=title,
+                    ).first()
+                if folder is None:
+                    folder = Bucket.objects.create(
+                        company_id=user.company_id, kind=Bucket.KIND_FOLDER,
+                        title=title, parent=parent, created_by=user, status='general',
+                    )
+                    log_activity(user.company, 'folder_create', actor=user, bucket=folder,
+                                 title=title, parent_id=parent.id if parent else None)
+                seen[cache_key] = folder
+                resolved['/'.join(walked)] = folder.id
+                parent = folder
+
+    return JsonResponse({'folders': resolved})
 
 
 @require_portal_user

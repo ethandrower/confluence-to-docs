@@ -40,6 +40,7 @@ urlpatterns = [
     # File sharing (customer + shared)
     path('files/buckets/', files.buckets_list, name='files-buckets'),
     path('files/folders/', files.folder_create, name='files-folder-create'),
+    path('files/folders/ensure-path', files.folders_ensure_path, name='files-folders-ensure-path'),
     path('files/folders/<int:folder_id>/', files.folder_detail, name='files-folder'),
     path('files/move/', files.files_move, name='files-move'),
     path('files/upload-init', files.upload_init, name='files-upload-init'),
