@@ -253,7 +253,8 @@ def upload_init(request):
         return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
     # Bound how fast one account can mint upload slots (the rest of auth is
     # rate-limited; this endpoint creates rows + presigned URLs).
-    if is_rate_limited('file-upload-init', str(user.id), 120, 3600):
+    if is_rate_limited('file-upload-init', str(user.id),
+                       settings.FILESHARE_UPLOAD_RATE, 3600):
         return JsonResponse({'error': 'Too many uploads right now — please slow down.'}, status=429)
     data = json.loads(request.body or '{}')
     name = (data.get('name') or '').strip()

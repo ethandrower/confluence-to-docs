@@ -283,6 +283,10 @@ FILESHARE_BUCKET = env('FILESHARE_BUCKET', default='') or _S3_BUCKET
 FILESHARE_KEY_PREFIX = env('FILESHARE_KEY_PREFIX', default='fileshare')
 FILESHARE_MAX_BYTES = env.int('FILESHARE_MAX_BYTES', default=5 * 1024 ** 3)  # 5 GB
 FILESHARE_PRESIGN_TTL = env.int('FILESHARE_PRESIGN_TTL', default=3600)
+# Upload slots one account may mint per hour. Bulk document sets are the
+# normal case here, so this is sized for a drag-and-drop of a few hundred
+# files rather than for a trickle.
+FILESHARE_UPLOAD_RATE = env.int('FILESHARE_UPLOAD_RATE', default=500)
 FILESHARE_ALLOWED_EXT = {
     'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'rtf',
     'ris', 'enw', 'nbib', 'xml', 'bib',          # reference-library exports
