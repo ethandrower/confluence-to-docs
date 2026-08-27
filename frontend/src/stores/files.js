@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiFetch } from '../lib/http.js'
 import { buildFolderTree, folderPath } from '../lib/folders.js'
+import { RateLimited } from '../lib/uploadQueue.js'
 
 const api = (p) => `/api${p}`
 
@@ -85,8 +86,31 @@ export const useFilesStore = defineStore('files', () => {
     activeBucketId.value = id
   }
 
-  async function upload(file, bucketId, onProgress) {
-    const init = await apiFetch(api('/files/upload-init'), {
+  /**
+   * PUT a blob straight to storage, reporting progress.
+   *
+   * Resolves with the ETag response header, which is meaningless for a whole
+   * file but is what multipart completion is assembled from — so the plumbing
+   * is here once rather than duplicated later.
+   */
+  function putToStorage(url, body, contentType, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('PUT', url)
+      if (contentType) xhr.setRequestHeader('Content-Type', contentType)
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded, e.total)
+      xhr.onload = () =>
+        xhr.status >= 200 && xhr.status < 300
+          ? resolve(xhr.getResponseHeader('ETag'))
+          : reject(new Error(`Upload to storage failed (${xhr.status})`))
+      xhr.onerror = () => reject(new Error('Network error during upload'))
+      xhr.ontimeout = () => reject(new Error('Upload timed out'))
+      xhr.send(body)
+    })
+  }
+
+  async function uploadInit(file, bucketId) {
+    const r = await apiFetch(api('/files/upload-init'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -94,18 +118,28 @@ export const useFilesStore = defineStore('files', () => {
         name: file.name, size: file.size, mime: file.type, bucket_id: bucketId || null,
       }),
     })
-    if (!init.ok) throw new Error((await init.json().catch(() => ({}))).error || 'Upload failed')
-    const { file_id, upload_url } = await init.json()
+    // 429 is backpressure, not failure: the caller pauses the whole queue and
+    // comes back, rather than burning this file as an error.
+    if (r.status === 429) {
+      const body = await r.json().catch(() => ({}))
+      throw new RateLimited((body.retry_after || 60) * 1000)
+    }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Upload failed')
+    return r.json()
+  }
 
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('PUT', upload_url)
-      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
-      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('Upload to storage failed')))
-      xhr.onerror = () => reject(new Error('Network error during upload'))
-      xhr.send(file)
-    })
+  /**
+   * Upload one file. Deliberately does NOT refresh the folder list — a caller
+   * uploading 200 files would otherwise refetch the entire tree 200 times.
+   * Callers reload once when their batch drains.
+   */
+  async function upload(file, bucketId, onProgress) {
+    const { file_id, upload_url } = await uploadInit(file, bucketId)
+
+    await putToStorage(
+      upload_url, file, file.type || 'application/octet-stream',
+      (loaded, total) => onProgress?.(loaded / total),
+    )
 
     const done = await apiFetch(api('/files/upload-complete'), {
       method: 'POST',
@@ -114,7 +148,7 @@ export const useFilesStore = defineStore('files', () => {
       body: JSON.stringify({ file_id }),
     })
     if (!done.ok) throw new Error((await done.json().catch(() => ({}))).error || 'Could not finalize upload')
-    await load()
+    return file_id
   }
 
   async function rename(id, name) {

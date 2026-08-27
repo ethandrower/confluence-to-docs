@@ -255,7 +255,16 @@ def upload_init(request):
     # rate-limited; this endpoint creates rows + presigned URLs).
     if is_rate_limited('file-upload-init', str(user.id),
                        settings.FILESHARE_UPLOAD_RATE, 3600):
-        return JsonResponse({'error': 'Too many uploads right now — please slow down.'}, status=429)
+        # Tell the client how long to hold. Without this the uploader guesses,
+        # and a queue of workers each guessing wrong earns another 429 apiece.
+        # The window rolls continuously, so re-checking every minute drains a
+        # oversized batch slowly instead of failing it outright.
+        resp = JsonResponse({
+            'error': 'Too many uploads right now — please slow down.',
+            'retry_after': 60,
+        }, status=429)
+        resp['Retry-After'] = '60'
+        return resp
     data = json.loads(request.body or '{}')
     name = (data.get('name') or '').strip()
     size = int(data.get('size') or 0)

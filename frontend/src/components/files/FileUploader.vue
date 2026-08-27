@@ -1,7 +1,7 @@
 <template>
   <div
     class="dropzone"
-    :class="{ dragging, busy: active.length }"
+    :class="{ dragging, busy }"
     role="button"
     tabindex="0"
     :aria-label="`Upload files${label ? ' to ' + label : ''}`"
@@ -24,6 +24,10 @@
     <p class="dz-title"><strong>Drop files</strong> to upload<span v-if="label"> to {{ label }}</span></p>
     <p class="dz-sub">or click to browse · PDF, Office, CSV, RIS/ENW/NBIB/XML, images, zip</p>
 
+    <p v-if="pausedFor" class="dz-paused" @click.stop>
+      Upload limit reached — resuming in {{ pausedFor }}s<span v-if="pending"> · {{ pending }} waiting</span>
+    </p>
+
     <ul v-if="active.length" class="dz-progress" @click.stop>
       <li v-for="(a, i) in active" :key="i" :class="{ failed: a.error, done: a.pct >= 1 && !a.error }">
         <span class="dz-name">{{ a.name }}</span>
@@ -39,8 +43,9 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useFilesStore } from '@/stores/files'
+import { createGate, runPool, RateLimited, UPLOAD_CONCURRENCY } from '@/lib/uploadQueue'
 
 const props = defineProps({
   bucketId: { type: Number, default: null },
@@ -48,30 +53,72 @@ const props = defineProps({
 })
 const emit = defineEmits(['uploaded'])
 
+// How many times one file will sit out a rate-limit pause before giving up.
+// The window is an hour, so this is generous on purpose: a big batch should
+// drain slowly, not fail.
+const MAX_WAITS = 60
+
 const store = useFilesStore()
 const input = ref(null)
 const dragging = ref(false)
 const active = ref([])
+const pausedFor = ref(0)
+const busy = ref(false)
+
+const pending = computed(() => active.value.filter((a) => !a.error && a.pct < 1).length)
 
 function open() {
   input.value?.click()
 }
 
-async function handle(fileList) {
-  const names = []
-  for (const file of Array.from(fileList)) {
-    const entry = reactive({ name: file.name, pct: 0, error: '' })
-    active.value.push(entry)
+/** Upload one file, sitting out any rate-limit pause rather than failing. */
+async function runOne(gate, file, entry) {
+  for (let waits = 0; ; waits++) {
+    await gate.pass()
     try {
       await store.upload(file, props.bucketId, (p) => (entry.pct = p))
       entry.pct = 1
-      names.push(file.name)
+      return file.name
     } catch (e) {
+      if (e instanceof RateLimited && waits < MAX_WAITS) {
+        // Everyone waits on the same barrier — N workers each backing off
+        // independently would each earn a fresh 429.
+        entry.pct = 0
+        gate.pause(e.retryAfterMs)
+        continue
+      }
       entry.error = e.message || 'Failed'
+      throw e
     }
   }
+}
+
+async function handle(fileList) {
+  const files = Array.from(fileList)
+  if (!files.length) return
+
+  const entries = files.map((f) => {
+    const entry = reactive({ name: f.name, pct: 0, error: '' })
+    active.value.push(entry)
+    return entry
+  })
+
+  busy.value = true
+  const gate = createGate((secs) => (pausedFor.value = secs))
+  const results = await runPool(
+    files,
+    (file, i) => runOne(gate, file, entries[i]),
+    UPLOAD_CONCURRENCY,
+  )
+  busy.value = false
+
+  // One refresh for the whole batch. Reloading per file meant a 200-file drop
+  // refetched the entire folder tree 200 times.
+  await store.load()
+
+  const names = results.filter((r) => r.ok).map((r) => r.value)
   if (names.length) emit('uploaded', names)
-  // Clear finished rows after a beat; keep failures pinned.
+
   setTimeout(() => {
     active.value = active.value.filter((a) => a.error)
   }, 1600)
@@ -129,6 +176,17 @@ function onPick(e) {
 .dz-title { font-size: 0.95rem; color: var(--foreground); }
 .dz-title strong { font-weight: 650; }
 .dz-sub { font-size: 0.76rem; color: var(--muted-foreground); }
+
+.dz-paused {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--destructive) 10%, var(--card));
+  color: var(--foreground);
+  font-size: 0.76rem;
+  cursor: default;
+}
 
 .dz-progress {
   width: 100%;
