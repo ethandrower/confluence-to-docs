@@ -16,23 +16,43 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 _client = None
+_public_client = None
+
+
+def _build(endpoint):
+    import boto3
+    from botocore.config import Config
+    return boto3.client(
+        's3',
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=getattr(settings, 'AWS_S3_REGION_NAME', 'us-east-1'),
+        endpoint_url=endpoint or None,
+        # Force SigV4 — not the deprecated SigV2 the default client emits here.
+        config=Config(signature_version='s3v4'),
+    )
 
 
 def _s3():
+    """Client for calls Django makes itself, over the network."""
     global _client
     if _client is None:
-        import boto3
-        from botocore.config import Config
-        _client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=getattr(settings, 'AWS_S3_REGION_NAME', 'us-east-1'),
-            endpoint_url=getattr(settings, 'AWS_S3_ENDPOINT_URL', None) or None,
-            # Force SigV4 — not the deprecated SigV2 the default client emits here.
-            config=Config(signature_version='s3v4'),
+        _client = _build(
+            getattr(settings, 'FILESHARE_ENDPOINT_URL', None)
+            or getattr(settings, 'AWS_S3_ENDPOINT_URL', None)
         )
     return _client
+
+
+def _s3_public():
+    """Client used ONLY to mint presigned URLs. Identical to _s3() unless the
+    store answers to a different hostname for the browser than for us (MinIO
+    in compose). Signing performs no I/O, so this client never connects."""
+    global _public_client
+    if _public_client is None:
+        public = getattr(settings, 'FILESHARE_PUBLIC_ENDPOINT', None)
+        _public_client = _s3() if not public else _build(public)
+    return _public_client
 
 
 def build_key(company_id, bucket_id, file_id, original_name):
@@ -45,7 +65,7 @@ def build_key(company_id, bucket_id, file_id, original_name):
 
 
 def presign_put(key, content_type):
-    return _s3().generate_presigned_url(
+    return _s3_public().generate_presigned_url(
         'put_object',
         Params={
             'Bucket': settings.FILESHARE_BUCKET,
@@ -60,7 +80,7 @@ def presign_get(key, download_name=None):
     params = {'Bucket': settings.FILESHARE_BUCKET, 'Key': key}
     if download_name:
         params['ResponseContentDisposition'] = f'attachment; filename="{download_name}"'
-    return _s3().generate_presigned_url(
+    return _s3_public().generate_presigned_url(
         'get_object', Params=params, ExpiresIn=settings.FILESHARE_PRESIGN_TTL
     )
 
@@ -71,7 +91,7 @@ def presign_view(key, mime=None):
     params = {'Bucket': settings.FILESHARE_BUCKET, 'Key': key, 'ResponseContentDisposition': 'inline'}
     if mime:
         params['ResponseContentType'] = mime
-    return _s3().generate_presigned_url(
+    return _s3_public().generate_presigned_url(
         'get_object', Params=params, ExpiresIn=settings.FILESHARE_PRESIGN_TTL
     )
 

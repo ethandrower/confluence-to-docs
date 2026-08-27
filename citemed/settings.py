@@ -281,6 +281,18 @@ AWS_S3_REGION_NAME = globals().get('AWS_S3_REGION_NAME') or env('AWS_S3_REGION_N
 
 FILESHARE_BUCKET = env('FILESHARE_BUCKET', default='') or _S3_BUCKET
 FILESHARE_KEY_PREFIX = env('FILESHARE_KEY_PREFIX', default='fileshare')
+# Endpoint for the S3 API calls Django itself makes (head, delete, multipart
+# create/complete/abort). Empty means real AWS.
+FILESHARE_ENDPOINT_URL = env('FILESHARE_ENDPOINT_URL', default='') or None
+# Endpoint baked into presigned URLs, which are consumed by the *browser* and
+# not by us. Normally identical to the above; they differ only when the store
+# is reachable under different names from the app and from the browser, which
+# is exactly the case for MinIO in docker compose ('minio:9000' internally,
+# 'localhost:9000' from the host). Presigning is pure string math — no
+# connection is made — so signing against a host we cannot reach is fine.
+FILESHARE_PUBLIC_ENDPOINT = (
+    env('FILESHARE_PUBLIC_ENDPOINT', default='') or FILESHARE_ENDPOINT_URL
+)
 FILESHARE_MAX_BYTES = env.int('FILESHARE_MAX_BYTES', default=5 * 1024 ** 3)  # 5 GB
 FILESHARE_PRESIGN_TTL = env.int('FILESHARE_PRESIGN_TTL', default=3600)
 # Upload slots one account may mint per hour. Bulk document sets are the
