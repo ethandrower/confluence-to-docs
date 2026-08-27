@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createSemaphore, createGate, runPool, RateLimited, UPLOAD_CONCURRENCY } from './uploadQueue.js'
+import {
+  createSemaphore, createGate, runPool, withRetry, withSlot, putSlots,
+  RateLimited, UPLOAD_CONCURRENCY,
+} from './uploadQueue.js'
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
@@ -173,4 +176,77 @@ describe('RateLimited', () => {
 
 it('keeps concurrency under the browser per-host connection cap', () => {
   expect(UPLOAD_CONCURRENCY).toBeLessThanOrEqual(6)
+})
+
+describe('withRetry', () => {
+  // No real waiting: the backoff is injected so these stay fast.
+  const nowait = { sleep: () => Promise.resolve() }
+
+  it('returns the first success without retrying', async () => {
+    const fn = vi.fn(async () => 'ok')
+    expect(await withRetry(fn, nowait)).toBe('ok')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a failure and succeeds on a later attempt', async () => {
+    // The whole point of multipart: a dropped part costs one part, not the file.
+    let calls = 0
+    const fn = vi.fn(async () => {
+      if (++calls < 3) throw new Error('flaky')
+      return 'recovered'
+    })
+    expect(await withRetry(fn, nowait)).toBe('recovered')
+    expect(fn).toHaveBeenCalledTimes(3)
+  })
+
+  it('gives up after the attempt limit and rethrows the last error', async () => {
+    const fn = vi.fn(async () => { throw new Error('always') })
+    await expect(withRetry(fn, nowait)).rejects.toThrow('always')
+    expect(fn).toHaveBeenCalledTimes(3)
+  })
+
+  it('never retries a RateLimited — that is the shared gate\'s job', async () => {
+    // Retrying here would burn the file's attempts against a limit that only
+    // time can clear, and would earn a fresh 429 each time.
+    const fn = vi.fn(async () => { throw new RateLimited(60000) })
+    await expect(withRetry(fn, nowait)).rejects.toBeInstanceOf(RateLimited)
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('backs off for longer on each successive attempt', async () => {
+    const waits = []
+    const fn = async () => { throw new Error('nope') }
+    await withRetry(fn, { sleep: (ms) => { waits.push(ms); return Promise.resolve() } })
+      .catch(() => {})
+    expect(waits).toHaveLength(2) // no sleep after the final attempt
+    expect(waits[1]).toBeGreaterThan(waits[0])
+  })
+})
+
+describe('withSlot', () => {
+  it('releases the slot even when the work throws', async () => {
+    // A leaked slot permanently shrinks the pool, so this matters more than
+    // the happy path.
+    const before = putSlots.active
+    await expect(withSlot(async () => { throw new Error('boom') })).rejects.toThrow('boom')
+    expect(putSlots.active).toBe(before)
+  })
+
+  it('passes the value through on success', async () => {
+    expect(await withSlot(async () => 42)).toBe(42)
+    expect(putSlots.active).toBe(0)
+  })
+
+  it('caps concurrent holders at the shared ceiling', async () => {
+    let inFlight = 0
+    let peak = 0
+    await Promise.all(Array.from({ length: 12 }, () => withSlot(async () => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((r) => setTimeout(r, 0))
+      inFlight--
+    })))
+    expect(peak).toBe(UPLOAD_CONCURRENCY)
+    expect(putSlots.active).toBe(0)
+  })
 })

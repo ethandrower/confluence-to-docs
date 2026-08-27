@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiFetch } from '../lib/http.js'
 import { buildFolderTree, folderPath } from '../lib/folders.js'
-import { RateLimited } from '../lib/uploadQueue.js'
+import { RateLimited, runPool, withSlot, withRetry, UPLOAD_CONCURRENCY } from '../lib/uploadQueue.js'
 
 const api = (p) => `/api${p}`
 
@@ -154,27 +154,114 @@ export const useFilesStore = defineStore('files', () => {
     return (await r.json()).folders
   }
 
+  async function fetchPartUrls(fileId, numbers) {
+    const r = await apiFetch(api('/files/upload-parts'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId, part_numbers: numbers }),
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not presign parts')
+    return (await r.json()).urls
+  }
+
+  async function abortUpload(fileId) {
+    // Best-effort: the nightly purge is the real backstop. Worth attempting
+    // because until an aborted multipart's parts are discarded they keep
+    // being billed and never appear in a listing.
+    try {
+      await apiFetch(api('/files/upload-abort'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fileId }),
+      })
+    } catch { /* nothing useful to do */ }
+  }
+
+  // Presign in batches rather than all at once: a 5 GB file is hundreds of
+  // parts whose URLs would otherwise all expire together.
+  const PART_URL_BATCH = 25
+
+  async function uploadInParts(file, init, onProgress) {
+    const { file_id, part_size, part_count } = init
+    const loaded = new Array(part_count).fill(0)
+    const report = () =>
+      onProgress?.(loaded.reduce((a, b) => a + b, 0) / (file.size || 1))
+
+    const done = []
+    for (let first = 1; first <= part_count; first += PART_URL_BATCH) {
+      const numbers = []
+      for (let n = first; n < first + PART_URL_BATCH && n <= part_count; n++) numbers.push(n)
+      const urls = await fetchPartUrls(file_id, numbers)
+
+      const results = await runPool(numbers, (n) => withRetry(async () => {
+        const blob = file.slice((n - 1) * part_size, n * part_size)
+        const etag = await withSlot(() => putToStorage(urls[String(n)], blob, null, (l) => {
+          loaded[n - 1] = l
+          report()
+        }))
+        if (!etag) {
+          // The PUT succeeded but the ETag header was not readable. Almost
+          // always a bucket CORS problem: multipart completion is assembled
+          // from ETags, so the store must expose that header to scripts.
+          throw new Error('Storage did not return an ETag (check CORS ExposeHeaders)')
+        }
+        // A retried part replaces the previous one, so recording it here is safe.
+        return { PartNumber: n, ETag: etag }
+      }), UPLOAD_CONCURRENCY)
+
+      const failed = results.find((r) => !r.ok)
+      if (failed) throw failed.error
+      done.push(...results.map((r) => r.value))
+    }
+
+    const complete = await apiFetch(api('/files/upload-complete'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id, parts: done }),
+    })
+    if (!complete.ok) {
+      throw new Error((await complete.json().catch(() => ({}))).error || 'Could not finalize upload')
+    }
+    return file_id
+  }
+
   /**
    * Upload one file. Deliberately does NOT refresh the folder list — a caller
    * uploading 200 files would otherwise refetch the entire tree 200 times.
    * Callers reload once when their batch drains.
+   *
+   * Large files go up in parts. That is not really about the 5 GB single-PUT
+   * ceiling: it is that a whole-object PUT has nothing to resume from, so one
+   * dropped connection at 90% costs the entire transfer.
    */
   async function upload(file, bucketId, onProgress) {
-    const { file_id, upload_url } = await uploadInit(file, bucketId)
+    const init = await uploadInit(file, bucketId)
 
-    await putToStorage(
-      upload_url, file, file.type || 'application/octet-stream',
+    if (init.multipart) {
+      try {
+        return await uploadInParts(file, init, onProgress)
+      } catch (e) {
+        await abortUpload(init.file_id)
+        throw e
+      }
+    }
+
+    await withRetry(() => withSlot(() => putToStorage(
+      init.upload_url, file, file.type || 'application/octet-stream',
       (loaded, total) => onProgress?.(loaded / total),
-    )
+    )))
 
     const done = await apiFetch(api('/files/upload-complete'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_id }),
+      body: JSON.stringify({ file_id: init.file_id }),
     })
     if (!done.ok) throw new Error((await done.json().catch(() => ({}))).error || 'Could not finalize upload')
-    return file_id
+    return init.file_id
   }
 
   async function rename(id, name) {

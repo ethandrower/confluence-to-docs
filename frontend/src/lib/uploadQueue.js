@@ -104,6 +104,53 @@ export function createGate(onTick) {
 }
 
 /**
+ * The single ceiling on concurrent PUTs to storage.
+ *
+ * Whole-file uploads and individual parts both acquire from here, so four
+ * large files splitting into parts still open four sockets rather than
+ * four-times-parts. Crucially a file does NOT hold a slot while its parts run
+ * — if it did, files would hold every slot while waiting on parts that can
+ * never get one, and the queue would deadlock.
+ */
+export const putSlots = createSemaphore(UPLOAD_CONCURRENCY)
+
+/** Run `fn` holding one PUT slot. */
+export async function withSlot(fn) {
+  await putSlots.acquire()
+  try {
+    return await fn()
+  } finally {
+    putSlots.release()
+  }
+}
+
+/**
+ * Retry `fn` with exponential backoff and jitter.
+ *
+ * Safe here because every operation it wraps is idempotent: re-PUTting a part
+ * replaces that part, and re-PUTting a whole object replaces the object. This
+ * is what makes multipart worth having — a dropped connection costs one part,
+ * not the whole file.
+ *
+ * A RateLimited never retries here; that is the queue's shared pause to
+ * handle, not an individual transfer's.
+ */
+export async function withRetry(fn, { attempts = 3, baseMs = 500, sleep } = {}) {
+  const wait = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)))
+  let last
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn(i)
+    } catch (e) {
+      if (e instanceof RateLimited) throw e
+      last = e
+      if (i < attempts - 1) await wait(baseMs * 2 ** i * (1 + Math.random() * 0.3))
+    }
+  }
+  throw last
+}
+
+/**
  * Run `task` over every item with at most `limit` in flight.
  *
  * Unlike Promise.all over a mapped array this never lets rejections escape:

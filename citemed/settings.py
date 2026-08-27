@@ -295,6 +295,15 @@ FILESHARE_PUBLIC_ENDPOINT = (
 )
 FILESHARE_MAX_BYTES = env.int('FILESHARE_MAX_BYTES', default=5 * 1024 ** 3)  # 5 GB
 FILESHARE_PRESIGN_TTL = env.int('FILESHARE_PRESIGN_TTL', default=3600)
+# Above this, upload in parts rather than as one PUT. Below it a single PUT is
+# one round trip and perfectly reliable, so multipart would only add calls.
+FILESHARE_MULTIPART_THRESHOLD = env.int(
+    'FILESHARE_MULTIPART_THRESHOLD', default=100 * 1024 ** 2)  # 100 MB
+# Floor for a single part. S3's own minimum is 5 MiB (the last part excepted);
+# larger parts mean fewer round trips, smaller ones mean less to redo on a
+# retry. part_plan() raises this when a file would otherwise exceed the
+# 10,000-part limit.
+FILESHARE_PART_SIZE = env.int('FILESHARE_PART_SIZE', default=16 * 1024 ** 2)  # 16 MB
 # Upload slots one account may mint per hour. Bulk document sets are the
 # normal case here, so this is sized for a drag-and-drop of a few hundred
 # files rather than for a trickle.

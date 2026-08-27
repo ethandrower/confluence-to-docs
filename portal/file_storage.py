@@ -96,6 +96,77 @@ def presign_view(key, mime=None):
     )
 
 
+
+# ── Multipart upload ──────────────────────────────────────────────────────
+# Above a threshold a single PUT stops being reasonable: S3 refuses one over
+# 5 GB outright, and long before that a dropped connection means restarting
+# from zero because a whole-object PUT has nothing to resume from. Multipart
+# splits the file into independently retryable pieces, which is the real win —
+# the size ceiling is secondary.
+
+def part_plan(size):
+    """(part_size, part_count) for a file of `size` bytes.
+
+    S3 allows at most 10,000 parts, so the part size has to grow with the
+    file rather than stay fixed; 9,000 leaves headroom for rounding. Parts
+    must also be at least 5 MiB (the final one excepted), which the
+    configured floor satisfies.
+    """
+    mib = 1024 * 1024
+    part = max(settings.FILESHARE_PART_SIZE, -(-size // 9000))
+    part = -(-part // mib) * mib  # whole MiB, so the numbers stay legible
+    return part, max(1, -(-size // part))
+
+
+def create_multipart(key, content_type):
+    r = _s3().create_multipart_upload(
+        Bucket=settings.FILESHARE_BUCKET, Key=key,
+        ContentType=content_type or 'application/octet-stream',
+    )
+    return r['UploadId']
+
+
+def presign_part(key, upload_id, part_number):
+    return _s3_public().generate_presigned_url(
+        'upload_part',
+        Params={
+            'Bucket': settings.FILESHARE_BUCKET,
+            'Key': key,
+            'UploadId': upload_id,
+            'PartNumber': part_number,
+        },
+        ExpiresIn=settings.FILESHARE_PRESIGN_TTL,
+    )
+
+
+def complete_multipart(key, upload_id, parts):
+    """Assemble the object. `parts` is [{'PartNumber': n, 'ETag': '"..."'}],
+    which S3 requires in ascending part order."""
+    ordered = sorted(parts, key=lambda p: p['PartNumber'])
+    return _s3().complete_multipart_upload(
+        Bucket=settings.FILESHARE_BUCKET, Key=key, UploadId=upload_id,
+        MultipartUpload={'Parts': ordered},
+    )
+
+
+def abort_multipart(key, upload_id):
+    """Discard an unfinished upload and its parts.
+
+    Worth being diligent about: until this runs the uploaded parts are still
+    stored and still billed, and they do not appear in a listing of the
+    bucket's objects, so the cost is invisible. A bucket lifecycle rule
+    (AbortIncompleteMultipartUpload) should back this up for the cases where
+    we never get the chance to call it.
+    """
+    try:
+        _s3().abort_multipart_upload(
+            Bucket=settings.FILESHARE_BUCKET, Key=key, UploadId=upload_id)
+        return True
+    except Exception as e:
+        logger.warning("abort_multipart(%s): %s", key, e)
+        return False
+
+
 # Magic-byte signatures for the types we ever render inline. Used to reject a
 # file whose real content doesn't match its extension (e.g. HTML uploaded as
 # .pdf) — the cheap, no-infra complement to a full AV scanner.
