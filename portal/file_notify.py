@@ -93,8 +93,8 @@ def notify_due_reminder(bucket, overdue=False):
     )
 
 
-def notify_upload(file):
-    """Tell staff a customer uploaded something.
+def upload_recipients(file):
+    """Who hears about an upload.
 
     This used to email only `bucket.requested_by` — the CSM who opened a
     document request — and return silently when there wasn't one. Every
@@ -102,8 +102,8 @@ def notify_upload(file):
     `requested_by`, and General is where the "Share files" button sends
     everything, so in practice most uploads notified nobody at all.
 
-    The audience now mirrors the ticket rule so there's one notion of "who is
-    on this account": the CSM who asked, when a request bucket names one, and
+    The audience mirrors the ticket rule so there's one notion of "who is on
+    this account": the CSM who asked, when a request bucket names one, and
     otherwise every agent — because an unsolicited upload, like a new ticket,
     belongs to nobody yet. The shared inbox is always copied.
     """
@@ -114,14 +114,51 @@ def notify_upload(file):
     support = getattr(settings, 'SUPPORT_EMAIL', None)
     if support:
         recipients.append(support)
-    recipients = _dedupe(recipients)
-    if not recipients:
+    return _dedupe(recipients)
+
+
+def notify_upload(file):
+    """Tell staff about one upload. See notify_upload_batch for the bulk path."""
+    notify_upload_batch(file.company, [file], upload_recipients(file))
+
+
+def notify_upload_batch(company, files, recipients):
+    """One email for a batch of uploads sharing a company and an audience.
+
+    The batch is what makes folder upload survivable: 150 files used to mean
+    150 emails to every agent. Naming a few files and counting the rest keeps
+    the message useful without turning it into a manifest — the portal is where
+    you go to actually look at them.
+    """
+    files = list(files)
+    if not recipients or not files:
         return
+
+    n = len(files)
+    # Distinct destinations, in the order encountered, so the mail says where
+    # things landed rather than just how many arrived.
+    places = []
+    for f in files:
+        title = f.bucket.title
+        if title not in places:
+            places.append(title)
+
+    if n == 1:
+        subject = f'New upload from {company.name}'
+        body = (f'{company.name} uploaded “{files[0].original_name}” to “{places[0]}”. '
+                'Review it in Manage → Files.')
+    else:
+        shown = ', '.join(f'“{f.original_name}”' for f in files[:3])
+        more = f' and {n - 3} more' if n > 3 else ''
+        where = places[0] if len(places) == 1 else f'{len(places)} folders'
+        subject = f'{n} new uploads from {company.name}'
+        body = (f'{company.name} uploaded {n} files to {where}: {shown}{more}. '
+                'Review them in Manage → Files.')
+
     _send(
-        f'New upload from {file.company.name}',
+        subject,
         recipients,
-        heading=f'New upload from {file.company.name}',
-        body=f'{file.company.name} uploaded “{file.original_name}” to “{file.bucket.title}”. '
-             'Review it in Manage → Files.',
+        heading=subject,
+        body=body,
         cta_label='Review in the portal', cta_url=f'{_site()}/manage',
     )

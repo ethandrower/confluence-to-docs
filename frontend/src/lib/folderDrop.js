@@ -133,3 +133,27 @@ export function pathsIn(items) {
   const set = new Set(items.map((i) => i.path).filter(Boolean))
   return [...set].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))
 }
+
+/**
+ * Dropping folder "specs" while already inside "specs" means "re-upload
+ * specs", not "nest specs inside itself".
+ *
+ * Without this you get specs/specs, and it is easy to hit by accident: a
+ * finished folder upload navigates into the folder it just created, so
+ * dropping the same tree twice would bury the second copy a level down
+ * instead of merging it into the first.
+ *
+ * Only fires when the whole batch shares ONE top-level folder — dropping two
+ * sibling folders at once, one of which happens to share the current folder's
+ * name, is not a re-upload of either.
+ *
+ * Returns the batch unchanged when the rule doesn't apply, so callers can test
+ * identity to know whether it fired.
+ */
+export function mergeIfSameFolder(items, currentFolderTitle) {
+  if (!currentFolderTitle) return items
+  const tops = [...new Set(pathsIn(items).map((p) => p.split('/')[0]))]
+  if (tops.length !== 1) return items
+  if (tops[0].toLowerCase() !== String(currentFolderTitle).toLowerCase()) return items
+  return items.map((it) => ({ ...it, path: it.path.split('/').slice(1).join('/') }))
+}

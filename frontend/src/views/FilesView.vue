@@ -100,6 +100,21 @@
               </div>
             </div>
 
+            <!-- The home the portal opens on, and a view rather than a bucket:
+                 it lists every file wherever it lives, which is what makes
+                 filing them possible at all. Always present — unlike "Not in a
+                 folder", it must not vanish when empty, because it is also the
+                 landing place for a customer who has nothing yet. -->
+            <button
+              class="fs-all"
+              :class="{ 'is-active': isAll }"
+              @click="store.select(ALL_FILES_ID)"
+            >
+              <svg class="fs-all-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+              <span class="fs-all-title">All files</span>
+              <span v-if="store.totalFileCount" class="fs-all-n">{{ store.totalFileCount }}</span>
+            </button>
+
             <ul v-if="store.folderTree.length" class="fs-tree">
               <FolderNode
                 v-for="node in store.folderTree"
@@ -166,17 +181,24 @@
             <div class="skeleton-row" v-for="n in 3" :key="n" />
           </template>
 
-          <template v-else-if="active">
+          <template v-else-if="isAll || active">
             <header class="fs-head">
               <div>
-                <nav v-if="breadcrumb.length > 1" class="fs-crumbs" aria-label="Folder path">
+                <template v-if="isAll">
+                  <h1>All files</h1>
+                  <p class="fs-submeta">
+                    Everything you’ve uploaded, wherever it lives ·
+                    {{ store.totalFileCount }} file{{ store.totalFileCount === 1 ? '' : 's' }}
+                  </p>
+                </template>
+                <nav v-if="!isAll && breadcrumb.length > 1" class="fs-crumbs" aria-label="Folder path">
                   <template v-for="(c, i) in breadcrumb.slice(0, -1)" :key="c.id">
                     <button class="fs-crumb" @click="store.select(c.id)">{{ c.title }}</button>
                     <span class="fs-crumb-sep" aria-hidden="true">/</span>
                   </template>
                 </nav>
                 <input
-                  v-if="renamingFolder && active.kind === 'folder'"
+                  v-if="!isAll && renamingFolder && active.kind === 'folder'"
                   ref="renameFolderInput"
                   v-model="renameFolderName"
                   class="fs-rename-h1"
@@ -184,21 +206,21 @@
                   @keydown.esc="renamingFolder = false"
                   @blur="submitFolderRename(active)"
                 />
-                <h1 v-else>{{ active.title }}</h1>
-                <p v-if="active.kind === 'folder'" class="fs-submeta">
+                <h1 v-else-if="!isAll">{{ active.title }}</h1>
+                <p v-if="!isAll && active.kind === 'folder'" class="fs-submeta">
                   <!-- Both numbers, because "0 files" in a folder that holds
                        forty in subfolders reads as an empty folder. -->
                   {{ active.files.length }} file{{ active.files.length === 1 ? '' : 's' }} here
                   <span v-if="deepCount > active.files.length"> · {{ deepCount }} including subfolders</span>
                 </p>
-                <p v-if="active.kind === 'request'" class="fs-submeta">
+                <p v-if="!isAll && active.kind === 'request'" class="fs-submeta">
                   <span v-if="active.requested_by_name">Requested by {{ active.requested_by_name }}</span>
                   <span v-if="active.created_at"> · {{ relDate(active.created_at) }}</span>
                   <span v-if="duePill(active)" class="fs-due" :class="`due--${duePill(active).tone}`"> · Due {{ shortDate(active.due_at) }}</span>
                 </p>
               </div>
               <div class="fs-head-actions">
-                <template v-if="active.kind === 'folder'">
+                <template v-if="!isAll && active.kind === 'folder'">
                   <button class="refresh-btn" @click="promptRename(active)">Rename</button>
                   <button
                     class="refresh-btn"
@@ -214,9 +236,9 @@
               </div>
             </header>
 
-            <p v-if="active.description" class="fs-desc">{{ active.description }}</p>
+            <p v-if="!isAll && active.description" class="fs-desc">{{ active.description }}</p>
 
-            <div v-if="active.kind === 'request' && active.checklist && active.checklist.length" class="fs-check">
+            <div v-if="!isAll && active.kind === 'request' && active.checklist && active.checklist.length" class="fs-check">
               <div class="fs-check-head">
                 <span class="fs-check-label">Requested documents</span>
                 <span class="fs-check-count">{{ checklistReceived(active) }} / {{ active.checklist.length }} received</span>
@@ -231,12 +253,45 @@
               </ul>
             </div>
 
-            <FileUploader :bucket-id="active.id" :label="uploadLabel" :key="active.id" @uploaded="onUploaded" />
+            <FileUploader
+              :bucket-id="uploadTarget"
+              :label="uploadLabel"
+              :key="store.activeBucketId"
+              @uploaded="onUploaded"
+            />
 
             <div class="files">
               <div class="files-bar">
-                <span class="files-count">{{ active.files.length }} file{{ active.files.length === 1 ? '' : 's' }}</span>
-                <input v-if="active.files.length" v-model="q" class="files-search" type="search" placeholder="Search…" aria-label="Search files" />
+                <label v-if="rows.length" class="files-checkall" :title="allVisibleSelected ? 'Clear selection' : 'Select all shown'">
+                  <input type="checkbox" :checked="allVisibleSelected" @change="toggleAllVisible" />
+                </label>
+                <span class="files-count">{{ rows.length }} file{{ rows.length === 1 ? '' : 's' }}</span>
+                <input v-if="rows.length" v-model="q" class="files-search" type="search" placeholder="Search…" aria-label="Search files" />
+              </div>
+
+              <!-- Only present once something is selected: an always-visible
+                   toolbar is furniture, and this one carries a destructive-ish
+                   verb that shouldn't sit under the cursor by default. -->
+              <div v-if="selected.size" class="files-sel">
+                <span class="files-sel-n">{{ selected.size }} selected</span>
+                <div class="files-sel-move">
+                  <button class="refresh-btn" @click="moveOpen = !moveOpen">Move to…</button>
+                  <div v-if="moveOpen" class="movemenu-scrim" @click="moveOpen = false" />
+                  <ul v-if="moveOpen" class="movemenu">
+                    <li v-if="store.generalBucket">
+                      <button class="movemenu-item" @click="moveSelectionTo(store.generalBucket.id)">Not in a folder</button>
+                    </li>
+                    <li v-for="t in moveTargets" :key="t.id">
+                      <button
+                        class="movemenu-item"
+                        :style="{ paddingLeft: 12 + t.depth * 14 + 'px' }"
+                        @click="moveSelectionTo(t.id)"
+                      >{{ t.title }}</button>
+                    </li>
+                    <li v-if="!moveTargets.length" class="movemenu-empty">Make a folder first</li>
+                  </ul>
+                </div>
+                <button class="refresh-btn" @click="clearSelection">Clear</button>
               </div>
 
               <ul v-if="filtered.length" class="rows">
@@ -244,10 +299,22 @@
                   v-for="f in filtered"
                   :key="f.id"
                   class="row"
-                  :class="{ flash: flash.has(f.original_name), 'row-active': preview && preview.id === f.id }"
+                  :class="{
+                    flash: flash.has(f.original_name),
+                    'row-active': preview && preview.id === f.id,
+                    'row-sel': selected.has(f.id),
+                  }"
                   :draggable="true"
                   @dragstart="onFileDragStart(f, $event)"
                 >
+                  <label class="row-check" @click.stop>
+                    <input
+                      type="checkbox"
+                      :checked="selected.has(f.id)"
+                      :aria-label="`Select ${f.original_name}`"
+                      @change="toggleFile(f.id)"
+                    />
+                  </label>
                   <span class="tile" :data-cat="cat(f.original_name)">{{ ext(f.original_name) }}</span>
                   <div class="row-main">
                     <template v-if="editingId === f.id">
@@ -257,6 +324,15 @@
                     <!-- No review badge: uploading is just uploading. -->
                     <span class="row-sub">
                       {{ fmtSize(f.size_bytes) }} · {{ relDate(f.uploaded_at) }}
+                      <!-- Where it lives. Without this the flat list is forty
+                           PDFs with no way to tell what still needs filing. -->
+                      <button
+                        v-if="isAll"
+                        class="row-loc"
+                        :class="{ 'row-loc--loose': f.bucketKind === 'general' }"
+                        :title="`Go to ${f.location}`"
+                        @click.stop="store.select(f.bucketId)"
+                      >{{ f.location }}</button>
                     </span>
                   </div>
                   <span class="row-actions">
@@ -310,12 +386,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import FileUploader from '@/components/files/FileUploader.vue'
 import FilePreviewPane from '@/components/files/FilePreviewPane.vue'
 import FolderNode from '@/components/files/FolderNode.vue'
-import { useFilesStore } from '@/stores/files'
+import { useFilesStore, ALL_FILES_ID } from '@/stores/files'
 
 const store = useFilesStore()
 const q = ref('')
@@ -458,7 +534,12 @@ function removeFolder(folder) {
 
 function onFileDragStart(f, e) {
   e.dataTransfer.effectAllowed = 'move'
-  e.dataTransfer.setData('application/x-file-ids', JSON.stringify([f.id]))
+  // Dragging a row that is part of the selection drags the whole selection.
+  // Dragging an unselected row drags only that row and leaves the selection
+  // alone — silently retargeting someone's selection to the row they happened
+  // to grab is how you move forty files by accident.
+  const ids = selected.value.has(f.id) ? selectedIds.value : [f.id]
+  e.dataTransfer.setData('application/x-file-ids', JSON.stringify(ids))
 }
 
 function onDropFiles({ ids, bucketId }) {
@@ -482,15 +563,83 @@ function onDropRoot(e) {
 }
 
 const active = computed(() => store.activeBucket)
+const isAll = computed(() => store.activeBucketId === ALL_FILES_ID)
 const uploadLabel = computed(() => (active.value?.kind === 'request' ? 'this request' : ''))
 const isFirstRun = computed(() =>
   !store.requests.length && store.buckets.every((b) => !b.files.length)
 )
+
+/** Where a plain file drop lands while "All files" is open. That view is not a
+ *  bucket and has no id of its own, so unfiled is the honest destination — the
+ *  customer files it afterwards, which is the whole point of the view. */
+const uploadTarget = computed(() =>
+  isAll.value ? store.generalBucket?.id ?? null : active.value?.id ?? null
+)
+
+const rows = computed(() => (isAll.value ? store.allFiles : active.value?.files ?? []))
 const filtered = computed(() => {
-  if (!active.value) return []
   const t = q.value.toLowerCase().trim()
-  return t ? active.value.files.filter((f) => f.original_name.toLowerCase().includes(t)) : active.value.files
+  return t ? rows.value.filter((f) => f.original_name.toLowerCase().includes(t)) : rows.value
 })
+
+// ── Multi-select ────────────────────────────────────────────────────────
+const selected = ref(new Set())
+const moveOpen = ref(false)
+
+// Moving files you can no longer see is not a feature. Changing view clears
+// the selection so "3 selected" always refers to rows on this screen.
+watch(() => store.activeBucketId, () => { selected.value = new Set(); moveOpen.value = false })
+
+// A refresh can delete or re-home rows out from under a selection (another
+// tab, or staff). Drop ids that no longer exist rather than sending them to
+// the move endpoint, which refuses the whole batch if any id misses.
+watch(rows, (list) => {
+  if (!selected.value.size) return
+  const live = new Set(list.map((f) => f.id))
+  const next = new Set([...selected.value].filter((id) => live.has(id)))
+  if (next.size !== selected.value.size) selected.value = next
+})
+
+const selectedIds = computed(() => [...selected.value])
+const allVisibleSelected = computed(
+  () => filtered.value.length > 0 && filtered.value.every((f) => selected.value.has(f.id))
+)
+function toggleFile(id) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function toggleAllVisible() {
+  const next = new Set(selected.value)
+  if (allVisibleSelected.value) filtered.value.forEach((f) => next.delete(f.id))
+  else filtered.value.forEach((f) => next.add(f.id))
+  selected.value = next
+}
+function clearSelection() { selected.value = new Set(); moveOpen.value = false }
+
+/** Folder tree flattened to a list with depth, so the picker keeps its shape. */
+function flattenFolders(nodes, depth = 0, out = []) {
+  for (const n of nodes) {
+    out.push({ id: n.id, title: n.title, depth })
+    if (n.children?.length) flattenFolders(n.children, depth + 1, out)
+  }
+  return out
+}
+const moveTargets = computed(() => flattenFolders(store.folderTree))
+
+async function moveSelectionTo(bucketId) {
+  const n = selectedIds.value.length
+  if (!n) return
+  moveOpen.value = false
+  const where = store.buckets.find((b) => b.id === bucketId)
+  await guard(async () => {
+    await store.moveFiles(selectedIds.value, bucketId)
+    toast.value = `Moved ${n} file${n === 1 ? '' : 's'} to ${where ? where.title : 'Not in a folder'}`
+    setTimeout(() => (toast.value = ''), 2200)
+  })
+  clearSelection()
+}
 
 /* Status: quiet dot + label. Color reserved for action/urgency only. */
 // Customer-facing request status, derived from what's actually happened
@@ -519,9 +668,17 @@ function duePill(b) {
   return { label: `Due ${days}d`, tone: 'ok' }
 }
 
-async function onUploaded(names) {
-  toast.value = names.length === 1 ? `Uploaded ${names[0]}` : `Uploaded ${names.length} files`
-  setTimeout(() => (toast.value = ''), 2200)
+async function onUploaded(names, folderId = null, folderTitle = '') {
+  // A folder upload follows its own result. Staying put would leave the
+  // customer looking at a pane that didn't change while their files went
+  // somewhere else entirely.
+  if (folderId) {
+    store.select(folderId)
+    toast.value = `Uploaded ${names.length} file${names.length === 1 ? '' : 's'} into ${folderTitle}`
+  } else {
+    toast.value = names.length === 1 ? `Uploaded ${names[0]}` : `Uploaded ${names.length} files`
+  }
+  setTimeout(() => (toast.value = ''), 2600)
   names.forEach((n) => flash.value.add(n))
   setTimeout(() => { names.forEach((n) => flash.value.delete(n)) }, 1800)
 }
@@ -718,6 +875,30 @@ function cat(name) {
 .fs-loose-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fs-loose-n { margin-left: auto; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 
+/* "All files" — the home row. Sits above the tree and, unlike "Not in a
+   folder", is always present: it is where the portal opens, including for a
+   customer who has nothing yet. Weighted a step heavier than a folder so it
+   reads as a destination rather than another node. */
+.fs-all {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  margin-bottom: 0.35rem; padding: 7px 8px;
+  border: 1px solid transparent; border-radius: 7px;
+  background: none; cursor: pointer;
+  font-family: var(--font-ui); font-size: 0.85rem; font-weight: 600;
+  color: var(--foreground); text-align: left;
+}
+.fs-all:hover { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fs-all.is-active {
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--brand-accent) 35%, var(--border));
+}
+.fs-all-ico { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted-foreground); }
+.fs-all-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-all-n {
+  margin-left: auto; font-size: 0.72rem; font-weight: 500;
+  font-variant-numeric: tabular-nums; color: var(--muted-foreground);
+}
+
 .fs-rename-h1 {
   width: 100%; max-width: 420px;
   border: 1px solid var(--border); border-radius: 8px;
@@ -812,7 +993,8 @@ function cat(name) {
 
 .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
 .row {
-  display: grid; grid-template-columns: 40px 1fr auto;
+  /* Leading column is the select checkbox. */
+  display: grid; grid-template-columns: auto 40px 1fr auto;
   align-items: center; gap: 0.85rem;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -838,6 +1020,58 @@ function cat(name) {
 .row-main { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
 .row-name { font-size: 0.9rem; font-weight: 550; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-sub { font-size: 0.76rem; color: var(--muted-foreground); }
+
+.row-check { display: grid; place-items: center; cursor: pointer; }
+.row-check input,
+.files-checkall input {
+  width: 15px; height: 15px; cursor: pointer; accent-color: var(--brand-accent);
+}
+.row.row-sel {
+  border-color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-accent) 7%, var(--card));
+}
+
+/* Where a file lives, shown only in the All files view. A button, not a chip,
+   because its job is to take you there. */
+.row-loc {
+  margin-left: 0.4rem; padding: 1px 7px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card); color: var(--muted-foreground);
+  font: inherit; font-size: 0.7rem; cursor: pointer;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row-loc:hover { border-color: var(--brand-accent); color: var(--foreground); }
+.row-loc--loose { font-style: italic; }
+
+.files-checkall { display: grid; place-items: center; cursor: pointer; }
+.files-sel {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin-bottom: 0.5rem; padding: 0.45rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--brand-accent) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--brand-accent) 7%, var(--card));
+}
+.files-sel-n { font-size: 0.8rem; font-weight: 600; color: var(--foreground); }
+.files-sel-move { position: relative; margin-left: auto; }
+
+/* Full-viewport catcher so a click anywhere dismisses the menu. */
+.movemenu-scrim { position: fixed; inset: 0; z-index: 20; }
+.movemenu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 21;
+  min-width: 190px; max-height: 280px; overflow-y: auto;
+  list-style: none; margin: 0; padding: 4px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--card); box-shadow: 0 10px 30px rgb(0 0 0 / 0.14);
+}
+.movemenu-item {
+  display: block; width: 100%; padding: 6px 10px;
+  border: 0; border-radius: var(--radius-sm); background: none;
+  font: inherit; font-size: 0.82rem; color: var(--foreground);
+  text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.movemenu-item:hover { background: var(--accent); }
+.movemenu-empty { padding: 6px 10px; font-size: 0.78rem; color: var(--muted-foreground); }
 .rename { font: inherit; font-size: 0.9rem; padding: 0.2rem 0.4rem; border: 1px solid var(--brand-accent); border-radius: var(--radius-sm); background: var(--card); color: var(--foreground); width: 100%; max-width: 340px; }
 
 .row-actions { display: flex; gap: 0.15rem; opacity: 0; transition: opacity 0.12s ease; }

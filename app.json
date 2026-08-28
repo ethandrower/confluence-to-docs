@@ -95,6 +95,16 @@
       "comment": "Create portal tickets from customer-raised JSM requests (email/customer-portal intake), matched on reporter email against the PortalUser allowlist. The cron entry is a no-op unless JIRA_INGEST is set; --dry-run reports without writing even while it is off, so matches can be observed before enabling.",
       "command": "python manage.py ingest_jira_requests",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "comment": "Email staff about customer uploads, batched. Uploads used to notify per file from the request path, so a 150-file folder upload sent 150 emails. Every minute, with a 90s settle window inside the command, so a lone upload is still reported promptly while a burst collapses into one message.",
+      "command": "python manage.py send_upload_digests",
+      "schedule": "* * * * *"
+    },
+    {
+      "comment": "Abort multipart uploads that were started and abandoned. Until aborted their parts are still stored, still billed, and absent from any listing of the bucket, so the cost is invisible. A bucket lifecycle rule (AbortIncompleteMultipartUpload) should back this up for the cases where we never get to run.",
+      "command": "python manage.py purge_stale_uploads",
+      "schedule": "17 * * * *"
     }
   ]
 }
