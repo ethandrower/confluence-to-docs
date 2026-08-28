@@ -32,15 +32,26 @@ class Command(BaseCommand):
         )
         count = stale.count()
         if opts['dry_run']:
-            self.stdout.write(f"[dry-run] {count} stale upload(s) older than {opts['hours']}h")
+            multipart = stale.exclude(upload_id='').count()
+            self.stdout.write(
+                f"[dry-run] {count} stale upload(s) older than {opts['hours']}h "
+                f"({multipart} with parts to abort)")
             return
 
-        purged = 0
+        purged, aborted = 0, 0
         for f in stale.iterator():
-            if f.storage_key:
+            if f.upload_id:
+                # A part-way multipart upload is not an object yet, so deleting
+                # the key would do nothing — its uploaded parts keep being
+                # billed, and they never show up in a listing of the bucket.
+                # Aborting is the only thing that reclaims them.
+                if file_storage.abort_multipart(f.storage_key, f.upload_id):
+                    aborted += 1
+            elif f.storage_key:
                 file_storage.delete_object(f.storage_key)  # best-effort; logs on failure
             f.delete()
             purged += 1
         self.stdout.write(self.style.SUCCESS(
-            f"Purged {purged} stale upload(s) older than {opts['hours']}h."
+            f"Purged {purged} stale upload(s) older than {opts['hours']}h "
+            f"({aborted} multipart abort(s))."
         ))
