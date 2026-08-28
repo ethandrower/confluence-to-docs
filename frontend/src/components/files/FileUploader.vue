@@ -58,7 +58,9 @@
 import { ref, reactive, computed } from 'vue'
 import { useFilesStore } from '@/stores/files'
 import { createGate, runPool, RateLimited, UPLOAD_CONCURRENCY } from '@/lib/uploadQueue'
-import { filesFromDrop, filesFromInput, partitionByExtension, pathsIn } from '@/lib/folderDrop'
+import {
+  filesFromDrop, filesFromInput, partitionByExtension, pathsIn, mergeIfSameFolder,
+} from '@/lib/folderDrop'
 
 const props = defineProps({
   bucketId: { type: Number, default: null },
@@ -133,10 +135,16 @@ async function handle(items) {
   if (!ok.length) return
 
   busy.value = true
+
+  // Re-uploading the folder you're standing in merges rather than nesting.
+  const here = store.buckets.find((b) => b.id === folderRoot.value) || null
+  const batch = mergeIfSameFolder(ok, here?.title)
+  const reupload = batch !== ok
+
   let folders
   try {
     // Every folder in the batch, resolved in one call before any upload starts.
-    folders = await store.ensurePaths(pathsIn(ok), folderRoot.value)
+    folders = await store.ensurePaths(pathsIn(batch), folderRoot.value)
   } catch (e) {
     busy.value = false
     skipped.value = []
@@ -144,7 +152,7 @@ async function handle(items) {
     return
   }
 
-  const entries = ok.map((it) => {
+  const entries = batch.map((it) => {
     const entry = reactive({ name: it.path ? `${it.path}/${it.file.name}` : it.file.name, pct: 0, error: '' })
     active.value.push(entry)
     return entry
@@ -152,7 +160,7 @@ async function handle(items) {
 
   const gate = createGate((secs) => (pausedFor.value = secs))
   const results = await runPool(
-    ok,
+    batch,
     (it, i) => runOne(gate, it.file, entries[i], folders[it.path] ?? props.bucketId),
     UPLOAD_CONCURRENCY,
   )
@@ -163,7 +171,31 @@ async function handle(items) {
   await store.load()
 
   const names = results.filter((r) => r.ok).map((r) => r.value)
-  if (names.length) emit('uploaded', names)
+
+  // Where a folder upload actually landed, so the view can follow it there.
+  // The tree was always built correctly, but the customer stayed parked on
+  // whatever they had open — the files appeared to vanish and the only clue
+  // was a new row in the sidebar. Resolved against the just-reloaded buckets
+  // rather than the ensure-path response, because the server may have reused
+  // an existing folder and matches titles case-insensitively.
+  const roots = [...new Set(pathsIn(batch).map((p) => p.split('/')[0]).filter(Boolean))]
+  let landed = null
+  if (names.length) {
+    if (reupload) {
+      // Re-upload merged into the folder already on screen. Re-found by id
+      // rather than reusing `here`, which came from the pre-refresh list.
+      landed = store.buckets.find((b) => b.id === folderRoot.value) || null
+    } else if (roots.length === 1) {
+      const want = roots[0].toLowerCase()
+      landed = store.buckets.find(
+        (b) => b.kind === 'folder'
+          && (b.parent ?? null) === folderRoot.value
+          && (b.title || '').toLowerCase() === want,
+      ) || null
+    }
+  }
+
+  if (names.length) emit('uploaded', names, landed ? landed.id : null, landed ? landed.title : '')
 
   setTimeout(() => {
     active.value = active.value.filter((a) => a.error)

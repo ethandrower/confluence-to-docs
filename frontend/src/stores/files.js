@@ -1,17 +1,26 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiFetch } from '../lib/http.js'
-import { buildFolderTree, folderPath } from '../lib/folders.js'
+import { buildFolderTree, folderPath, flattenFiles } from '../lib/folders.js'
 import { RateLimited, runPool, withSlot, withRetry, UPLOAD_CONCURRENCY } from '../lib/uploadQueue.js'
 
 const api = (p) => `/api${p}`
+
+/**
+ * Sentinel for the "All files" home, which is a view rather than a bucket.
+ *
+ * A string can never collide with a Bucket id (always a number), so every
+ * `b.id === activeBucketId` test in the tree simply misses it and no folder
+ * lights up while it is selected — which is what we want, since it is not one.
+ */
+export const ALL_FILES_ID = '__all__'
 
 export const useFilesStore = defineStore('files', () => {
   const buckets = ref([])
   const loading = ref(false)
   // Server-authoritative; the uploader uses it only to report skips early.
   const allowedExt = ref(new Set())
-  const activeBucketId = ref(null)
+  const activeBucketId = ref(ALL_FILES_ID)
 
   const requests = computed(() => buckets.value.filter((b) => b.kind === 'request'))
 
@@ -56,6 +65,12 @@ export const useFilesStore = defineStore('files', () => {
     return n
   }
 
+  /** Backing list for the "All files" home. See flattenFiles for what it
+   *  includes and why. */
+  const allFiles = computed(() => flattenFiles(buckets.value))
+
+  const totalFileCount = computed(() => allFiles.value.length)
+
   async function load() {
     loading.value = true
     try {
@@ -67,23 +82,21 @@ export const useFilesStore = defineStore('files', () => {
       } else {
         buckets.value = []
       }
-      // Keep the selection valid, and when there isn't one, land somewhere
-      // worth landing: a request that actually blocks them, else their own
-      // files. Never an optional request — opening on "Old IFU versions (if
-      // handy)" makes a nice-to-have look like the task of the day.
-      // The general bucket is only *shown* when it has files, so falling back
-      // to it unconditionally could select a row that isn't on screen — the
-      // main pane would show contents with nothing highlighted in the sidebar.
-      // Prefer a real folder, and only land on unfiled files if there is
-      // something in there to look at.
-      if (!buckets.value.some((b) => b.id === activeBucketId.value)) {
-        const general = generalBucket.value
-        activeBucketId.value =
-          requiredRequests.value[0]?.id
-          ?? folderTree.value[0]?.id
-          ?? (general?.files.length ? general.id : null)
-          ?? general?.id
-          ?? null
+      // Land on "All files", never on a request.
+      //
+      // This used to open on requiredRequests[0], which meant the portal
+      // greeted people by selecting the first thing that blocked them and
+      // scoping the drop zone to it — so an ordinary upload silently became
+      // "answer this request", and the answer to a different question than the
+      // one they came to do. Uploading is the common case; requests stay
+      // listed in the sidebar and are chosen deliberately.
+      //
+      // "All files" is a view rather than a bucket, so it is never in this
+      // list — test for it explicitly or every refresh knocks the customer off
+      // whatever they were looking at.
+      const onAllFiles = activeBucketId.value === ALL_FILES_ID
+      if (!onAllFiles && !buckets.value.some((b) => b.id === activeBucketId.value)) {
+        activeBucketId.value = ALL_FILES_ID
       }
     } finally {
       loading.value = false
@@ -329,7 +342,7 @@ export const useFilesStore = defineStore('files', () => {
   return {
     buckets, loading, activeBucketId, requests, generalBucket, activeBucket,
     requiredRequests, optionalRequests, doneRequests,
-    folders, folderTree, pathTo, fileCount,
+    folders, folderTree, pathTo, fileCount, allFiles, totalFileCount,
     load, select, upload, rename, remove, downloadUrl,
     allowedExt, ensurePaths,
     createFolder, renameFolder, moveFolder, deleteFolder, moveFiles,

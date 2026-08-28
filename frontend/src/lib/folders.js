@@ -63,3 +63,32 @@ export function folderPath(buckets, id) {
 export function unseenIn(bucket) {
   return (bucket?.files || []).filter((f) => f.seen === false).length
 }
+
+/**
+ * Every file across every bucket, annotated with where it lives.
+ *
+ * Backs the "All files" home. Request files are included deliberately: someone
+ * who uploaded three PDFs against "CV" and now wants them filed under a folder
+ * can only do that if they can see them next to everything else, and moving
+ * one out does not un-satisfy the request — ChecklistItem.linked_file points
+ * at the file, not at whichever bucket it currently sits in.
+ *
+ * Newest first, because the reason to open this view is nearly always "deal
+ * with the thing I just uploaded".
+ */
+export function flattenFiles(buckets) {
+  const rows = []
+  for (const b of buckets || []) {
+    for (const f of b.files || []) {
+      rows.push({
+        ...f,
+        bucketId: b.id,
+        bucketKind: b.kind,
+        location: b.kind === 'general' ? 'Not in a folder' : b.title,
+      })
+    }
+  }
+  return rows.sort(
+    (a, z) => String(z.uploaded_at || '').localeCompare(String(a.uploaded_at || '')),
+  )
+}
