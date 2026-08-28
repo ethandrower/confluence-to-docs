@@ -513,11 +513,12 @@ def upload_complete(request):
     f.save(update_fields=['size_bytes', 'state'])
     log_activity(user.company, 'upload', actor=user, file=f, bucket=f.bucket,
                  name=f.original_name, size=size)
-    try:
-        from portal import file_notify
-        file_notify.notify_upload(f)
-    except Exception:
-        pass
+    # Deliberately NOT emailing here. This used to call notify_upload(f) inline,
+    # which meant a 150-file folder upload sent 150 separate emails to every
+    # agent — and made 150 blocking mail calls on the request path, four at a
+    # time now that uploads run concurrently. The file is left with
+    # notified_at NULL and send_upload_digests collapses the batch into one
+    # message. See portal/management/commands/send_upload_digests.py.
     return JsonResponse({'ok': True, 'file_id': f.id})
 
 

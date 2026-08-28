@@ -345,6 +345,11 @@ class SharedFile(models.Model):
     # abandoned upload needs it to be *aborted*: orphaned parts keep being
     # billed and never show up in a listing of the bucket's objects.
     upload_id = models.CharField(max_length=255, blank=True)
+    # Null means "staff have not been told about this one yet". Uploads used to
+    # email per file from inside upload_complete, so a 150-file folder upload
+    # sent 150 emails — and made 150 blocking mail calls inside 150 requests.
+    # send_upload_digests sweeps these and sends one message per batch.
+    notified_at = models.DateTimeField(null=True, blank=True, db_index=True)
     size_bytes = models.BigIntegerField(null=True, blank=True)
     mime_type = models.CharField(max_length=255, blank=True)
     state = models.CharField(max_length=16, default=STATE_UPLOADING)
