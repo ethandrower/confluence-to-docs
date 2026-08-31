@@ -193,7 +193,7 @@ def folders_ensure_path(request):
         return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
 
     data = json.loads(request.body or '{}')
-    root, err = _resolve_parent(user, data.get('root_id'))
+    root, err = _resolve_parent(Bucket.for_user(user), data.get('root_id'))
     if err:
         return err
 
