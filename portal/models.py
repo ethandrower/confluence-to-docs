@@ -524,6 +524,21 @@ class ShareNotice(models.Model):
         related_name='sent_share_notices',
     )
     sent_at = models.DateTimeField(auto_now_add=True)
+    # Part of the /api/v1/share-events/ contract, not bookkeeping.
+    #
+    # That endpoint is polled, and its cursor walks an ASCENDING ordering, so a
+    # row that changes must move to the END of the ordering or the consumer's
+    # cursor has already passed it and the change is lost. Ordering on sent_at
+    # would do exactly that: an open — the event most worth syncing — never
+    # moves the row, so RevenueHub would learn about every push and none of the
+    # responses to them.
+    #
+    # auto_now covers an ordinary save(). It fires on NEITHER of the two other
+    # ways this row is written: a queryset .update() (mark_opened) skips save()
+    # altogether, and save(update_fields=[...]) omitting this name skips it too.
+    # Both of those sites therefore set this column explicitly, and
+    # test_api_v1_share_events.py holds them to it.
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
     first_opened_at = models.DateTimeField(null=True, blank=True)
     last_reminder_at = models.DateTimeField(null=True, blank=True)
     reminder_count = models.IntegerField(default=0)
@@ -572,6 +587,10 @@ class ShareNotice(models.Model):
         Walking ancestors matters: we push a folder, they open something two
         levels down inside it, and that is plainly them having opened what we
         sent. Only the first open is kept; re-opening doesn't move the mark.
+
+        `updated_at` is written by hand here because this is a queryset update:
+        it never calls save(), so the field's auto_now would not fire and the
+        open would stay invisible to /api/v1/share-events/.
         """
         now = now or timezone.now()
         bucket_ids, node, seen = [], file.bucket, set()
@@ -588,7 +607,7 @@ class ShareNotice(models.Model):
             .filter(recipient=user, first_opened_at__isnull=True)
             .filter(models.Q(file=file)
                     | models.Q(file__isnull=True, bucket_id__in=bucket_ids))
-            .update(first_opened_at=now)
+            .update(first_opened_at=now, updated_at=now)
         )
 
 

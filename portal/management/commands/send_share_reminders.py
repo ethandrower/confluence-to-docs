@@ -58,7 +58,12 @@ class Command(BaseCommand):
                 continue
             n.reminder_count += 1
             n.last_reminder_at = now
-            n.save(update_fields=['reminder_count', 'last_reminder_at'])
+            # updated_at is named explicitly: save(update_fields=...) writes
+            # only the fields it is given, so leaving it out would skip the
+            # column's auto_now and hide the nudge from
+            # /api/v1/share-events/ — the consumer would see a delivery sit
+            # unopened with no sign that anyone had chased it.
+            n.save(update_fields=['reminder_count', 'last_reminder_at', 'updated_at'])
             sent += 1
         if not opts['dry_run']:
             self.stdout.write(self.style.SUCCESS(f'Sent {sent} share reminder(s).'))

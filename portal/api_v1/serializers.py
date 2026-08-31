@@ -157,3 +157,82 @@ class TicketSerializer(serializers.Serializer):
         """
         from portal.views.tickets_admin import _portal_ticket_url
         return _portal_ticket_url(obj)
+
+
+class ShareItemSerializer(serializers.Serializer):
+    """The one file or link a push named, when it named one."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(source='original_name', read_only=True)
+    # 'file' or 'link'. A link's target URL is deliberately NOT here: it points
+    # at something outside the portal, a health dashboard has no use for it,
+    # and this namespace crosses the tenant boundary — so it stays out on the
+    # same principle that keeps message bodies out.
+    item_type = serializers.CharField(read_only=True)
+
+
+class ShareFolderSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    title = serializers.CharField(read_only=True)
+
+
+class ShareEventSerializer(serializers.Serializer):
+    """One (push, person) pair: something staff sent a customer, and what
+    became of it.
+
+    This is the finest grain the portal records, and it stays that way rather
+    than being pre-aggregated per push. "Two of the four people we sent this to
+    have opened it" is a fact a consumer can compute from these rows; it is not
+    one it could recover from a summary that had already collapsed them.
+
+    Titles and filenames appear here because staff wrote them when pushing —
+    they are our own outbound material, not customer content. The recipient's
+    address appears on the same footing as `requester_email` on a ticket: it
+    names the participant in one interaction. That is a different question from
+    CompanySerializer's, which deliberately publishes email DOMAINS only,
+    because a discovery endpoint listing every customer's whole staff roster is
+    a roster leak — one interaction is not.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    company = TicketCompanySerializer(source='bucket.company', read_only=True)
+    folder = ShareFolderSerializer(source='bucket', read_only=True)
+    # Null when the whole folder was pushed rather than one item in it. That
+    # distinction is the payload's own: a folder push means "here is everything
+    # in here", and it stays true as staff add to it afterwards.
+    item = ShareItemSerializer(read_only=True, source='file', allow_null=True)
+
+    sent_by_email = serializers.SerializerMethodField()
+    recipient_email = serializers.CharField(source='recipient.email', read_only=True)
+
+    sent_at = serializers.DateTimeField(read_only=True)
+    first_opened_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    # Derivable from first_opened_at, and included anyway: every consumer of
+    # this endpoint wants the boolean, and each one deriving it separately is
+    # each one getting a chance to derive it differently.
+    opened = serializers.BooleanField(read_only=True)
+
+    reminder_count = serializers.IntegerField(read_only=True)
+    last_reminder_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    # Whether the nudge loop is still armed. False means nobody will chase this
+    # automatically again — either staff switched it off at push time or both
+    # nudges are spent — which is exactly when a health dashboard should start
+    # caring that it is still unopened.
+    remind = serializers.BooleanField(read_only=True)
+
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    # No `url`, unlike TicketSerializer, and not by oversight: the admin files
+    # view is a tab held in local component state inside /manage, so there is
+    # no address that opens one company's folders. Any link built here would
+    # be guessed, and a guessed link that lands on the users tab — or on the
+    # SPA's catch-all — is worse than none. Making that tab deep-linkable is
+    # the prerequisite, and it belongs with the frontend, not here.
+
+    @staticmethod
+    def get_sent_by_email(obj) -> str:
+        """The staff member who pushed it. Empty string when the account has
+        since been deleted (`sent_by` is SET_NULL), on the same reasoning as
+        `assignee_email`: a consumer should not have to tell "no longer with
+        us" apart from "field absent"."""
+        return obj.sent_by.email if obj.sent_by_id else ''

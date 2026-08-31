@@ -235,6 +235,7 @@ not an extension of the table above and shares no authentication with it.
 | `/api/v1/companies/` | GET | Discovery: id, name, contract end, ticket counts, last ticket. Populate a consumer's account-id mapping from this once, instead of matching on names forever |
 | `/api/v1/tickets/` | GET | Ticket metadata. Filters: `company_id`, `email` (+`include_cc`), `status`, `priority`, `created_since`, `updated_since`; cursor paginated |
 | `/api/v1/tickets/<number>/` | GET | One ticket, same shape |
+| `/api/v1/share-events/` | GET | Files and folders staff pushed **to** a customer, one row per person notified, with open and reminder state. Filters: `company_id`, `recipient_email`, `opened`, `sent_since`, `updated_since`; cursor paginated |
 | `/api/v1/schema/` | GET | OpenAPI 3 schema (drf-spectacular) |
 | `/api/v1/docs/` | GET | Swagger UI |
 
@@ -262,6 +263,32 @@ Four rules hold this surface together, and all four are asserted in
 Statuses and priorities are returned in the portal's own vocabulary, unmapped.
 Consumers with a smaller enum collapse it on ingest; note `csm_direct` is a
 routing origin rather than a severity and has no clean severity equivalent.
+
+#### Syncing share events
+
+`/tickets/` answers *what has this customer asked us?*. `/share-events/`
+answers *what have we sent them, and did anyone look?* — one row per (push,
+person), so "two of the four people we sent this to have opened it" is
+something a consumer computes rather than something we pre-aggregate away.
+
+Poll it the same way as tickets, on `updated_at`:
+
+```bash
+curl -H "Authorization: Bearer csp_…" \
+  "https://…/api/v1/share-events/?updated_since=2026-08-01T00:00:00Z"
+```
+
+**Use `updated_since`, not `sent_since`.** Nearly everything worth knowing
+about a delivery happens after it is made: the open lands days later, and so do
+the two reminders. `sent_since` only ever replays the push itself, so a sync
+built on it would show every delivery frozen in the state it had a second after
+it left. `updated_since` catches all three, and — because the ordering is
+ascending — a row that changes mid-sync moves toward the end rather than behind
+your cursor, making the sync resumable and at-least-once.
+
+Deliveries carry no file contents, no download URLs, and no link targets. The
+endpoint reports *that* something was sent and what became of it, never what
+was in it.
 
 ## Project structure
 
