@@ -227,3 +227,62 @@ class EveryUnsafeEndpointRequiresCsrfTest(TestCase):
         # 28 as of the assignment/watchers/escalation endpoints; raise it when
         # you add more, so a discovery regression can't hide behind a low bar.
         self.assertGreaterEqual(checked, 28)
+
+
+class MagicLinkVerifyLoggingTest(TestCase):
+    """The Jenna Lowe incident (scanner-consumed tokens) needed a prod DB
+    query to diagnose because verify_magic_link logged nothing. Every verify
+    attempt — success or failure — must leave a log line with the outcome,
+    source IP and user agent, so the next report is a log grep."""
+
+    def setUp(self):
+        self.co = Company.objects.create(name='Acme')
+        self.user = PortalUser.objects.create(
+            email='c@acme.com', company=self.co, role=PortalUser.ROLE_CUSTOMER)
+
+    def _token(self, value='tok', **kw):
+        defaults = dict(
+            user=self.user, token=value,
+            expires_at=timezone.now() + timedelta(minutes=15))
+        defaults.update(kw)
+        return MagicLinkToken.objects.create(**defaults)
+
+    def _verify(self, token_value):
+        return self.client.post(
+            '/api/auth/verify/',
+            data=json.dumps({'token': token_value}),
+            content_type='application/json',
+            HTTP_USER_AGENT='TestBrowser/1.0')
+
+    def test_successful_verify_is_logged_with_ip_and_user_agent(self):
+        t = self._token()
+        with self.assertLogs('portal.views.auth', level='INFO') as logs:
+            r = self._verify(t.token)
+        self.assertEqual(r.status_code, 200)
+        line = '\n'.join(logs.output)
+        self.assertIn('c@acme.com', line)
+        self.assertIn('127.0.0.1', line)
+        self.assertIn('TestBrowser/1.0', line)
+
+    def test_used_token_failure_is_logged(self):
+        t = self._token(used=True)
+        with self.assertLogs('portal.views.auth', level='WARNING') as logs:
+            r = self._verify(t.token)
+        self.assertEqual(r.status_code, 401)
+        line = '\n'.join(logs.output)
+        self.assertIn('used', line)
+        self.assertIn('c@acme.com', line)
+        self.assertIn('127.0.0.1', line)
+
+    def test_expired_token_failure_is_logged(self):
+        t = self._token(expires_at=timezone.now() - timedelta(minutes=1))
+        with self.assertLogs('portal.views.auth', level='WARNING') as logs:
+            r = self._verify(t.token)
+        self.assertEqual(r.status_code, 401)
+        self.assertIn('expired', '\n'.join(logs.output))
+
+    def test_unknown_token_failure_is_logged(self):
+        with self.assertLogs('portal.views.auth', level='WARNING') as logs:
+            r = self._verify('no-such-token')
+        self.assertEqual(r.status_code, 401)
+        self.assertIn('unknown token', '\n'.join(logs.output))

@@ -9,6 +9,7 @@ import json
 import logging
 
 from django.conf import settings
+from django.db import transaction
 from django.http import JsonResponse, HttpResponseRedirect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -57,11 +58,19 @@ def _own_file(request, file_id):
 @require_http_methods(['GET'])
 def buckets_list(request):
     user = request.portal_user
+    # `allowed_ext` travels with the listing so the uploader can report what a
+    # dropped folder will skip BEFORE uploading it. Duplicating the list in JS
+    # would let the two drift, and the drift would show up as a file the UI
+    # promised to take and the server then refused.
+    allowed = sorted(settings.FILESHARE_ALLOWED_EXT)
     if not user.company_id:
-        return JsonResponse({'buckets': []})
+        return JsonResponse({'buckets': [], 'allowed_ext': allowed})
     get_general_bucket(user.company)  # ensure it exists
     buckets = Bucket.objects.filter(company_id=user.company_id)
-    return JsonResponse({'buckets': BucketSerializer(buckets, many=True).data})
+    return JsonResponse({
+        'buckets': BucketSerializer(buckets, many=True).data,
+        'allowed_ext': allowed,
+    })
 
 
 # ── Folders ───────────────────────────────────────────────────────────────
@@ -158,6 +167,95 @@ def folder_create(request):
     log_activity(user.company, 'folder_create', actor=user, bucket=folder,
                  title=title, parent_id=parent.id if parent else None)
     return JsonResponse({'folder': BucketSerializer(folder).data}, status=201)
+
+
+# A dropped folder tree is bounded so one gesture can't mint thousands of rows.
+MAX_ENSURE_PATHS = 500
+
+
+@require_portal_user
+@require_http_methods(['POST'])
+def folders_ensure_path(request):
+    """Resolve each relative path to a folder id, creating what's missing.
+
+    Folder upload needs this to be one server-side call. A dropped tree is N
+    files each carrying a path like "2024/q1", and walking that client-side
+    would be a round trip per segment *and* racy: two files in the same new
+    subfolder would each try to create it and one would lose to the duplicate
+    check. Deciding reuse-or-create exactly once per path, in a transaction,
+    is what makes the tree come out right.
+
+    Returns {path: bucket_id}. The empty path maps to the root the upload was
+    dropped on, so callers can treat loose files and nested ones identically.
+    """
+    user = request.portal_user
+    if not user.company_id:
+        return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
+
+    data = json.loads(request.body or '{}')
+    root, err = _resolve_parent(user, data.get('root_id'))
+    if err:
+        return err
+
+    paths = data.get('paths') or []
+    if not isinstance(paths, list):
+        return JsonResponse({'error': 'paths must be a list.'}, status=400)
+    if len(paths) > MAX_ENSURE_PATHS:
+        return JsonResponse(
+            {'error': f'Too many folders at once (limit {MAX_ENSURE_PATHS}).'}, status=400)
+
+    base_level = root.level if root else 0
+    resolved = {'': root.id if root else None}
+    # Keyed by (parent_id, lowercased title) so repeated segments across paths
+    # resolve to the same row without re-querying.
+    seen = {}
+
+    with transaction.atomic():
+        for raw in paths:
+            if not isinstance(raw, str):
+                return JsonResponse({'error': 'paths must be strings.'}, status=400)
+            # Normalise: strip slashes, drop empty segments ("a//b") and any
+            # "." / ".." a zip or odd filesystem might produce.
+            segments = [s.strip() for s in raw.split('/')]
+            segments = [s for s in segments if s and s not in ('.', '..')]
+            if not segments:
+                continue
+
+            key = '/'.join(segments)
+            if key in resolved:
+                continue
+            if base_level + len(segments) > Bucket.MAX_DEPTH:
+                return JsonResponse(
+                    {'error': f'“{key}” nests deeper than {Bucket.MAX_DEPTH} levels.'},
+                    status=400)
+
+            parent = root
+            walked = []
+            for segment in segments:
+                title, terr = _clean_title(segment)
+                if terr:
+                    return terr
+                walked.append(title)
+                cache_key = (parent.id if parent else None, title.lower())
+                folder = seen.get(cache_key)
+                if folder is None:
+                    # Reuse an existing folder of that name rather than making
+                    # a second one — re-uploading a tree must merge, not fork.
+                    folder = Bucket.for_user(user).filter(
+                        kind=Bucket.KIND_FOLDER, parent=parent, title__iexact=title,
+                    ).first()
+                if folder is None:
+                    folder = Bucket.objects.create(
+                        company_id=user.company_id, kind=Bucket.KIND_FOLDER,
+                        title=title, parent=parent, created_by=user, status='general',
+                    )
+                    log_activity(user.company, 'folder_create', actor=user, bucket=folder,
+                                 title=title, parent_id=parent.id if parent else None)
+                seen[cache_key] = folder
+                resolved['/'.join(walked)] = folder.id
+                parent = folder
+
+    return JsonResponse({'folders': resolved})
 
 
 @require_portal_user
@@ -294,8 +392,18 @@ def upload_init(request):
         return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
     # Bound how fast one account can mint upload slots (the rest of auth is
     # rate-limited; this endpoint creates rows + presigned URLs).
-    if is_rate_limited('file-upload-init', str(user.id), 120, 3600):
-        return JsonResponse({'error': 'Too many uploads right now — please slow down.'}, status=429)
+    if is_rate_limited('file-upload-init', str(user.id),
+                       settings.FILESHARE_UPLOAD_RATE, 3600):
+        # Tell the client how long to hold. Without this the uploader guesses,
+        # and a queue of workers each guessing wrong earns another 429 apiece.
+        # The window rolls continuously, so re-checking every minute drains a
+        # oversized batch slowly instead of failing it outright.
+        resp = JsonResponse({
+            'error': 'Too many uploads right now — please slow down.',
+            'retry_after': 60,
+        }, status=429)
+        resp['Retry-After'] = '60'
+        return resp
     data = json.loads(request.body or '{}')
     name = (data.get('name') or '').strip()
     size = int(data.get('size') or 0)
@@ -326,10 +434,83 @@ def upload_init(request):
     )
     f.storage_key = file_storage.build_key(user.company_id, bucket.id, f.id, name)
     f.save(update_fields=['storage_key'])
+
+    # Small files stay on the single-PUT path: one round trip, nothing to gain
+    # from splitting. The response shape is unchanged for them, so an older
+    # client keeps working.
+    if size <= settings.FILESHARE_MULTIPART_THRESHOLD:
+        return JsonResponse({
+            'file_id': f.id,
+            'upload_url': file_storage.presign_put(f.storage_key, mime),
+        })
+
+    part_size, part_count = file_storage.part_plan(size)
+    f.upload_id = file_storage.create_multipart(f.storage_key, mime)
+    f.save(update_fields=['upload_id'])
     return JsonResponse({
         'file_id': f.id,
-        'upload_url': file_storage.presign_put(f.storage_key, mime),
+        'multipart': True,
+        'part_size': part_size,
+        'part_count': part_count,
     })
+
+
+# Presigning every part up front would mean one huge response whose URLs all
+# expire together; batching lets a slow upload re-presign what it still needs.
+MAX_PART_BATCH = 50
+
+
+@require_portal_user
+@require_http_methods(['POST'])
+def upload_parts(request):
+    """Presign a batch of part PUTs for an in-flight multipart upload."""
+    user = request.portal_user
+    data = json.loads(request.body or '{}')
+    f = SharedFile.for_user(user).filter(
+        id=data.get('file_id'), state=SharedFile.STATE_UPLOADING).first()
+    if not f or not f.upload_id:
+        return JsonResponse({'error': 'Upload not found.'}, status=404)
+
+    numbers = data.get('part_numbers') or []
+    if not isinstance(numbers, list) or not numbers:
+        return JsonResponse({'error': 'part_numbers required.'}, status=400)
+    if len(numbers) > MAX_PART_BATCH:
+        return JsonResponse(
+            {'error': f'At most {MAX_PART_BATCH} parts per request.'}, status=400)
+    try:
+        numbers = [int(n) for n in numbers]
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'part_numbers must be integers.'}, status=400)
+    # S3 numbers parts from 1 and allows at most 10,000.
+    if any(n < 1 or n > 10000 for n in numbers):
+        return JsonResponse({'error': 'part number out of range.'}, status=400)
+
+    return JsonResponse({'urls': {
+        str(n): file_storage.presign_part(f.storage_key, f.upload_id, n)
+        for n in numbers
+    }})
+
+
+@require_portal_user
+@require_http_methods(['POST'])
+def upload_abort(request):
+    """Give up on an in-flight upload and reclaim its storage.
+
+    Parts of an abandoned multipart upload are billed until aborted and do not
+    appear in a listing, so leaving them is a silent cost.
+    """
+    user = request.portal_user
+    data = json.loads(request.body or '{}')
+    f = SharedFile.for_user(user).filter(
+        id=data.get('file_id'), state=SharedFile.STATE_UPLOADING).first()
+    if not f:
+        return JsonResponse({'error': 'Upload not found.'}, status=404)
+    if f.upload_id:
+        file_storage.abort_multipart(f.storage_key, f.upload_id)
+    else:
+        file_storage.delete_object(f.storage_key)
+    f.delete()
+    return JsonResponse({'ok': True})
 
 
 @require_portal_user
@@ -340,6 +521,26 @@ def upload_complete(request):
     f = SharedFile.for_user(user).filter(id=data.get('file_id')).first()
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
+
+    # A multipart upload isn't an object until its parts are assembled, so this
+    # has to happen before the size and signature checks below — those read the
+    # finished object.
+    if f.upload_id:
+        parts = data.get('parts') or []
+        if not parts:
+            return JsonResponse({'error': 'Missing part list.'}, status=400)
+        try:
+            file_storage.complete_multipart(f.storage_key, f.upload_id, [
+                {'PartNumber': int(p['PartNumber']), 'ETag': p['ETag']} for p in parts
+            ])
+        except (KeyError, TypeError, ValueError):
+            return JsonResponse({'error': 'Malformed part list.'}, status=400)
+        except Exception:
+            logger.exception('complete_multipart failed for file %s', f.id)
+            return JsonResponse({'error': 'Could not assemble the upload.'}, status=400)
+        f.upload_id = ''
+        f.save(update_fields=['upload_id'])
+
     size = file_storage.head_size(f.storage_key)
     if size is None:
         return JsonResponse({'error': 'Upload not found in storage.'}, status=400)

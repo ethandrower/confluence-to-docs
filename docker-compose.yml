@@ -41,6 +41,41 @@ services:
       timeout: 3s
       retries: 20
 
+  # S3-compatible object store for local dev. Production talks to real S3;
+  # without something here, file uploads simply cannot be exercised locally
+  # (there are no AWS keys in .env, by design).
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      # Browser PUTs are cross-origin (5174 -> 9000), and multipart needs the
+      # ETag of each part readable from JS.
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    volumes:
+      - miniodata:/data
+    ports:
+      # 9000 API (presigned URLs point here), 9001 console.
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: create the dev bucket, then exit.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "mc alias set local http://minio:9000 minioadmin minioadmin &&
+             mc mb --ignore-existing local/fileshare-dev &&
+             echo 'bucket ready'"
+
   web:
     # Dockerfile.dev, not Dockerfile — a root Dockerfile would hijack Dokku's
     # builder detection away from the buildpacks production uses.
@@ -61,6 +96,15 @@ services:
       # Keep image writes inside the bind mount so synced attachments survive
       # a container rebuild and are visible on the host.
       MEDIA_ROOT: /app/media
+      # Point file sharing at MinIO. FILESHARE_ENDPOINT_URL is how *we* reach
+      # it; FILESHARE_PUBLIC_ENDPOINT is what gets baked into presigned URLs,
+      # which the browser resolves from the host.
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_S3_REGION_NAME: us-east-1
+      FILESHARE_BUCKET: fileshare-dev
+      FILESHARE_ENDPOINT_URL: http://minio:9000
+      FILESHARE_PUBLIC_ENDPOINT: http://localhost:9000
     volumes:
       - .:/app
       # Django writes nothing to these, but keeping them off the bind mount
@@ -72,6 +116,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     # runserver speaks ASGI here because 'daphne' leads INSTALLED_APPS, so
     # WebSockets work in dev with autoreload.
@@ -101,3 +147,4 @@ services:
 
 volumes:
   pgdata:
+  miniodata:

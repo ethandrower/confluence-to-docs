@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('portal', '0031_apiclient_can_provision'),
+        ('portal', '0032_sharedfile_upload_id'),
     ]
 
     operations = [

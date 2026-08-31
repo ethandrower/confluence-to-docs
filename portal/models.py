@@ -379,6 +379,11 @@ class SharedFile(models.Model):
     item_type = models.CharField(max_length=8, choices=ITEM_TYPE_CHOICES, default=ITEM_FILE)
     external_url = models.URLField(max_length=2048, blank=True)
     storage_key = models.CharField(max_length=1024)
+    # S3 multipart UploadId, set only while a large upload is in flight.
+    # Completion needs it to assemble the object from its parts, and an
+    # abandoned upload needs it to be *aborted*: orphaned parts keep being
+    # billed and never show up in a listing of the bucket's objects.
+    upload_id = models.CharField(max_length=255, blank=True)
     size_bytes = models.BigIntegerField(null=True, blank=True)
     mime_type = models.CharField(max_length=255, blank=True)
     state = models.CharField(max_length=16, default=STATE_UPLOADING)
