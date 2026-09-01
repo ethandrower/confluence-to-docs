@@ -373,6 +373,19 @@ def _staff_folder(folder_id):
         id=folder_id, kind=Bucket.KIND_FOLDER, origin=Bucket.ORIGIN_STAFF).first()
 
 
+def _version_stamp(dt):
+    """A row's version as an integer, for equality rather than nearness.
+
+    Postgres keeps microseconds and a browser's Date only milliseconds, so the
+    two sides have to be compared at the coarser of them or a token that went
+    through JSON.parse would never match. Truncating is the way to absorb that
+    and NOT a tolerance window: a window accepts a token that is merely close,
+    which is precisely the rename that landed a moment ago — the collision this
+    check exists to catch.
+    """
+    return int(dt.timestamp() * 1000)
+
+
 def _clean_url(raw):
     """Validate an external link target. Returns (url, error_response)."""
     url = (raw or '').strip()
@@ -439,6 +452,27 @@ def staff_folder_detail(request, folder_id):
         return JsonResponse({'error': 'Shared folder not found.'}, status=404)
 
     if request.method == 'DELETE':
+        # Once we have told someone about a folder, it stops being ours to
+        # remove. The emptiness checks below stop a one-click cascade, but on
+        # their own they are only a speed bump: delete the files one at a time
+        # and the folder becomes deletable, taking a link the customer was
+        # emailed down with it.
+        #
+        # A ShareNotice is the line rather than the folder's own existence
+        # because a staff folder shows up in the customer's tree the moment it
+        # is created (buckets_list does not filter on origin) — so "never
+        # visible to them" is not a state that exists, and deleting a typo'd
+        # folder in the first minute has to stay possible. Being *notified* is
+        # the point of no return: that is when the folder acquires a life
+        # outside this screen.
+        #
+        # Deletion is refused outright rather than offered as an archive
+        # because there is no archived state yet; that is the follow-up this
+        # guard is holding the line for.
+        if ShareNotice.objects.filter(bucket=folder).exists():
+            return JsonResponse(
+                {'error': 'This folder has already been shared with the customer, '
+                          'so it can’t be deleted.'}, status=409)
         # Same refuse-rather-than-cascade rule as the customer side: the FK is
         # CASCADE so an unguarded delete would take every delivered file with
         # it, including ones the customer has already been told about.
@@ -454,6 +488,27 @@ def staff_folder_detail(request, folder_id):
         return JsonResponse({'ok': True})
 
     data = json.loads(request.body or '{}')
+    # Optimistic concurrency. Two admins on the same account is the ordinary
+    # case, not the exotic one, and without this the second rename silently
+    # wins — the first admin keeps looking at a name that is no longer real and
+    # has no way to find that out.
+    #
+    # The precondition is REQUIRED rather than honoured-when-present: a caller
+    # that omits it would get exactly the clobbering behaviour this exists to
+    # stop, and "the safe path is the one you have to opt into" is how a guard
+    # ends up protecting nothing. Nothing calls this endpoint yet — the admin
+    # UI creates shared folders but has no rename control — so requiring it
+    # costs no caller anything today and sets the contract for the one that
+    # eventually does.
+    seen_at = parse_datetime(data.get('updated_at') or '')
+    if seen_at is None:
+        return JsonResponse(
+            {'error': 'updated_at is required so a concurrent edit can be detected.'},
+            status=400)
+    if _version_stamp(folder.updated_at) != _version_stamp(seen_at):
+        return JsonResponse(
+            {'error': 'Someone else changed this folder. Reload and try again.'},
+            status=409)
     title, err = _clean_title(data.get('title'))
     if err:
         return err

@@ -323,6 +323,31 @@ person who never opened it sent nine emails — three sends and six reminders,
 several on the same day under one subject line — even though the per-notice cap
 of two was working exactly as documented.
 
+#### What staff can no longer do to a shared folder
+
+A shared folder the customer has been **notified** about (any `ShareNotice`
+exists for it) cannot be deleted — the endpoint returns 409. The older rule
+only refused to delete a folder that still held subfolders or live files, which
+a determined admin got past by deleting the files one at a time; the folder then
+went, and with it a link a customer had been emailed. The notification is the
+line rather than the folder's creation because a staff folder appears in the
+customer's tree as soon as it exists (`buckets_list` does not filter on
+`origin`), so "before they could see it" is not a window that exists — but
+undoing a folder created by mistake has to stay possible.
+
+There is no archived state yet, so a notified folder currently cannot be
+retired at all. That is the intended follow-up; this guard holds the line until
+it lands.
+
+Renaming a shared folder requires sending back the `updated_at` you were
+looking at, and gets a 409 if the row has moved since. Two admins on one
+account is ordinary, and without the precondition the second rename silently
+won while the first admin went on reading a name that was no longer real. The
+field is required rather than optional — a caller that omitted it would get
+exactly the clobbering the check exists to prevent — and it is compared for
+equality at millisecond resolution, not as a tolerance window, because a window
+accepts the rename that landed a moment ago.
+
 ## Project structure
 
 ```

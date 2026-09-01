@@ -426,6 +426,118 @@ class StaffFolderCreationTest(PushTestBase):
         self.assertEqual(theirs.title, 'Theirs')
 
 
+class SharedFolderIsNotOursToRemoveTest(PushTestBase):
+    """Once a customer has been told about a folder, staff lose the right to
+    delete it out from under them.
+
+    The emptiness checks alone were only a speed bump: delete the delivered
+    files one at a time and the folder becomes deletable, taking a link the
+    customer was emailed down with it. These tests are written against the
+    announced/unannounced line rather than against emptiness for that reason.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.login(self.staff)
+
+    def empty_the_folder(self):
+        """Soft-delete everything in it, which is what an admin clicking
+        delete on each file would do — the state the old guard permitted."""
+        self.shared.files.update(deleted_at=timezone.now())
+
+    def test_an_announced_folder_survives_even_once_it_is_empty(self):
+        ShareNotice.objects.create(
+            bucket=self.shared, recipient=self.jane, sent_by=self.staff)
+        self.empty_the_folder()
+        r = self.client.delete(f'/api/admin/files/folders/{self.shared.id}/')
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('already been shared', r.json()['error'])
+        self.assertTrue(Bucket.objects.filter(id=self.shared.id).exists())
+
+    def test_a_held_notice_still_counts_as_announced(self):
+        """The row is what matters, not whether the email went. A push whose
+        email the rate limit held still put the folder in front of them."""
+        ShareNotice.objects.create(
+            bucket=self.shared, recipient=self.jane, sent_by=self.staff,
+            last_email_at=None)
+        self.empty_the_folder()
+        r = self.client.delete(f'/api/admin/files/folders/{self.shared.id}/')
+        self.assertEqual(r.status_code, 409)
+
+    def test_an_unannounced_folder_can_still_be_deleted(self):
+        """Undoing a typo in the first minute has to stay possible — a staff
+        folder is visible in the customer's tree from creation, so 'never seen'
+        is not a state we could wait for."""
+        self.empty_the_folder()
+        r = self.client.delete(f'/api/admin/files/folders/{self.shared.id}/')
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(Bucket.objects.filter(id=self.shared.id).exists())
+
+    def test_the_announced_check_runs_before_the_emptiness_ones(self):
+        """A folder that is both announced and full should say the thing that
+        will not change by emptying it, or staff will empty it and try again."""
+        ShareNotice.objects.create(
+            bucket=self.shared, recipient=self.jane, sent_by=self.staff)
+        r = self.client.delete(f'/api/admin/files/folders/{self.shared.id}/')
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('already been shared', r.json()['error'])
+
+
+class SharedFolderRenameConcurrencyTest(PushTestBase):
+    """Two admins on one account is the ordinary case, so the second rename
+    must not silently win."""
+
+    def setUp(self):
+        super().setUp()
+        self.login(self.staff)
+
+    def rename(self, title, updated_at=...):
+        body = {'title': title}
+        if updated_at is not ...:
+            body['updated_at'] = updated_at
+        return self.client.patch(
+            f'/api/admin/files/folders/{self.shared.id}/',
+            data=json.dumps(body), content_type='application/json')
+
+    def test_the_token_is_readable_from_the_listing(self):
+        """A required precondition a client cannot obtain is not a contract."""
+        r = self.client.get(f'/api/admin/files/companies/{self.acme.id}/')
+        self.assertEqual(r.status_code, 200)
+        folders = [b for b in r.json()['buckets'] if b['id'] == self.shared.id]
+        self.assertEqual(len(folders), 1)
+        self.assertTrue(folders[0]['updated_at'])
+
+    def test_a_rename_without_the_token_is_refused(self):
+        r = self.rename('Renamed')
+        self.assertEqual(r.status_code, 400)
+        self.shared.refresh_from_db()
+        self.assertEqual(self.shared.title, 'Deliverables')
+
+    def test_a_stale_rename_is_refused(self):
+        stale = self.shared.updated_at - timedelta(minutes=5)
+        r = self.rename('Renamed', updated_at=stale.isoformat())
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('Someone else', r.json()['error'])
+        self.shared.refresh_from_db()
+        self.assertEqual(self.shared.title, 'Deliverables')
+
+    def test_a_current_rename_succeeds(self):
+        r = self.rename('Renamed', updated_at=self.shared.updated_at.isoformat())
+        self.assertEqual(r.status_code, 200)
+        self.shared.refresh_from_db()
+        self.assertEqual(self.shared.title, 'Renamed')
+
+    def test_the_second_of_two_concurrent_renames_loses(self):
+        """Both admins read the same version; the first write moves it."""
+        token = self.shared.updated_at.isoformat()
+        first = self.rename('Ana’s name', updated_at=token)
+        self.assertEqual(first.status_code, 200)
+        second = self.rename('Raj’s name', updated_at=token)
+        self.assertEqual(second.status_code, 409)
+        self.shared.refresh_from_db()
+        self.assertEqual(self.shared.title, 'Ana’s name')
+
+
 class NotificationVolumeTest(PushTestBase):
     """What one person's inbox actually receives.
 

@@ -113,6 +113,11 @@ class BucketSerializer(serializers.ModelSerializer):
             # Drives both the "From CiteMed" section split and every
             # read-only affordance on the customer side.
             'origin',
+            # The concurrency token. Renaming a shared folder requires sending
+            # back the updated_at you were looking at, so a second admin
+            # editing the same folder gets a 409 instead of silently winning —
+            # which means the value has to be readable in the first place.
+            'updated_at',
         ]
 
     def get_files(self, obj):
