@@ -9,14 +9,16 @@ folders in their own tree and uploads into them, staff create folders with
 read and download what lands there but not rename, move, delete or add to it
 (see the guards in views/files.py). Notifications are per-person rather than
 per-company, and each one is recorded as a ShareNotice so an unopened delivery
-can be nudged exactly twice and then left alone."""
+can be nudged exactly twice and then left alone. How much of that actually
+reaches an inbox is bounded separately, per recipient rather than per row —
+see the rate-limit notes on ShareNotice."""
 import json
 import tempfile
 import zipfile
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.db import transaction
+from django.db import models, transaction
 from django.http import JsonResponse, FileResponse, HttpResponseRedirect
 from django.utils.dateparse import parse_datetime, parse_date
 from django.utils import timezone
@@ -629,8 +631,12 @@ def share_push(request):
             status=400)
 
     remind = bool(data.get('remind', True))
-    notices = []
+    notices, emailed, held = [], [], []
     for r in recipients:
+        # Disarm this person's earlier unopened notices for the same folder
+        # BEFORE adding the new one, so the nudge cycles don't stack. See
+        # ShareNotice.supersede_open_notices.
+        ShareNotice.supersede_open_notices(r.id, folder.id)
         # One row per person, created individually rather than bulk: the
         # counts here are a handful, and doing it this way keeps auto_now_add
         # and any future save-side logic honest.
@@ -641,24 +647,44 @@ def share_push(request):
     # One message per person, not one message addressed to all of them: the
     # recipient list is not something a customer needs to see, and a per-person
     # send is what lets the reminder loop talk to one of them later.
-    for r in recipients:
+    #
+    # The row is always written even when the email is held back: the push
+    # happened, staff meant it, and it belongs in the status panel and the
+    # RevenueHub feed. What the rate limit decides is whether it also lands in
+    # someone's inbox — and `held` carries that back so the UI can say so
+    # rather than reporting a delivery that never left.
+    for n in notices:
         try:
-            file_notify.notify_share(folder, item, r)
+            reason = file_notify.send_share_email(n)
         except Exception:
-            pass
+            reason = None
+        (held if reason else emailed).append(n.recipient.email)
     log_activity(folder.company, 'share_push', actor=request.portal_user,
                  bucket=folder, file=item, name=(item.original_name if item else folder.title),
-                 recipients=[r.email for r in recipients], remind=remind)
-    return JsonResponse({'ok': True, 'notified': len(notices)}, status=201)
+                 recipients=[r.email for r in recipients], remind=remind,
+                 emailed=emailed, held=held)
+    return JsonResponse({'ok': True, 'notified': len(notices),
+                         'emailed': len(emailed), 'held': held}, status=201)
 
 
-def _notice_dict(n):
+def _notice_dict(n, last_email_at=None):
     return {
         'user_id': n.recipient_id,
         'name': n.recipient.name or '',
         'email': n.recipient.email,
         'item': n.file.original_name if n.file else None,
         'sent_at': n.sent_at.isoformat(),
+        # When an email last actually reached them, which is not the same as
+        # when staff last pushed — the rate limit is the difference. The UI
+        # uses this to warn before a re-notify that would be held anyway.
+        #
+        # Taken across ALL of this person's notices for the folder, not just
+        # the newest one shown here. A held push writes a row with no send on
+        # it, so reading this off the latest row alone would blank the warning
+        # the moment the rate limit acted — the UI would re-tick them, and
+        # staff would watch the same send get held again with no idea why.
+        'last_email_at': (last_email_at or n.last_email_at).isoformat()
+                         if (last_email_at or n.last_email_at) else None,
         'opened_at': n.first_opened_at.isoformat() if n.first_opened_at else None,
         'reminders_sent': n.reminder_count,
         'reminding': bool(n.remind and not n.first_opened_at and not n.exhausted),
@@ -677,6 +703,14 @@ def share_status(request, bucket_id):
     folder = _staff_folder(bucket_id)
     if not folder:
         return JsonResponse({'error': 'Shared folder not found.'}, status=404)
+    # The last email that actually went to each person about this folder,
+    # across every notice — see _notice_dict for why the newest row alone
+    # would be wrong.
+    last_emails = dict(
+        ShareNotice.objects.filter(bucket=folder, last_email_at__isnull=False)
+        .values_list('recipient_id')
+        .annotate(models.Max('last_email_at'))
+    )
     seen, latest = set(), []
     # Default ordering is -sent_at, so the first row seen per recipient is
     # their most recent notice.
@@ -684,7 +718,7 @@ def share_status(request, bucket_id):
         if n.recipient_id in seen:
             continue
         seen.add(n.recipient_id)
-        latest.append(_notice_dict(n))
+        latest.append(_notice_dict(n, last_emails.get(n.recipient_id)))
     return JsonResponse({
         'bucket_id': folder.id,
         'recipients': latest,

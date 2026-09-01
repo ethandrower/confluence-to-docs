@@ -511,6 +511,27 @@ class ShareNotice(models.Model):
     # Indexed by reminder_count, so it must hold exactly MAX_REMINDERS entries.
     REMINDER_AFTER_DAYS = [3, 7]
 
+    # ── How much mail one person can receive about shared files ──────────
+    #
+    # The per-notice reminder cap above is not by itself a limit on what a
+    # human receives, because pushing a folder twice makes two notices and
+    # each one nudges on its own schedule. Staff re-notifying a folder as they
+    # add to it is the normal workflow, not misuse, so the cadence has to
+    # survive it: three pushes of one folder to one person who never opens it
+    # produced NINE emails — three sends plus six reminders, several landing
+    # on the same day with an identical subject line.
+    #
+    # Two rules fix that, and they are deliberately about the person rather
+    # than the row, because "spam" is a fact about an inbox:
+    #
+    #   1. One email per person per folder per day. A second push of the same
+    #      folder says the same sentence and points at the same link, so a
+    #      second email adds nothing the first did not already say.
+    #   2. A hard ceiling per person per day across all folders, as a backstop
+    #      for any path that gets added later without reading this comment.
+    SAME_FOLDER_COOLDOWN = timedelta(hours=24)
+    MAX_EMAILS_PER_DAY = 4
+
     bucket = models.ForeignKey(Bucket, on_delete=models.CASCADE, related_name='notices')
     # Set when a single file or link was pushed; null when the whole folder was.
     file = models.ForeignKey(
@@ -544,6 +565,13 @@ class ShareNotice(models.Model):
     reminder_count = models.IntegerField(default=0)
     # Staff can push without arming the nudge loop at all.
     remind = models.BooleanField(default=True)
+    # When an email for THIS notice last actually reached the recipient —
+    # push or reminder, whichever came last. Distinct from sent_at, which
+    # records when staff pushed: the two differ exactly when a send was
+    # suppressed, and that gap is the thing the rate limit is made of.
+    # Counting sent_at instead would count suppressed sends as delivered and
+    # let the ceiling drift up every time it did its job.
+    last_email_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ['-sent_at']
@@ -578,6 +606,67 @@ class ShareNotice(models.Model):
             return False
         return (now - self.sent_at) >= timedelta(
             days=self.REMINDER_AFTER_DAYS[self.reminder_count])
+
+    def suppressed_reason(self, now=None):
+        """Why this notice must not be emailed right now, or None to send.
+
+        Consulted by both senders — the push view and the reminder sweep — so
+        the two cannot come to different conclusions about the same inbox. A
+        reason string rather than a bool because it gets logged and returned
+        to staff: "we didn't email them" is a much less useful thing to be
+        told than which rule stopped it.
+
+        Both windows are rolling rather than calendar days. A calendar rule
+        would let a push at 23:50 and another at 00:10 both go, which is the
+        one case a reader of "once a day" would be most surprised by.
+        """
+        now = now or timezone.now()
+        recent = self.__class__.objects.filter(
+            recipient_id=self.recipient_id, last_email_at__isnull=False)
+        if self.pk:
+            recent = recent.exclude(pk=self.pk)
+
+        if recent.filter(bucket_id=self.bucket_id,
+                         last_email_at__gt=now - self.SAME_FOLDER_COOLDOWN).exists():
+            return 'already emailed about this folder today'
+        if recent.filter(
+                last_email_at__gt=now - timedelta(days=1)
+        ).count() >= self.MAX_EMAILS_PER_DAY:
+            return 'daily email limit for this recipient reached'
+        return None
+
+    def record_email_sent(self, now=None):
+        """Stamp an email that actually went out.
+
+        Writes updated_at by hand for the reason the field's own comment
+        gives: this is a save(update_fields=...), so the column's auto_now
+        does not fire for names the caller leaves out, and a send that never
+        moved updated_at would be invisible to /api/v1/share-events/.
+        """
+        self.last_email_at = now or timezone.now()
+        self.updated_at = self.last_email_at
+        self.save(update_fields=['last_email_at', 'updated_at'])
+
+    @classmethod
+    def supersede_open_notices(cls, recipient_id, bucket_id, now=None):
+        """Disarm this person's earlier unopened notices for the same folder.
+
+        A second push of a folder is not a second thing to open — it is the
+        same folder, behind the same link — so the older notice's nudge cycle
+        would spend its two reminders saying what the new one is about to say
+        again. Left alone they interleave: with pushes on three consecutive
+        days the recipient gets a reminder on days 4, 5, 6 and again on 8, 9,
+        10, all with one subject line.
+
+        Only `remind` is cleared. The rows stay, unopened and readable, so the
+        per-person status panel and the RevenueHub feed still show every push
+        that was made rather than quietly losing the history.
+        """
+        now = now or timezone.now()
+        return (cls.objects
+                .filter(recipient_id=recipient_id, bucket_id=bucket_id,
+                        first_opened_at__isnull=True, remind=True)
+                .update(remind=False, updated_at=now))
 
     @classmethod
     def mark_opened(cls, user, file, now=None):

@@ -206,6 +206,14 @@ class ShareEventSerializer(serializers.Serializer):
     recipient_email = serializers.CharField(source='recipient.email', read_only=True)
 
     sent_at = serializers.DateTimeField(read_only=True)
+    # When an email for this row last actually reached the recipient. Null
+    # means the push is recorded but nothing was sent — the per-recipient rate
+    # limit held it because they had already heard about this folder today.
+    # Worth publishing rather than inferring from sent_at: a row that has sat
+    # unopened for a week reads very differently once you know whether anyone
+    # ever told them, and a consumer scoring engagement would otherwise count
+    # an email we never sent as one they ignored.
+    last_email_at = serializers.DateTimeField(read_only=True, allow_null=True)
     first_opened_at = serializers.DateTimeField(read_only=True, allow_null=True)
     # Derivable from first_opened_at, and included anyway: every consumer of
     # this endpoint wants the boolean, and each one deriving it separately is

@@ -286,9 +286,42 @@ it left. `updated_since` catches all three, and — because the ordering is
 ascending — a row that changes mid-sync moves toward the end rather than behind
 your cursor, making the sync resumable and at-least-once.
 
+`last_email_at` is null when a push was recorded but no email was sent,
+because the per-recipient rate limit below held it. Worth reading rather than
+assuming `sent_at` implies delivery: a row that has sat unopened for a week
+means something different once you know whether anyone was ever told, and a
+consumer scoring engagement would otherwise count an email we never sent as one
+the customer ignored.
+
 Deliveries carry no file contents, no download URLs, and no link targets. The
 endpoint reports *that* something was sent and what became of it, never what
 was in it.
+
+#### How much mail one person can get
+
+Staff re-notify a folder as they add to it, which is the normal workflow rather
+than misuse — so the limits are written about the person, not the row. Two
+rules, both on `ShareNotice`:
+
+- **One email per person per folder per day** (`SAME_FOLDER_COOLDOWN`). A
+  second push of the same folder says the same sentence and points at the same
+  link, so a second email adds nothing the first did not.
+- **At most `MAX_EMAILS_PER_DAY` share emails per person across all folders**,
+  as a backstop for any path added later.
+
+A push whose email is held is still recorded, still appears in the status panel
+and the sync feed, and still supersedes the older notice — only the email is
+dropped, and `share_push` returns `held` so the UI can say so instead of
+reporting a delivery that never left. The admin's notify dialog unticks anyone
+already emailed about that folder today and flags them, so re-notifying is a
+deliberate act.
+
+Pushing a folder again **supersedes** that person's earlier unopened notices
+for it rather than adding a second nudge cycle: the older rows stay on the
+record but stop reminding. Without that, three pushes of one folder to one
+person who never opened it sent nine emails — three sends and six reminders,
+several on the same day under one subject line — even though the per-notice cap
+of two was working exactly as documented.
 
 ## Project structure
 

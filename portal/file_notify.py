@@ -167,6 +167,29 @@ def notify_share(bucket, item, recipient):
     )
 
 
+def send_share_email(notice, *, reminder=False, now=None):
+    """The one door every customer-facing share email goes through.
+
+    Checks the rate limit, sends, and records the send as one step, because
+    the three coming apart is how a limit stops working: a caller that sends
+    without recording lets the next check believe nothing was sent, and the
+    ceiling quietly stops existing.
+
+    Returns None when the email went, or the reason string when it did not.
+    """
+    reason = notice.suppressed_reason(now)
+    if reason:
+        logger.info('share email suppressed for %s (%s): %s',
+                    notice.recipient.email, notice.bucket_id, reason)
+        return reason
+    if reminder:
+        notify_share_reminder(notice)
+    else:
+        notify_share(notice.bucket, notice.file, notice.recipient)
+    notice.record_email_sent(now)
+    return None
+
+
 def notify_share_reminder(notice):
     """Nudge one person who hasn't opened what we sent them.
 

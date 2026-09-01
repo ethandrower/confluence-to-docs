@@ -424,3 +424,163 @@ class StaffFolderCreationTest(PushTestBase):
         self.assertEqual(r.status_code, 404)
         theirs.refresh_from_db()
         self.assertEqual(theirs.title, 'Theirs')
+
+
+class NotificationVolumeTest(PushTestBase):
+    """What one person's inbox actually receives.
+
+    The reminder cap is per notice, and a folder can be pushed many times, so
+    "at most two nudges" was never a statement about a human being. Before the
+    rate limit, three pushes of one folder to one person who never opened it
+    produced nine emails — three sends and six reminders, several arriving on
+    the same day under one subject line. These tests are written in terms of
+    len(mail.outbox) for that reason: a per-row assertion would have passed
+    happily the whole time.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.login(self.staff)
+
+    def push(self, recipients=None, bucket=None, remind=True):
+        return self.post('/api/admin/files/share/',
+                         bucket_id=(bucket or self.shared).id,
+                         recipient_ids=[u.id for u in (recipients or [self.jane])],
+                         remind=remind)
+
+    def age_everything(self, days):
+        """Move every notice's timestamps back in time together.
+
+        All three move as a set. Ageing sent_at alone would leave
+        last_reminder_at pinned to the real clock, and the sweep's 20-hour
+        double-run guard would then block every nudge after the first —
+        looking exactly like the cap working when it is the harness lying."""
+        delta = timedelta(days=days)
+        back = lambda t: (t - delta) if t else None
+        for n in ShareNotice.objects.all():
+            ShareNotice.objects.filter(pk=n.pk).update(
+                sent_at=n.sent_at - delta,
+                last_email_at=back(n.last_email_at),
+                last_reminder_at=back(n.last_reminder_at))
+
+    # ── The immediate send ───────────────────────────────────────────────
+
+    def test_pushing_the_same_folder_twice_in_one_day_emails_once(self):
+        self.push()
+        self.push()
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_the_second_push_is_still_recorded_even_though_it_was_not_emailed(self):
+        """The push happened and staff meant it. Only the email is held."""
+        self.push()
+        self.push()
+        self.assertEqual(ShareNotice.objects.filter(recipient=self.jane).count(), 2)
+
+    def test_a_held_send_is_reported_to_staff_rather_than_counted_as_delivered(self):
+        self.push()
+        r = self.push()
+        body = r.json()
+        self.assertEqual(body['notified'], 1)
+        self.assertEqual(body['emailed'], 0)
+        self.assertEqual(body['held'], ['jane@acme.com'])
+
+    def test_a_different_folder_the_same_day_still_gets_through(self):
+        """The cooldown is about repeating yourself, not about silence."""
+        other = Bucket.objects.create(
+            company=self.acme, kind=Bucket.KIND_FOLDER, title='Second delivery',
+            status='general', origin=Bucket.ORIGIN_STAFF, created_by=self.staff)
+        self.push()
+        self.push(bucket=other)
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_the_same_folder_tomorrow_gets_through(self):
+        self.push()
+        self.age_everything(days=1)
+        self.push()
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_one_persons_cooldown_does_not_silence_another(self):
+        self.push([self.jane])
+        mail.outbox = []
+        self.push([self.jane, self.raj])
+        self.assertEqual([m.to for m in mail.outbox], [['raj@acme.com']])
+
+    def test_no_more_than_the_daily_ceiling_across_every_folder(self):
+        for i in range(ShareNotice.MAX_EMAILS_PER_DAY + 3):
+            b = Bucket.objects.create(
+                company=self.acme, kind=Bucket.KIND_FOLDER, title=f'Folder {i}',
+                status='general', origin=Bucket.ORIGIN_STAFF, created_by=self.staff)
+            self.push(bucket=b)
+        self.assertEqual(len(mail.outbox), ShareNotice.MAX_EMAILS_PER_DAY)
+
+    # ── The nudge loop ───────────────────────────────────────────────────
+
+    def test_repeated_pushes_do_not_multiply_the_nudges(self):
+        """The nine-email case. Three pushes on three days, never opened."""
+        for _ in range(3):
+            self.push()
+            self.age_everything(days=1)
+        mail.outbox = []
+        # Two weeks, a day at a time, exactly as the daily cron runs it.
+        for _ in range(14):
+            call_command('send_share_reminders')
+            self.age_everything(days=1)
+        self.assertEqual(len(mail.outbox), ShareNotice.MAX_REMINDERS)
+
+    def test_the_superseded_notice_stops_nudging_but_is_still_on_the_record(self):
+        self.push()
+        first = ShareNotice.objects.get()
+        self.push()
+        first.refresh_from_db()
+        self.assertFalse(first.remind)
+        self.assertIsNone(first.first_opened_at)
+        self.assertEqual(ShareNotice.objects.count(), 2)
+
+    def test_superseding_moves_the_row_so_the_sync_can_see_it(self):
+        """updated_at is the cursor /api/v1/share-events/ walks. A queryset
+        update skips auto_now, so a supersede that didn't write it by hand
+        would leave RevenueHub showing a nudge cycle that had already ended."""
+        self.push()
+        first = ShareNotice.objects.get()
+        before = first.updated_at
+        self.push()
+        first.refresh_from_db()
+        self.assertGreater(first.updated_at, before)
+
+    def test_a_held_nudge_is_retried_rather_than_spent(self):
+        """A reminder blocked by the ceiling must not burn one of the two."""
+        self.push()
+        self.age_everything(days=3)
+        # Fill the rest of today's allowance with other folders.
+        for i in range(ShareNotice.MAX_EMAILS_PER_DAY):
+            b = Bucket.objects.create(
+                company=self.acme, kind=Bucket.KIND_FOLDER, title=f'Filler {i}',
+                status='general', origin=Bucket.ORIGIN_STAFF, created_by=self.staff)
+            self.push(bucket=b)
+        n = ShareNotice.objects.filter(bucket=self.shared).first()
+        mail.outbox = []
+        call_command('send_share_reminders')
+        n.refresh_from_db()
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(n.reminder_count, 0)
+        self.assertTrue(n.due_for_reminder())
+
+    def test_opening_it_still_ends_every_nudge_cycle_for_that_folder(self):
+        self.push()
+        self.age_everything(days=1)
+        self.push()
+        ShareNotice.mark_opened(self.jane, self.delivered)
+        self.age_everything(days=8)
+        mail.outbox = []
+        call_command('send_share_reminders')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_the_warning_survives_a_held_push(self):
+        """A held push adds a row with no send on it. The status panel must
+        still report the earlier real send, or the UI drops its warning at
+        exactly the moment the rate limit starts acting."""
+        self.push()
+        self.push()
+        r = self.client.get(f'/api/admin/files/share/{self.shared.id}/')
+        (row,) = r.json()['recipients']
+        self.assertIsNotNone(row['last_email_at'])

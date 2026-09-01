@@ -97,7 +97,7 @@
       "schedule": "*/5 * * * *"
     },
     {
-      "comment": "Nudge customers who were sent a shared file or folder and never opened it. Capped at two reminders per person per push (3 and 7 days after the send), then silent. Daily is the right cadence because the thresholds are measured in days; running more often just re-checks the same throttle.",
+      "comment": "Nudge customers who were sent a shared file or folder and never opened it. Two reminders per person per FOLDER (3 and 7 days after the send), then silent — re-pushing a folder supersedes the earlier notice rather than starting a second nudge cycle, and a per-recipient daily ceiling holds anything over it back for the next run. Daily is the right cadence because the thresholds are measured in days; running more often just re-checks the same throttle.",
       "command": "python manage.py send_share_reminders",
       "schedule": "0 14 * * *"
     }

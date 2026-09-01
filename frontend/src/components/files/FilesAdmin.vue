@@ -440,6 +440,11 @@
         <div class="modal" role="dialog" aria-modal="true">
           <h2 class="modal-title">Notify about “{{ sharedBucket?.title }}”</h2>
           <p v-if="notifyError" class="form-error">{{ notifyError }}</p>
+          <p v-if="notifyHeld.length" class="form-note">
+            Shared, but no email sent to {{ notifyHeld.join(', ') }} — they were
+            already emailed about this folder today. They’ll see it in their
+            portal; reach out directly if it’s urgent.
+          </p>
           <p class="modal-hint">
             Only people with portal access at this client can be notified — a
             link into the portal is no use to someone who can’t sign in.
@@ -450,6 +455,9 @@
               <span class="recip-who">
                 <span class="recip-name">{{ m.name || m.email }}</span>
                 <span class="recip-email">{{ m.email }}</span>
+              </span>
+              <span v-if="emailedToday(m.id)" class="recip-flag">
+                emailed today, not opened
               </span>
             </label>
             <p v-if="!members.length" class="recip-empty">
@@ -1009,17 +1017,32 @@ const notifyModal = ref(false)
 const notifySaving = ref(false)
 const notifyError = ref('')
 const notifyForm = ref({ recipient_ids: [], remind: true })
+const notifyHeld = ref([])
+
+/** Whether we already emailed this person about THIS folder inside the
+ * server's cooldown and they still haven't opened it. Read off the status
+ * we already load for the panel rather than asking for it again — the two
+ * would only ever disagree, and the answer is a warning, not a gate. */
+function emailedToday(userId) {
+  const row = shareStatus.value.find((r) => r.user_id === userId)
+  if (!row || row.opened_at || !row.last_email_at) return false
+  return Date.now() - new Date(row.last_email_at).getTime() < 24 * 60 * 60 * 1000
+}
 
 async function openNotify() {
   notifyError.value = ''
-  // Default to everyone with access: the common case is telling the whole
-  // team, and unticking is easier than remembering who to tick.
+  notifyHeld.value = []
   const r = await apiFetch(`/api/admin/files/companies/${selectedCompanyId.value}/members`, {
     credentials: 'include',
   })
   members.value = r.ok ? (await r.json()).members : []
+  // Everyone with access, EXCEPT anyone we already emailed about this folder
+  // today who hasn't opened it. Telling the whole team is still the common
+  // case and still one click; what's no longer one click is mailing the same
+  // person the same sentence twice in an afternoon, which is how a delivery
+  // notice turns into something people filter.
   notifyForm.value = {
-    recipient_ids: members.value.map((m) => m.id),
+    recipient_ids: members.value.filter((m) => !emailedToday(m.id)).map((m) => m.id),
     remind: true,
   }
   notifyModal.value = true
@@ -1039,8 +1062,14 @@ async function sendNotify() {
         remind: notifyForm.value.remind,
       }),
     })
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not notify')
-    notifyModal.value = false
+    const body = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(body.error || 'Could not notify')
+    // A push whose email was rate-limited still succeeded as a push, so this
+    // is not an error — but it must not be reported as a delivery either.
+    // Staff who think someone was emailed and wait for a reply are worse off
+    // than staff who know to pick up the phone.
+    notifyHeld.value = body.held || []
+    if (!notifyHeld.value.length) notifyModal.value = false
     await loadShareStatus()
   } catch (e) {
     notifyError.value = e.message
@@ -1383,6 +1412,8 @@ tbody tr:hover td { background: var(--accent); }
 .recip input { flex-shrink: 0; }
 .recip-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .recip-name { font-size: 0.85rem; color: var(--foreground); }
+.recip-flag { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--muted-foreground); background: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.form-note { font-size: 12.5px; color: var(--foreground); background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; margin-bottom: 10px; }
 .recip-email { font-size: 0.75rem; color: var(--muted-foreground); }
 .recip-empty {
   padding: 14px 10px; font-size: 0.82rem;

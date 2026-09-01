@@ -1,9 +1,16 @@
 """Nudge customers who were sent a file or folder and never opened it.
 
-At most TWO reminders per person per push — at 3 days and 7 days after the
+At most TWO reminders per person per FOLDER — at 3 days and 7 days after the
 send, both measured from the push itself — and then it stays quiet for good.
 A third automated email was never going to be the thing that worked; past that
 point staff chase it themselves from the per-person status panel on the folder.
+
+Per folder rather than per push, which is not the same thing: a folder gets
+pushed again every time staff add to it, and each push used to bring its own
+nudge cycle. Re-pushing now supersedes the earlier notice (see
+ShareNotice.supersede_open_notices), so the cap is a statement about an inbox
+rather than about a row. Sends also pass the per-recipient ceiling in
+send_share_email, which can hold a due nudge over to the next run.
 
 Safe to run often; every decision is idempotent and throttled.
 
@@ -35,7 +42,7 @@ class Command(BaseCommand):
               .filter(first_opened_at__isnull=True, remind=True,
                       reminder_count__lt=ShareNotice.MAX_REMINDERS)
               .select_related('bucket', 'file', 'recipient'))
-        sent = 0
+        sent = held = 0
         for n in qs.iterator():
             if not n.due_for_reminder(now):
                 continue
@@ -51,10 +58,21 @@ class Command(BaseCommand):
                     f'{ShareNotice.MAX_REMINDERS})')
                 continue
             try:
-                file_notify.notify_share_reminder(n)
+                # Goes through send_share_email, which owns the per-recipient
+                # rate limit. A nudge that is due can still be held: the
+                # cadence asks whether this notice has waited long enough, the
+                # limit asks how much mail this person has already had today,
+                # and only the second one knows about their other folders.
+                reason = file_notify.send_share_email(n, reminder=True, now=now)
             except Exception as e:
                 # One bad address must not stop the sweep for everyone else.
                 self.stderr.write(f'reminder failed for {n.recipient.email}: {e}')
+                continue
+            if reason:
+                # Left as it was, so it stays due and is retried tomorrow
+                # rather than burning one of its two nudges on a send that
+                # never happened.
+                held += 1
                 continue
             n.reminder_count += 1
             n.last_reminder_at = now
@@ -66,4 +84,7 @@ class Command(BaseCommand):
             n.save(update_fields=['reminder_count', 'last_reminder_at', 'updated_at'])
             sent += 1
         if not opts['dry_run']:
-            self.stdout.write(self.style.SUCCESS(f'Sent {sent} share reminder(s).'))
+            msg = f'Sent {sent} share reminder(s).'
+            if held:
+                msg += f' Held {held} to stay under the per-recipient daily limit.'
+            self.stdout.write(self.style.SUCCESS(msg))
