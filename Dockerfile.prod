@@ -1,0 +1,72 @@
+# Production-parity image: the app built and served the way Dokku serves it.
+#
+# Dokku builds with the Node + Python buildpacks declared in app.json, which do
+# three things in order that local dev never does — build the Vue bundle, install
+# the Python deps, and run collectstatic so WhiteNoise has a hashed manifest to
+# serve. This file reproduces that sequence so a `docker compose -f
+# docker-compose.prod.yml up` exercises the same code path a deploy will.
+#
+# Named Dockerfile.prod, NOT Dockerfile, for the same reason Dockerfile.dev is:
+# Dokku's builder auto-detection treats a root `Dockerfile` as the build
+# strategy and would deploy this image in place of the buildpack chain. Keep
+# the name as it is.
+#
+# This is a close approximation, not the real builder. It uses the same Python
+# (3.12, matching runtime.txt) and the same Node major and runs the same
+# commands, but the buildpacks themselves are not run — so it will catch a
+# broken bundle, a missing static reference or a DEBUG=False failure, and it
+# will not catch a buildpack-specific problem. Staging remains the only true
+# parity.
+
+# ── Stage 1: the Vue bundle, exactly as heroku-postbuild builds it ──────────
+FROM node:22-slim AS frontend
+WORKDIR /app/frontend
+# Lockfile first so the install layer caches independently of source edits.
+COPY frontend/package.json frontend/package-lock.json ./
+# `npm ci --include=dev`, matching package.json's heroku-postbuild: vite and
+# the plugins are devDependencies, so a production-only install cannot build.
+RUN npm ci --include=dev
+COPY frontend/ ./
+RUN npm run build
+
+# ── Stage 2: the Python runtime ─────────────────────────────────────────────
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# git: the trinity-atlassian-cli dependency installs from a git+https URL.
+# libpq5: psycopg2-binary's runtime shared library.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+# The built bundle lands where settings.py looks for it: STATICFILES_DIRS picks
+# up frontend/dist, and urls.py's spa_index serves frontend/dist/index.html.
+COPY --from=frontend /app/frontend/dist ./frontend/dist
+
+# collectstatic at BUILD time, as the buildpack does. This is the step most
+# worth having: CompressedManifestStaticFilesStorage hashes every asset and
+# RAISES on a reference it cannot resolve, so a broken static path fails the
+# build here instead of 500ing on a page in production.
+#
+# The values below exist only to satisfy settings.py during the build — DEBUG
+# off refuses to boot without a SECRET_KEY, by design. Nothing signed with this
+# key is ever kept: the runtime key comes from the environment.
+RUN DEBUG=False \
+    SECRET_KEY=collectstatic-build-only-never-used-at-runtime \
+    DATABASE_URL=postgres://unused:unused@localhost:5432/unused \
+    python manage.py collectstatic --noinput --clear
+
+EXPOSE 8001
+
+# The Procfile's web line, verbatim, plus an explicit bind. Dokku injects PORT;
+# honouring it here keeps the two commands the same shape.
+CMD ["sh", "-c", "gunicorn citemed.asgi:application -k uvicorn.workers.UvicornWorker --workers 2 --timeout 120 --log-file - --access-logfile - --bind 0.0.0.0:${PORT:-8001}"]

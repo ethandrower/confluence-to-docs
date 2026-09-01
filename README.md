@@ -193,6 +193,49 @@ cross-worker WebSocket broadcasts behave as they do on Dokku. Postgres is
 published on host port `5433` and Redis on `6380` so they don't collide with
 anything already running locally.
 
+### Run it the way production runs it (before a deploy)
+
+`docker-compose.yml` is for iterating: runserver, `DEBUG=True`, the Vite dev
+server, instant reload. It is a different **shape** of application from the one
+Dokku runs, so passing locally has never meant much about a deploy.
+`docker-compose.prod.yml` closes most of that gap.
+
+```bash
+docker compose -f docker-compose.prod.yml up --build   # http://localhost:8090
+```
+
+Its own project name, ports and volumes, so it runs alongside the dev stack.
+What it exercises that dev cannot:
+
+- **The real build.** `vite build`, then collectstatic through
+  `CompressedManifestStaticFilesStorage`, at image-build time exactly as the
+  buildpack does. That storage **raises** on a static reference it can't
+  resolve, so a broken asset path fails the build instead of 500ing a page in
+  production.
+- **One origin.** WhiteNoise serves the hashed assets and Django serves the SPA
+  shell itself. Dev's two origins (Vite + proxied API) are why
+  `CSRF_TRUSTED_ORIGINS` needs a `DEBUG`-only block; none of that applies here.
+- **`DEBUG=False`.** Secure cookies, SSL redirect, security headers, real error
+  pages, and the `SECRET_KEY` requirement that refuses to boot without one.
+- **The real web command.** gunicorn with two uvicorn workers and the 120s
+  timeout from the Procfile, not single-process autoreload.
+- **An nginx hop**, as Dokku has, so `SECURE_PROXY_SSL_HEADER` and the
+  WebSocket upgrade path are actually exercised. It sets `X-Forwarded-Proto:
+  https`, which is what stops `SECURE_SSL_REDIRECT` from bouncing every request
+  to a TLS port that isn't there.
+- **A release phase.** `migrate` runs as its own one-shot service that `web`
+  waits on, so a bad migration fails visibly the way it aborts a deploy.
+
+`SECURE_HSTS_SECONDS` is set to `0` here and **only** here. HSTS is remembered
+by the browser per host, so a real header served from `localhost` would force
+https on every other app you run there, for a month, with no obvious cause.
+
+What this still does **not** prove: the buildpacks themselves, Mailgun
+delivery, CloudFront, real S3 bucket policy and CORS, and the six cron entries
+in `app.json` — none of which run locally. A staging app on the Dokku host is
+the only true parity; this is the fast check that catches the common
+breakages first.
+
 ### Keeping docs in sync
 
 **Manual:** `python manage.py sync_confluence` (full) or `--incremental` (changed pages only).

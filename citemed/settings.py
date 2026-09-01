@@ -87,7 +87,13 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
-    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30  # 30 days
+    # 30 days, and overridable ONLY so the production-parity stack can run on
+    # http://localhost (docker-compose.prod.yml sets 0). HSTS is remembered by
+    # the browser per host, so a real header served from `localhost` would
+    # force https on every other app you run there — for a month, with no
+    # obvious cause. Nothing but that local profile should ever set this;
+    # deployments get the default by saying nothing.
+    SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=60 * 60 * 24 * 30)
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
