@@ -72,19 +72,18 @@
         <template v-if="selectedCompany">
           <div class="fd-head">
             <h3>{{ selectedCompany.name }}</h3>
+            <!-- Refresh and New request live in the toolbar above and are not
+                 repeated here: both called the same handlers (openRequest fills
+                 company_id from selectedCompanyId either way), so a second copy
+                 was pure duplication — and it put two navy buttons on screen for
+                 the least important action while the push controls read as
+                 captions. Download all stays because it is genuinely per-company
+                 and has nowhere else to be. -->
             <div class="fd-head-actions">
-              <button class="refresh-btn" :class="refreshing && 'is-spinning'" :disabled="refreshing" title="Refresh this company" aria-label="Refresh" @click="refresh">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>
-                {{ refreshing ? 'Refreshing…' : 'Refresh' }}
-              </button>
               <a v-if="companyFileCount" class="btn-outline" :href="`/api/admin/files/companies/${selectedCompanyId}/download-all`">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Download all
               </a>
-              <button class="btn-primary" @click="openRequest()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                New request
-              </button>
             </div>
           </div>
           <!-- 1. WHAT THIS CLIENT STILL OWES US.
@@ -149,7 +148,16 @@
           <section class="fd-shared">
             <div class="fd-shared-head">
               <h4 class="fd-section-title">Shared with this client</h4>
-              <button class="btn-ghost sm" @click="openShareFolder">+ New shared folder</button>
+              <!-- Outline, not ghost, and beside the heading rather than shoved
+                   to the far edge: this is the entry point to the whole push
+                   feature, and as muted text floating opposite the title it
+                   read as a caption. Nothing else on the screen creates a
+                   shared folder, so if this is missed there is no way in.
+                   Hidden while the section is empty, because the empty state
+                   below carries the same button as its call to action and two
+                   of them a few centimetres apart is the duplication this
+                   screen already had too much of. -->
+              <button v-if="sharedTree.length" class="btn-outline sm" @click="openShareFolder">+ New shared folder</button>
             </div>
 
             <div v-if="sharedTree.length" class="fd-browser">
@@ -244,9 +252,15 @@
                 <p v-else class="bucket-empty">Pick a shared folder.</p>
               </div>
             </div>
-            <p v-else class="fd-tree-empty">
-              Nothing shared with this client yet. Make a folder to send them files or links they can always get back to.
-            </p>
+            <!-- The empty state tells you to make a folder, so it carries the
+                 button that makes one. Prose describing an action whose control
+                 is elsewhere on the page is how this section got missed. -->
+            <div v-else class="fd-shared-empty">
+              <p class="fd-tree-empty">
+                Nothing shared with this client yet. Make a folder to send them files or links they can always get back to.
+              </p>
+              <button class="btn-primary sm" @click="openShareFolder">+ New shared folder</button>
+            </div>
           </section>
 
           <!-- 3. THE CLIENT'S OWN FILING, exactly as they see it. -->
@@ -1347,9 +1361,13 @@ tbody tr:hover td { background: var(--accent); }
 /* ── Push: shared-with-client section ─────────────────────────────────── */
 .fd-shared { margin-bottom: 26px; }
 .fd-shared-head {
-  display: flex; align-items: center; justify-content: space-between;
+  /* Packed left, not space-between: the create button belongs next to the
+     heading it acts on, not at the opposite edge of a wide panel. */
+  display: flex; align-items: center;
   gap: 12px; margin-bottom: 10px;
 }
+.btn-outline.sm { font-size: 0.76rem; padding: 4px 11px; font-weight: 600; }
+.fd-shared-empty { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .fd-shared-head .fd-section-title { margin: 0; }
 .fd-shared-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .btn-primary.sm { font-size: 0.76rem; padding: 4px 11px; }
