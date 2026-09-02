@@ -1,0 +1,392 @@
+# Support-portal QA suite, as executed against a real deployment.
+#
+# Every case here was walked by hand before it was written down — on the
+# production-parity stack (docker-compose.prod.yml) and on staging
+# (https://support.qa.citemed.com). Nothing is aspirational: where the portal
+# does not behave the way it should, the case records what it ACTUALLY does and
+# is tagged `known-defect`, so a run that "passes" is telling the truth rather
+# than hiding the gap.
+#
+# Push to Qase with:  python qa/qase/push_to_qase.py
+# See qa/README.md for the token and project code.
+
+project:
+  title: CiteMed Support Portal
+  code: CSP
+  description: >-
+    Customer support portal — magic-link access, customer file exchange,
+    staff file push, and row-level tenancy. Deployed as dokku citemed-docs.
+
+suites:
+  - title: Access and onboarding
+    description: >-
+      How a customer comes to exist and how they get in. There are no
+      passwords anywhere in this product: access is an allowlisted email
+      address plus a single-use link.
+    cases:
+      - title: Staff creates a customer against a company
+        priority: high
+        severity: critical
+        preconditions: Signed in as an owner or admin. At least one company exists.
+        steps:
+          - action: Open Manage → Users and press "+ Add user".
+            expected: The dialog offers email, name, role, company and an "Access enabled" checkbox.
+          - action: Enter a new address, pick role Customer, pick a company, save.
+            expected: 201. The row appears in the table with the right role and company.
+          - action: Re-open the dialog and save the same address again.
+            expected: 409 and the message "A user with that email already exists".
+
+      - title: Creating a customer sends them nothing
+        priority: high
+        severity: major
+        tags: [known-defect, onboarding]
+        description: >-
+          Recorded as it behaves today. There is no invite email anywhere in
+          the codebase — POST /api/admin/users/ writes the row and returns.
+          The customer is never told the account exists, so onboarding depends
+          on someone telling them out of band.
+        preconditions: Signed in as an owner. Mail backend set to console so sends are observable.
+        steps:
+          - action: Create a customer, then read the application log.
+            expected: "POST /api/admin/users/ 201 and NOT ONE mail line. Desired behaviour: an invite carrying a sign-in link."
+
+      - title: Customer created with no company reaches a dead end
+        priority: high
+        severity: major
+        tags: [known-defect, onboarding]
+        description: >-
+          The company dropdown defaults to "— None —", so this is what happens
+          when a staff member forgets to set it.
+        preconditions: A customer exists whose company is unset.
+        steps:
+          - action: Sign in as that customer and open Share Files.
+            expected: "The page renders empty: no upload area, no request, and no explanation of why."
+          - action: Press "New folder", type a name and press Create.
+            expected: "Only now does 'No company is associated with your account.' appear. Desired: say so on arrival, or refuse to create such a user."
+
+      - title: Customer requests their own sign-in link and gets in
+        priority: high
+        severity: blocker
+        preconditions: An enabled customer exists. Mail backend observable.
+        steps:
+          - action: Sign out, open /files, and note the redirect.
+            expected: Redirected to /login?redirect=/files.
+          - action: Enter the customer's address and press "Send login link".
+            expected: '"Check your email" panel, stating 60 minutes and single use.'
+          - action: Open the emailed link and press "Sign in".
+            expected: Signed in and landed on /files — the redirect target is honoured, not dropped.
+
+      - title: A sign-in link works exactly once
+        priority: high
+        severity: critical
+        steps:
+          - action: Redeem a link, sign out, then open the same link again.
+            expected: Refused. No session is created.
+
+      - title: Sign-in is a POST so the token stays out of access logs
+        priority: medium
+        severity: major
+        description: The verify page requires a deliberate button press; the SPA posts the token from the body.
+        steps:
+          - action: Open a sign-in link and inspect the network panel without pressing the button.
+            expected: No credential-bearing request has fired. An email scanner prefetching the URL cannot spend the token.
+          - action: Press "Sign in" and inspect the request.
+            expected: POST /api/auth/verify/ with the token in the body, not the query string.
+
+      - title: Redeeming a link while signed in as someone else switches account
+        priority: medium
+        severity: normal
+        steps:
+          - action: Sign in as customer A, then open a valid link for customer B and press "Sign in".
+            expected: The session becomes customer B. No stale mixture of the two.
+
+      - title: An unknown address does not reveal whether an account exists
+        priority: high
+        severity: critical
+        tags: [security]
+        steps:
+          - action: Request a login link for an address that is not a portal user.
+            expected: The same "Check your email" panel as for a real user, and no account is created.
+
+      - title: A disabled account cannot sign in
+        priority: high
+        severity: critical
+        tags: [security]
+        steps:
+          - action: Turn a customer's Access toggle off, then request and open a link for them.
+            expected: Sign-in is refused.
+
+  - title: Customer file upload and management
+    description: >-
+      The half the customer touches. Uploads are presigned PUTs straight to
+      object storage — the bytes never pass through Django — so "it appeared in
+      the list" is not sufficient evidence; the download must return them.
+    cases:
+      - title: Upload files to an open document request
+        priority: high
+        severity: blocker
+        preconditions: Signed in as a customer whose company has an open request.
+        steps:
+          - action: Drop three files of different types onto the request's dropzone.
+            expected: Each shows in the list with its true size and type badge.
+          - action: Watch the request's status chip.
+            expected: It moves from "Awaiting your upload" to "Sent to CiteMed".
+          - action: Confirm each file server-side.
+            expected: "state=ready, and the storage key is under fileshare/companies/<company id>/ — never a shared or global prefix."
+
+      - title: Uploaded bytes come back byte-for-byte
+        priority: high
+        severity: blocker
+        description: Guards the whole presign path — credentials, endpoint, signature version, and key.
+        steps:
+          - action: Upload a file of known size, then press Download.
+            expected: 302 to the object store, then 200 with exactly the uploaded byte count and the right content type.
+          - action: Check the filename offered to the browser.
+            expected: The original filename, via response-content-disposition — not the storage key.
+
+      - title: A disallowed file type is refused
+        priority: high
+        severity: critical
+        tags: [security]
+        steps:
+          - action: Choose a .exe alongside allowed files.
+            expected: '"Skipped 1 unsupported file — <name>" and no upload-init request for it. The allowed files still upload.'
+          - action: Call POST /api/files/upload-init directly with a .exe name.
+            expected: 400 "File type not allowed." The client-side skip is convenience; the server is the control.
+
+      - title: Create a folder and upload into it
+        priority: high
+        severity: major
+        steps:
+          - action: Press "New folder", name it, and create.
+            expected: It appears under "Your files" and is selected.
+          - action: Upload a file while it is selected.
+            expected: The file lands in that folder, and the folder shows a count of 1.
+
+      - title: Rename a file
+        priority: medium
+        severity: normal
+        steps:
+          - action: Press the rename (pencil) control on a file.
+            expected: The name becomes an inline field with the current name preselected.
+          - action: Type a new name and press Enter.
+            expected: The list shows the new name; size and date are unchanged.
+
+      - title: Delete is a soft delete and hides the file from staff too
+        priority: high
+        severity: major
+        description: >-
+          The dialog promises "CiteMed staff will no longer have access to it",
+          so the staff view is part of this case, not a separate one. The row
+          and the object are removed later by purge_deleted_files --days 90.
+        steps:
+          - action: Press delete on a file.
+            expected: An in-app confirmation appears — not a browser dialog.
+          - action: Confirm.
+            expected: The file leaves the customer's list.
+          - action: Open Manage → Files for that company as staff.
+            expected: The file is gone from the staff view as well.
+          - action: Inspect the row server-side.
+            expected: It still exists with deleted_at set — recoverable, and reaped on the 90-day cron.
+
+      - title: Only inline-safe types offer a preview
+        priority: medium
+        severity: normal
+        tags: [security]
+        description: Content type is derived from the validated extension, never the client-supplied MIME.
+        steps:
+          - action: Compare the controls on a PDF and on a .csv or .txt.
+            expected: The PDF offers Preview; the others offer Download only.
+
+      - title: Uploads are rate limited
+        priority: low
+        severity: minor
+        steps:
+          - action: Exceed FILESHARE_UPLOAD_RATE upload-init calls within an hour.
+            expected: 429 carrying Retry-After and a retry_after body field, so the uploader waits rather than guessing.
+
+      - title: A file over the size limit is refused
+        priority: medium
+        severity: major
+        steps:
+          - action: Attempt a file larger than FILESHARE_MAX_BYTES.
+            expected: Refused with "File exceeds the size limit." before any bytes are sent.
+
+  - title: Staff file operations
+    description: The CiteMed side — asking for documents, sending deliverables back, and knowing whether they were read.
+    cases:
+      - title: Create a document request and notify the company
+        priority: high
+        severity: critical
+        steps:
+          - action: Manage → Files → New request. Pick a client, add a title and description, create.
+            expected: 201, and it appears under "Needed from this client".
+          - action: Read the log.
+            expected: '"CiteMed needs documents from you" is sent to EVERY enabled user at that company, not just one.'
+          - action: Open the email body.
+            expected: "Recorded as-is: the CTA is a bare /files link with no sign-in token, so a first-time recipient meets the login wall."
+
+      - title: Required requests are separated from nice-to-haves
+        priority: medium
+        severity: normal
+        steps:
+          - action: Create one request with Required ticked and one without.
+            expected: The customer sees the first under "Needed from you" and the second under "Nice to have".
+
+      - title: Staff upload into a shared folder
+        priority: high
+        severity: critical
+        steps:
+          - action: Create a shared folder for a client and upload two files into it.
+            expected: Both are listed against the folder, attributed to the staff member who sent them.
+
+      - title: Push a shared folder to chosen recipients
+        priority: high
+        severity: critical
+        steps:
+          - action: Press "Notify…" on a shared folder.
+            expected: Only people with portal access at that client are offered, each individually selectable.
+          - action: Send with the reminder option left on.
+            expected: '"CiteMed shared <folder> with you" is sent, and the panel shows "sent … not opened · reminder armed".'
+
+      - title: Delivery tracking reflects what the recipient did
+        priority: medium
+        severity: major
+        steps:
+          - action: Read the "Who's been told" panel before the customer opens anything.
+            expected: Reads "0 of N opened", with each recipient marked not opened.
+          - action: Have the recipient open the shared folder, then re-read the panel.
+            expected: That recipient flips to opened and their reminder disarms.
+
+      - title: Customers cannot upload into a folder CiteMed shared with them
+        priority: high
+        severity: critical
+        tags: [security]
+        steps:
+          - action: As a customer, attempt an upload into a staff-origin folder.
+            expected: 403 "You can't upload into a folder shared by CiteMed."
+
+      - title: Download all of a client's files as one archive
+        priority: low
+        severity: normal
+        steps:
+          - action: Press "Download all" on a client with several files.
+            expected: An archive containing them, and it does not block the request thread for a large client.
+
+  - title: Tenancy and access control
+    description: >-
+      The property that matters most in a portal where every customer is a
+      different medical-device company. Row-level tenancy via Company plus an
+      FK on PortalUser is the only thing between them.
+    cases:
+      - title: A customer cannot reach another company's files
+        priority: high
+        severity: blocker
+        tags: [security, tenancy]
+        preconditions: Two companies, each with a customer; company A has uploaded files with known ids.
+        steps:
+          - action: Signed in as company B, request /api/files/<id>/download for each of company A's ids.
+            expected: 404 for every one — not 403, so the response does not confirm the row exists.
+          - action: Request /api/files/<id>/view for the same ids.
+            expected: 404.
+          - action: Fetch /api/files/buckets/.
+            expected: Only company B's own buckets. No file, folder or request belonging to A appears.
+
+      - title: Anonymous callers are refused every data surface
+        priority: high
+        severity: blocker
+        tags: [security]
+        steps:
+          - action: Signed out, call the files, tickets and admin endpoints.
+            expected: Every one refuses. None returns customer data.
+
+      - title: A customer cannot reach the admin API
+        priority: high
+        severity: blocker
+        tags: [security]
+        steps:
+          - action: Signed in as a customer, call /api/admin/users/ and /api/admin/files/companies/.
+            expected: Refused. The Manage UI is likewise absent from their navigation.
+
+      - title: Only an owner can grant or modify the Owner role
+        priority: medium
+        severity: critical
+        tags: [security]
+        steps:
+          - action: As an admin (not owner), try to create a user with role Owner.
+            expected: 403 "Only an owner can grant the Owner role".
+          - action: As an admin, try to edit an existing owner account.
+            expected: 403 "Only an owner can modify an owner account".
+
+      - title: You cannot lock yourself out
+        priority: low
+        severity: normal
+        steps:
+          - action: Try to disable your own access, then to delete your own account.
+            expected: 400 in both cases, with a message naming the reason.
+
+  - title: Notifications
+    description: >-
+      Mail is best-effort by design — a send failure must never roll back an
+      upload. The cost of that choice is that failures are quiet, which is
+      what the last case pins down.
+    cases:
+      - title: Staff are told when a customer uploads
+        priority: medium
+        severity: major
+        steps:
+          - action: Upload one file as a customer and read the log.
+            expected: '"New upload from <company>" reaches the staff recipients, naming the file and the request.'
+
+      - title: A multi-file drop sends one email per file
+        priority: low
+        severity: minor
+        tags: [known-defect, noise]
+        description: Recorded as it behaves. A three-file drop produced three staff emails; twenty files would produce twenty.
+        steps:
+          - action: Drop three files at once and count the sends.
+            expected: "Three separate emails today. Desired: one digest per drop."
+
+      - title: A failing mail provider is invisible to the user
+        priority: high
+        severity: major
+        tags: [known-defect, observability]
+        description: >-
+          Reproduced on staging with an invalid Mailgun key: the provider
+          returned 401 and the portal still reported success. request_magic_link
+          catches every exception and always answers "Magic link sent if email
+          exists", which is right for account enumeration but means a wholly
+          broken mail configuration looks healthy from the outside.
+        steps:
+          - action: Point MAILGUN_ACCESS_KEY at an invalid value and request a sign-in link.
+            expected: '"Check your email" is shown and the log records "Mailgun API response 401". Nothing surfaces to the user or to /healthz/.'
+          - action: Create a document request with the same broken key.
+            expected: The request is created and the UI reports success; only the log shows file_notify failed.
+
+  - title: Deployment and configuration
+    description: Things that only break once the app is built and served the way production serves it.
+    cases:
+      - title: The portal answers healthy on a real deployment
+        priority: high
+        severity: blocker
+        steps:
+          - action: GET /healthz/ on the target environment.
+            expected: 'status ok with database, redis and migrations each ok. This is the check dokku gates the release on.'
+
+      - title: Every static asset the SPA references resolves
+        priority: high
+        severity: blocker
+        description: >-
+          Production uses CompressedManifestStaticFilesStorage, which 500s on a
+          reference collectstatic did not resolve. Neither the Django test suite
+          nor the frontend build covers this; `manage.py smoke` does.
+        steps:
+          - action: Run `python manage.py smoke --url <deployment>`.
+            expected: All nine checks pass, including every asset the shell references returning 200.
+
+      - title: Scheduled jobs are installed on the host
+        priority: medium
+        severity: major
+        steps:
+          - action: Run `dokku cron:list <app>`.
+            expected: Every entry in app.json is present — including purge_stale_uploads and purge_deleted_files, without which orphaned multipart parts are billed forever and soft-deleted files are never reaped.

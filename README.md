@@ -287,6 +287,13 @@ Run it from the `release` service rather than `web`: `compose run web` starts a
 second container answering to the same `web` DNS name, and Docker round-robins
 between them, so results become nondeterministic.
 
+What the smoke test deliberately leaves alone is everything needing a person's
+judgement — the shape of the upload UI, what a customer actually receives, and
+whether a dead end explains itself. That half lives in **[`qa/`](qa/README.md)**
+as 36 Qase cases, each one walked by hand against a real deployment before it
+was written down. Four of them record a defect rather than the desired
+behaviour, so a green run stays honest about the gaps.
+
 ### Staging
 
 **https://support.qa.citemed.com** — Dokku app `citemed-docs-staging` on
@@ -310,32 +317,47 @@ approximates but cannot prove. Service versions match production
 (postgres 18, redis 8); note this is **not** what CI runs, which is still
 Postgres 16.
 
-Two things are deliberately **not** configured, and both are visible in
-`dokku config`:
+**Confluence** (`CONFLUENCE_*`, `ATLASSIAN_CLOUD_ID`) is set to literal
+`not-configured` placeholders, so doc sync is idle. `app.json` declares these
+without defaults, which makes Dokku refuse to release until *something* is set
+— placeholders are how a new environment gets past that honestly.
 
-- **Confluence** (`CONFLUENCE_*`, `ATLASSIAN_CLOUD_ID`) is set to literal
-  `not-configured` placeholders, so doc sync is idle. `app.json` declares these
-  without defaults, which makes Dokku refuse to release until *something* is
-  set — placeholders are how a new environment gets past that honestly.
-- **Mailgun** is a placeholder too, so staging sends no mail. Note the shape of
-  the trap: `settings.py` selects the Mailgun backend whenever
-  `MAILGUN_ACCESS_KEY` is non-empty, so a placeholder means send attempts fail
-  against Mailgun rather than falling back to the console.
+**Mail goes to the application log.** `MAILGUN_ACCESS_KEY` is set to the empty
+string and `EMAIL_BACKEND` to the console backend, so every message the portal
+sends — magic links included — is readable with `dokku logs
+citemed-docs-staging`. That is what makes the notification and onboarding test
+cases runnable here at all.
 
-**Object storage is the one piece left**, and it needs a decision rather than a
-command: file *uploads* need an S3 bucket, and staging must have **its own** —
-never `citemed-fileshare`, which holds real customer files. Once a staging
-bucket and a key scoped to it exist:
+Two traps are worth knowing, because both cost an hour to find:
 
-```bash
-dokku config:set citemed-docs-staging \
-    AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... \
-    AWS_S3_REGION_NAME=us-east-1 \
-    FILESHARE_BUCKET=citemed-fileshare-staging
-```
+- A **placeholder** Mailgun key is worse than an empty one. `settings.py`
+  selects the Mailgun backend whenever `MAILGUN_ACCESS_KEY` is non-empty, so
+  `not-configured` means sends fail against Mailgun (401) rather than falling
+  back to the console — and `request_magic_link` swallows the exception, so the
+  UI still says "Check your email".
+- `dokku config:unset` is **not** enough to clear a var here. The buildpack
+  bakes config into the image, so an unset value is still present in the
+  container env until the app is rebuilt. Setting it to an explicit empty
+  string (`config:set KEY=`) overrides at container start and needs no rebuild.
 
-Everything else — sign-in, the file tree, tenancy, tickets, delivery tracking
-— works without it.
+**Object storage works** — staging inherits AWS credentials from the host's
+*global* Dokku config (the review-apps box sets them for the citemed_web review
+apps), so `FILESHARE_BUCKET` falls through to `citemed-staging` and uploads,
+presigned downloads and deletes all function. Verified end-to-end: a file
+uploaded through the browser came back byte-for-byte from
+`citemed-staging.s3.amazonaws.com`.
+
+Two consequences of inheriting rather than owning those credentials:
+
+- Staging shares a bucket with the citemed_web review apps. Objects are
+  namespaced under the `fileshare/` prefix so nothing collides, but a bucket of
+  its own would be cleaner — set `FILESHARE_BUCKET` to change it.
+- The credentials are **global to the host**, so every app on
+  `157.90.131.248` can read them, and `dokku run <app> env` prints the secret
+  key in the clear. Worth rotating to a key scoped to just this bucket.
+
+It has never pointed at `citemed-fileshare`, which holds real customer files,
+and it must not.
 
 ### Keeping docs in sync
 
