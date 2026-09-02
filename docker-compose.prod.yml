@@ -92,7 +92,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    env_file: .env
+    # Optional so this stack also comes up on a CI runner, which has no .env.
+    # Everything the stack actually needs is in the `environment` block below;
+    # .env only adds real credentials (Mailgun, Confluence) when you have them.
+    env_file:
+      - path: .env
+        required: false
     environment: &app_env
       DEBUG: "False"
       # A fixed throwaway key: DEBUG=False refuses to boot without one, and a
@@ -137,7 +142,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    env_file: .env
+    # Optional — see the note on `release`.
+    env_file:
+      - path: .env
+        required: false
     environment: *app_env
     # No source bind mount, deliberately: production runs the code that was
     # built into the image. Mounting the tree over it would put the dev

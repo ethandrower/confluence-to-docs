@@ -161,5 +161,57 @@ jobs:
         # The Node buildpack runs this during deploy, so a build broken here is
         # a deploy broken in production. Note it does NOT cover collectstatic
         # under manifest static storage, which DEPLOY.md flags as a release-time
-        # failure mode — that needs DEBUG=False and a built dist in one job.
+        # failure mode — the `smoke` job below is what covers that.
         run: npm run build
+
+  smoke:
+    name: Production-parity smoke test
+    runs-on: ubuntu-latest
+    # Builds a Vue bundle and a Python image from scratch, so it is the slowest
+    # job here by a wide margin. Still bounded well under the 360-minute
+    # default, for the same reason the others are.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the production-parity stack
+        # This is the step the other two jobs cannot do. `backend` runs Django
+        # with DEBUG=True and no bundle; `frontend` builds the bundle but never
+        # collects it. Only here do the two meet: vite build, then collectstatic
+        # through CompressedManifestStaticFilesStorage at image-build time,
+        # then gunicorn behind nginx with DEBUG=False — the shape Dokku runs.
+        run: docker compose -f docker-compose.prod.yml up -d --build
+
+      - name: Wait for the app to answer
+        # `depends_on: service_completed_successfully` gets migrations done
+        # before web starts, but gunicorn still needs a moment to bind. Poll
+        # the endpoint Dokku's own zero-downtime check polls.
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8090/healthz/ >/dev/null 2>&1; then
+              echo "healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "app never became healthy"; exit 1
+
+      - name: Walk the customer journey
+        # From `release`, not `web`: `compose run web` starts a second container
+        # answering to the same `web` DNS name and Docker round-robins between
+        # them, which makes results nondeterministic.
+        #
+        # --insecure is for the stack's own self-signed cert. TLS is not
+        # decoration here: with DEBUG=False Django sets SESSION_COOKIE_SECURE,
+        # and an ordinary HTTP client will not send a Secure cookie back over
+        # plain http, so sign-in would fail for a reason that has nothing to do
+        # with the code under test.
+        run: |
+          docker compose -f docker-compose.prod.yml run --rm --no-deps release \
+            python manage.py smoke --url https://proxy --insecure
+
+      - name: Container logs
+        # The smoke test reports which check failed; this says why. Without it
+        # a red run means re-running the whole thing locally to find out.
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs --tail=200
