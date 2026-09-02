@@ -287,6 +287,56 @@ Run it from the `release` service rather than `web`: `compose run web` starts a
 second container answering to the same `web` DNS name, and Docker round-robins
 between them, so results become nondeterministic.
 
+### Staging
+
+**https://support.qa.citemed.com** — Dokku app `citemed-docs-staging` on
+`157.90.131.248`, the review-apps host. Deliberately **not** on
+`116.203.82.103`, which runs production: a staging environment sharing a box
+with the thing it is meant to protect can take that thing down with it.
+
+```bash
+git remote add dokku-staging dokku@157.90.131.248:citemed-docs-staging
+git push dokku-staging <your-branch>:main        # deploy any branch
+
+dokku run citemed-docs-staging python manage.py smoke \
+    --url https://support.qa.citemed.com          # verify it
+dokku run citemed-docs-staging python manage.py magic_link \
+    --email edrower@citemed.com                   # get in
+```
+
+It runs the real buildpack chain, its own Postgres and Redis, letsencrypt TLS,
+and all eight `app.json` cron entries — the pieces `docker-compose.prod.yml`
+approximates but cannot prove. Service versions match production
+(postgres 18, redis 8); note this is **not** what CI runs, which is still
+Postgres 16.
+
+Two things are deliberately **not** configured, and both are visible in
+`dokku config`:
+
+- **Confluence** (`CONFLUENCE_*`, `ATLASSIAN_CLOUD_ID`) is set to literal
+  `not-configured` placeholders, so doc sync is idle. `app.json` declares these
+  without defaults, which makes Dokku refuse to release until *something* is
+  set — placeholders are how a new environment gets past that honestly.
+- **Mailgun** is a placeholder too, so staging sends no mail. Note the shape of
+  the trap: `settings.py` selects the Mailgun backend whenever
+  `MAILGUN_ACCESS_KEY` is non-empty, so a placeholder means send attempts fail
+  against Mailgun rather than falling back to the console.
+
+**Object storage is the one piece left**, and it needs a decision rather than a
+command: file *uploads* need an S3 bucket, and staging must have **its own** —
+never `citemed-fileshare`, which holds real customer files. Once a staging
+bucket and a key scoped to it exist:
+
+```bash
+dokku config:set citemed-docs-staging \
+    AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... \
+    AWS_S3_REGION_NAME=us-east-1 \
+    FILESHARE_BUCKET=citemed-fileshare-staging
+```
+
+Everything else — sign-in, the file tree, tenancy, tickets, delivery tracking
+— works without it.
+
 ### Keeping docs in sync
 
 **Manual:** `python manage.py sync_confluence` (full) or `--incremental` (changed pages only).
