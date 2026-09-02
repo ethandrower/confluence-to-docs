@@ -236,6 +236,57 @@ in `app.json` — none of which run locally. A staging app on the Dokku host is
 the only true parity; this is the fast check that catches the common
 breakages first.
 
+### Smoke test — is the portal actually working for clients?
+
+The suites in `portal/tests/` drive Django's test client against a fresh
+database in-process. That is the right shape for logic and it is blind by
+construction to release breakage, because the test client never builds a
+bundle, never resolves a static asset, never terminates TLS and never reads
+the environment the container was started with. `manage.py smoke` is the
+complement: it walks a customer's journey against a **running** server, over
+real HTTP.
+
+```bash
+# before a deploy, against the parity stack
+docker compose -f docker-compose.prod.yml run --rm --no-deps release \
+    python manage.py smoke --url https://proxy --insecure
+
+# after a deploy, against production
+dokku run citemed-docs python manage.py smoke \
+    --url https://support.citemed.com --as edrower@citemed.com
+```
+
+Nine checks, in this order: health endpoint, SPA shell, **every static asset
+the shell references**, the API refusing anonymous callers, magic-link
+sign-in, session identity, the file tree (including the tenancy boundary as
+seen from outside), the ticket list, and sign-out.
+
+The static-asset check is the one that earns its keep. Under manifest static
+storage a hashed filename that wasn't collected 404s at runtime while every
+unit test stays green — the page loads and renders nothing, which reads as
+"the app is broken" with no error anywhere.
+
+It runs **inside** the app, so it mints its own sign-in token rather than
+handling a password, but every assertion is an HTTP request to `--url`.
+
+**Safe against production.** It only reads. The one mutation is spending a
+magic-link token for an account that already exists, which is what signing in
+does anyway; it creates no company, folder or file and sends no email. Write
+flows belong on the parity stack, where the blast radius is a docker volume.
+
+Two flags earn an explanation. `--insecure` skips certificate verification and
+is for the parity stack's self-signed cert **only** — against production a
+cert error is a finding, not a nuisance. And the parity stack serves TLS on
+`https://localhost:8443` precisely so this can run: with `DEBUG=False` Django
+sets `SESSION_COOKIE_SECURE`, and while browsers treat `localhost` as a
+trustworthy origin and will store a `Secure` cookie over plain http, ordinary
+HTTP clients do not — so over `http://` the sign-in check fails with a 403
+that looks like a CSRF bug and isn't.
+
+Run it from the `release` service rather than `web`: `compose run web` starts a
+second container answering to the same `web` DNS name, and Docker round-robins
+between them, so results become nondeterministic.
+
 ### Keeping docs in sync
 
 **Manual:** `python manage.py sync_confluence` (full) or `--incremental` (changed pages only).

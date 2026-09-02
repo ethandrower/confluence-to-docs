@@ -101,12 +101,21 @@ services:
       SECRET_KEY: local-production-parity-only-do-not-use-anywhere-else
       DATABASE_URL: postgres://portal:portal@db:5432/portal
       REDIS_URL: redis://redis:6379/0
-      # 'web' is the Host nginx forwards under.
-      ALLOWED_HOSTS: localhost,127.0.0.1,web
+      # 'web' is the Host nginx forwards under. 'proxy' is how a sibling
+      # container reaches nginx by service name, which is how `manage.py smoke`
+      # runs against this stack — without it every request from inside the
+      # network is a bare 400 with no explanation, since ALLOWED_HOSTS
+      # rejection has no body.
+      ALLOWED_HOSTS: localhost,127.0.0.1,web,proxy
       # One origin here, unlike dev — the SPA is served by Django itself, so
       # this is the only address in play.
       FRONTEND_URL: http://localhost:8090
-      CSRF_TRUSTED_ORIGINS: http://localhost:8090,http://127.0.0.1:8090
+      # The proxy entries are there for the same reason as ALLOWED_HOSTS above:
+      # the smoke test's sign-in POST is a write, so it is CSRF-checked by
+      # Origin too, and a missing entry fails it at the last step of the
+      # journey. https://proxy is the one it actually uses; http://proxy keeps
+      # a plain-http run from failing for a second, unrelated reason.
+      CSRF_TRUSTED_ORIGINS: http://localhost:8090,http://127.0.0.1:8090,https://localhost:8443,http://proxy,https://proxy
       # See settings.py: HSTS is remembered per host, so a real header from
       # `localhost` would force https on every other app you run there. This
       # is the one place that override is meant to be used.
@@ -143,17 +152,43 @@ services:
       minio:
         condition: service_healthy
 
+  # A self-signed cert for the nginx TLS listener, generated once into a
+  # volume. Kept out of the repo on purpose: a committed private key is a
+  # finding in every scanner and an invitation to reuse it somewhere it
+  # matters, and regenerating this one costs a second.
+  certgen:
+    image: alpine:3.20
+    volumes:
+      - certs_prod:/certs
+    # One line on purpose. In a YAML folded block (`>`) a more-indented line
+    # keeps its newline instead of being folded, so a wrapped openssl
+    # invocation becomes several separate shell commands — which fails in the
+    # confusing shape `sh: -keyout: not found` while still printing success.
+    command:
+      - sh
+      - -c
+      - "apk add --no-cache openssl >/dev/null 2>&1 && if [ ! -f /certs/local.crt ]; then openssl req -x509 -nodes -newkey rsa:2048 -days 825 -keyout /certs/local.key -out /certs/local.crt -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,DNS:proxy,IP:127.0.0.1' >/dev/null 2>&1 && echo 'cert generated'; else echo 'cert already present'; fi"
+
   # Dokku puts nginx in front of every app; so does this. It is what makes
   # SECURE_PROXY_SSL_HEADER and the WebSocket upgrade path real here.
   proxy:
     image: nginx:alpine
     volumes:
       - ./deploy/local-prod-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certs_prod:/etc/nginx/certs:ro
     ports:
       - "8090:80"
+      # https://localhost:8443 — the same site over TLS. Your browser will warn
+      # about the self-signed cert; that is expected, and it is what lets the
+      # smoke test authenticate.
+      - "8443:443"
     depends_on:
-      - web
+      certgen:
+        condition: service_completed_successfully
+      web:
+        condition: service_started
 
 volumes:
   pgdata_prod:
   miniodata_prod:
+  certs_prod:
