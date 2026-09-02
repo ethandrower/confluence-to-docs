@@ -34,3 +34,21 @@ class CompanyCursorPagination(CursorPagination):
     page_size_query_param = 'limit'
     max_page_size = 500
     cursor_query_param = 'cursor'
+
+
+class ShareEventCursorPagination(CursorPagination):
+    """Same ascending contract as tickets, for the same reason.
+
+    It matters more here, because a share event's interesting moments nearly
+    all arrive AFTER the row is created: the push is the boring half, and the
+    open — days later — is the half a health dashboard is actually waiting for.
+    Ordering on `sent_at` would leave every one of those changes behind a
+    consumer's cursor, so `ShareNotice.updated_at` exists specifically to give
+    this ordering something that moves. See the comment on that field.
+    """
+
+    ordering = ('updated_at', 'pk')
+    page_size = 100
+    page_size_query_param = 'limit'
+    max_page_size = 500
+    cursor_query_param = 'cursor'

@@ -34,6 +34,16 @@ urlpatterns = [
     path('admin/files/<int:file_id>/comments', files_admin.file_comments, name='admin-files-comments'),
     path('admin/files/checklist/', files_admin.create_checklist_item, name='admin-files-checklist-create'),
     path('admin/files/checklist/<int:item_id>/', files_admin.checklist_item, name='admin-files-checklist-item'),
+    # Push side: staff-owned folders, staff uploads, links, notifications.
+    path('admin/files/folders/', files_admin.staff_folder_create, name='admin-files-folder-create'),
+    path('admin/files/folders/<int:folder_id>/', files_admin.staff_folder_detail, name='admin-files-folder'),
+    path('admin/files/upload-init', files_admin.staff_upload_init, name='admin-files-upload-init'),
+    path('admin/files/upload-complete', files_admin.staff_upload_complete, name='admin-files-upload-complete'),
+    path('admin/files/links/', files_admin.staff_link_create, name='admin-files-link-create'),
+    path('admin/files/items/<int:file_id>/', files_admin.staff_item_delete, name='admin-files-item-delete'),
+    path('admin/files/companies/<int:company_id>/members', files_admin.company_members, name='admin-files-members'),
+    path('admin/files/share/', files_admin.share_push, name='admin-files-share'),
+    path('admin/files/share/<int:bucket_id>/', files_admin.share_status, name='admin-files-share-status'),
     path('admin/files/<int:file_id>/download', files_admin.admin_file_download, name='admin-files-download'),
     path('admin/files/<int:file_id>/view', files_admin.admin_file_view, name='admin-files-view'),
 
@@ -50,6 +60,7 @@ urlpatterns = [
     path('files/<int:file_id>', files.file_detail, name='files-file'),
     path('files/<int:file_id>/download', files.file_download, name='files-download'),
     path('files/<int:file_id>/view', files.file_view, name='files-view'),
+    path('files/<int:file_id>/opened', files.file_opened, name='files-opened'),
 
     # Docs
     path('docs/', docs.page_tree, name='page-tree'),

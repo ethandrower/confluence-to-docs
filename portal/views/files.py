@@ -16,7 +16,7 @@ from django.views.decorators.http import require_http_methods
 
 from portal import file_storage
 from portal.decorators import require_portal_user
-from portal.models import Bucket, SharedFile, FileActivity
+from portal.models import Bucket, SharedFile, FileActivity, ShareNotice
 from portal.rate_limit import is_rate_limited
 from portal.serializers import BucketSerializer
 
@@ -80,16 +80,18 @@ def buckets_list(request):
 MAX_FOLDER_TITLE = 120
 
 
-def _resolve_parent(user, parent_id):
-    """Resolve a parent folder for the acting user, or explain why not.
+def _resolve_parent(scope, parent_id):
+    """Resolve a parent folder within `scope`, or explain why not.
 
-    Returns (parent_or_None, error_response_or_None). Everything goes through
-    Bucket.for_user, so a parent id belonging to another company is simply not
-    found — the move never sees it.
+    `scope` is a Bucket queryset already narrowed to exactly one company —
+    Bucket.for_user() on the customer side, Bucket.for_company() on the staff
+    side. Passing the queryset rather than the acting user is what lets both
+    sides share this logic without the staff path having to bypass the
+    isolation helpers: a parent id outside the scope is simply not found.
     """
     if parent_id in (None, '', 0):
         return None, None
-    parent = Bucket.for_user(user).filter(id=parent_id).first()
+    parent = scope.filter(id=parent_id).first()
     if not parent:
         return None, JsonResponse({'error': 'Folder not found.'}, status=404)
     if parent.kind != Bucket.KIND_FOLDER:
@@ -114,10 +116,17 @@ def _clean_title(raw):
     return title, None
 
 
-def _duplicate_sibling(user, title, parent, exclude_id=None):
-    """A second "Reports" beside the first is a usability trap, not a feature."""
-    qs = Bucket.for_user(user).filter(
-        kind=Bucket.KIND_FOLDER, parent=parent, title__iexact=title)
+def _duplicate_sibling(scope, title, parent, origin, exclude_id=None):
+    """A second "Reports" beside the first is a usability trap, not a feature.
+
+    Scoped by `origin` as well as by parent: at the top level the customer's
+    own folders and the ones we pushed them render as two separate sections,
+    so a customer "Reports" and a CiteMed "Reports" are not siblings on screen
+    and refusing the second one would be a puzzling error about a folder the
+    user may not even be able to see.
+    """
+    qs = scope.filter(
+        kind=Bucket.KIND_FOLDER, parent=parent, origin=origin, title__iexact=title)
     if exclude_id:
         qs = qs.exclude(id=exclude_id)
     return qs.exists()
@@ -133,18 +142,27 @@ def folder_create(request):
     title, err = _clean_title(data.get('title'))
     if err:
         return err
-    parent, err = _resolve_parent(user, data.get('parent_id'))
+    scope = Bucket.for_user(user)
+    parent, err = _resolve_parent(scope, data.get('parent_id'))
     if err:
         return err
+    # Customers extend their own tree only. Nesting a folder of theirs under
+    # something we pushed would make it undeletable by them (the parent is
+    # read-only) and blur a boundary the whole feature rests on.
+    if parent and parent.is_staff_origin:
+        return JsonResponse(
+            {'error': 'You can’t add folders inside a folder shared by CiteMed.'},
+            status=403)
     if parent and parent.level + 1 > Bucket.MAX_DEPTH:
         return JsonResponse(
             {'error': f'Folders can only be {Bucket.MAX_DEPTH} levels deep.'}, status=400)
-    if _duplicate_sibling(user, title, parent):
+    if _duplicate_sibling(scope, title, parent, Bucket.ORIGIN_CUSTOMER):
         return JsonResponse(
             {'error': 'A folder with that name is already here.'}, status=409)
     folder = Bucket.objects.create(
         company_id=user.company_id, kind=Bucket.KIND_FOLDER, title=title,
         parent=parent, created_by=user, status='general',
+        origin=Bucket.ORIGIN_CUSTOMER,
     )
     log_activity(user.company, 'folder_create', actor=user, bucket=folder,
                  title=title, parent_id=parent.id if parent else None)
@@ -175,7 +193,7 @@ def folders_ensure_path(request):
         return JsonResponse({'error': 'No company is associated with your account.'}, status=403)
 
     data = json.loads(request.body or '{}')
-    root, err = _resolve_parent(user, data.get('root_id'))
+    root, err = _resolve_parent(Bucket.for_user(user), data.get('root_id'))
     if err:
         return err
 
@@ -250,6 +268,14 @@ def folder_detail(request, folder_id):
     if folder.kind != Bucket.KIND_FOLDER:
         return JsonResponse(
             {'error': 'Only folders you created can be renamed or removed.'}, status=400)
+    # Folders we pushed are deliverables, not the customer's filing system.
+    # Without this a customer could rename or delete the thing we just sent
+    # them — and DELETE below only guards against losing files, not against
+    # losing something they were never meant to control.
+    if folder.is_staff_origin:
+        return JsonResponse(
+            {'error': 'This folder was shared with you by CiteMed and can’t be changed.'},
+            status=403)
 
     if request.method == 'DELETE':
         # Refuse rather than cascade. The FK is CASCADE so a company delete can
@@ -273,16 +299,21 @@ def folder_detail(request, folder_id):
         title, err = _clean_title(data.get('title'))
         if err:
             return err
-        if _duplicate_sibling(user, title, folder.parent, exclude_id=folder.id):
+        if _duplicate_sibling(Bucket.for_user(user), title, folder.parent,
+                              folder.origin, exclude_id=folder.id):
             return JsonResponse(
                 {'error': 'A folder with that name is already here.'}, status=409)
         folder.title = title
         fields.append('title')
 
     if 'parent_id' in data:
-        parent, err = _resolve_parent(user, data.get('parent_id'))
+        parent, err = _resolve_parent(Bucket.for_user(user), data.get('parent_id'))
         if err:
             return err
+        if parent and parent.is_staff_origin:
+            return JsonResponse(
+                {'error': 'You can’t move folders into a folder shared by CiteMed.'},
+                status=403)
         if parent:
             # Moving a folder into itself or its own descendant would detach
             # the subtree from the root entirely — it becomes unreachable and
@@ -294,7 +325,8 @@ def folder_detail(request, folder_id):
                 return JsonResponse(
                     {'error': f'That would nest deeper than {Bucket.MAX_DEPTH} levels.'},
                     status=400)
-        if _duplicate_sibling(user, folder.title, parent, exclude_id=folder.id):
+        if _duplicate_sibling(Bucket.for_user(user), folder.title, parent,
+                              folder.origin, exclude_id=folder.id):
             return JsonResponse(
                 {'error': 'A folder with that name is already there.'}, status=409)
         folder.parent = parent
@@ -326,12 +358,21 @@ def files_move(request):
     target = Bucket.for_user(user).filter(id=data.get('bucket_id')).first()
     if not target:
         return JsonResponse({'error': 'Destination folder not found.'}, status=404)
+    if target.is_staff_origin:
+        return JsonResponse(
+            {'error': 'You can’t move files into a folder shared by CiteMed.'}, status=403)
 
-    files = list(SharedFile.for_user(user).filter(id__in=ids))
+    files = list(SharedFile.for_user(user).select_related('bucket').filter(id__in=ids))
     if len(files) != len(set(ids)):
         # Partial matches mean at least one id was another tenant's or deleted.
         # Refuse the whole batch rather than half-moving a selection.
         return JsonResponse({'error': 'Some of those files could not be found.'}, status=404)
+    # Guard the source as well as the destination: moving a delivered document
+    # out of the folder we sent it in would let a customer dismantle the share
+    # one file at a time, which the destination check alone doesn't stop.
+    if any(f.bucket.is_staff_origin for f in files):
+        return JsonResponse(
+            {'error': 'Files shared by CiteMed can’t be moved.'}, status=403)
 
     for f in files:
         f.bucket = target
@@ -376,9 +417,13 @@ def upload_init(request):
 
     bucket_id = data.get('bucket_id')
     if bucket_id:
-        bucket = Bucket.objects.filter(id=bucket_id, company_id=user.company_id).first()
+        bucket = Bucket.for_user(user).filter(id=bucket_id).first()
         if not bucket:
             return JsonResponse({'error': 'Bucket not found.'}, status=404)
+        if bucket.is_staff_origin:
+            return JsonResponse(
+                {'error': 'You can’t upload into a folder shared by CiteMed.'},
+                status=403)
     else:
         bucket = get_general_bucket(user.company)
 
@@ -528,6 +573,10 @@ def file_detail(request, file_id):
     f = _own_file(request, file_id)
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
+    if f.bucket.is_staff_origin:
+        return JsonResponse(
+            {'error': 'This was shared with you by CiteMed and can’t be changed.'},
+            status=403)
     if request.method == 'DELETE':
         f.deleted_at = timezone.now()
         f.save(update_fields=['deleted_at'])
@@ -552,9 +601,15 @@ def file_download(request, file_id):
     f = _own_file(request, file_id)
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
+    if f.is_link:
+        # A link row has an empty storage_key; presigning it would hand back a
+        # signed URL to a key that doesn't exist. The client opens
+        # external_url directly and reports the open via files_opened.
+        return JsonResponse({'error': 'This is a link, not a file.'}, status=400)
     url = file_storage.presign_get(f.storage_key, download_name=f.original_name)
     log_activity(request.portal_user.company, 'download', actor=request.portal_user,
                  file=f, name=f.original_name)
+    ShareNotice.mark_opened(request.portal_user, f)
     return HttpResponseRedirect(url)
 
 
@@ -581,7 +636,33 @@ def file_view(request, file_id):
     f = _own_file(request, file_id)
     if not f:
         return JsonResponse({'error': 'File not found.'}, status=404)
+    if f.is_link:
+        return JsonResponse({'error': 'This is a link, not a file.'}, status=400)
+    ShareNotice.mark_opened(request.portal_user, f)
     mime = inline_mime(f.original_name)
     if not mime:
         return HttpResponseRedirect(file_storage.presign_get(f.storage_key, download_name=f.original_name))
     return HttpResponseRedirect(file_storage.presign_view(f.storage_key, mime))
+
+
+@require_portal_user
+@require_http_methods(['POST'])
+def file_opened(request, file_id):
+    """Record that the customer opened this item.
+
+    Downloads and previews mark themselves, but a link is opened by the
+    browser navigating straight to external_url — nothing hits Django — so the
+    client reports it here instead. Deliberately NOT a redirect endpoint that
+    forwards to external_url: that would make the portal an authenticated
+    open-redirector, and the client already has the URL from the serializer.
+
+    Idempotent; only the first open is recorded.
+    """
+    f = _own_file(request, file_id)
+    if not f:
+        return JsonResponse({'error': 'File not found.'}, status=404)
+    marked = ShareNotice.mark_opened(request.portal_user, f)
+    if f.is_link:
+        log_activity(request.portal_user.company, 'link_open', actor=request.portal_user,
+                     file=f, name=f.original_name, url=f.external_url)
+    return JsonResponse({'ok': True, 'marked': marked})

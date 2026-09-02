@@ -95,6 +95,21 @@
       "comment": "Create portal tickets from customer-raised JSM requests (email/customer-portal intake), matched on reporter email against the PortalUser allowlist. The cron entry is a no-op unless JIRA_INGEST is set; --dry-run reports without writing even while it is off, so matches can be observed before enabling.",
       "command": "python manage.py ingest_jira_requests",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "comment": "Nudge customers who were sent a shared file or folder and never opened it. Two reminders per person per FOLDER (3 and 7 days after the send), then silent — re-pushing a folder supersedes the earlier notice rather than starting a second nudge cycle, and a per-recipient daily ceiling holds anything over it back for the next run. Daily is the right cadence because the thresholds are measured in days; running more often just re-checks the same throttle.",
+      "command": "python manage.py send_share_reminders",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "comment": "Reclaim uploads that were started and never finished. upload-init creates a SharedFile in state='uploading' and reserves an S3 key before the browser's PUT; if that PUT fails or the tab is closed, the row and any multipart parts linger. Unscheduled, those parts are invisible in the console and still billed, and they accumulate forever. 24h is well clear of any legitimate upload, including a large multipart one on a slow link.",
+      "command": "python manage.py purge_stale_uploads --hours 24",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "comment": "The app-side half of the retention policy: customer deletes are soft deletes, kept for audit and accidental-recovery, and this is what finally removes the S3 object and the row. Without it 'deleted' data is retained indefinitely, which is the opposite of what a customer is told. Pair with an S3 lifecycle rule on the bucket (infra). Runs after purge_stale_uploads so the two never contend for the same keys.",
+      "command": "python manage.py purge_deleted_files --days 90",
+      "schedule": "45 3 * * *"
     }
   ]
 }
