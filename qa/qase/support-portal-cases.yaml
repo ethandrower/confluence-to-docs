@@ -363,6 +363,316 @@ suites:
           - action: Create a document request with the same broken key.
             expected: The request is created and the UI reports success; only the log shows file_notify failed.
 
+      - title: A ticket confirmation reaches the customer and threads
+        priority: high
+        severity: critical
+        preconditions: A customer with a working mailbox.
+        steps:
+          - action: Open a ticket as a customer and read the sent message.
+            expected: >-
+              Subject is "[<display_number>] <subject>". The message carries a
+              Message-ID at the DEFAULT_FROM_EMAIL domain and a Reply-To of
+              ticket-<n>+<token>@<domain>.
+          - action: Have staff reply, then inspect the second email's headers.
+            expected: >-
+              In-Reply-To names the first message's id and References chains it,
+              so the customer's inbox shows one conversation rather than two
+              unrelated mails.
+
+      - title: A new ticket fans out to every agent, later mail does not
+        priority: high
+        severity: major
+        description: >-
+          An unassigned ticket belongs to nobody, so creation notifies all
+          agents. Once someone picks it up, follow-ups narrow to the assignee
+          and watchers. Getting this backwards either floods the team or leaves
+          a reply unseen.
+        steps:
+          - action: Open a ticket and list the staff recipients.
+            expected: Every admin and owner with access_enabled, plus SUPPORT_EMAIL.
+          - action: Assign the ticket, have the customer reply, and list recipients again.
+            expected: Assignee plus watchers plus SUPPORT_EMAIL only, not the full agent list.
+
+      - title: An internal note never reaches the customer
+        priority: high
+        severity: blocker
+        tags: [security]
+        steps:
+          - action: Post a staff message with is_internal set and watch the mail log.
+            expected: notify_staff_reply returns immediately. No email reaches the customer or CCs.
+
+      - title: An on-behalf ticket does not confirm to the staff member who raised it
+        priority: medium
+        severity: major
+        description: >-
+          For an on-behalf ticket created_by is the agent, not the customer.
+          The customer-facing "we received your request" must go to the real
+          customer in cc_emails, never to the agent who typed it.
+        steps:
+          - action: Create a ticket on behalf of a customer and list customer recipients.
+            expected: >-
+              The cc_emails customer receives the confirmation. The staff
+              creator does not, because _customer_recipients only includes
+              created_by when its role is customer.
+
+      - title: Claiming a ticket yourself does not email you
+        priority: low
+        severity: minor
+        steps:
+          - action: Assign a ticket to yourself.
+            expected: No assignment email. notify_assigned returns when the actor is the assignee.
+          - action: Assign a ticket to a colleague.
+            expected: They receive "<display_number> was assigned to you", naming who assigned it.
+
+      - title: Resolving a ticket tells the customer and stays in thread
+        priority: medium
+        severity: major
+        steps:
+          - action: Mark a ticket resolved.
+            expected: >-
+              Customer and CCs receive "<display_number> marked Resolved",
+              anchored to the last outbound message so it threads rather than
+              starting a new conversation.
+
+      - title: Delivery outcome is visible to staff on the ticket
+        priority: high
+        severity: major
+        description: >-
+          The one place in the product where a staff member can see whether
+          mail actually left. Rendered only for staff messages in the admin
+          perspective.
+        steps:
+          - action: Send a staff reply and look at the message in the admin ticket view.
+            expected: A "Sent" marker appears under the message.
+          - action: Run poll_mailgun_events, then reload.
+            expected: >-
+              The marker becomes "Delivered", or "Bounced" / "Not delivered"
+              with the reason, reconciled from the Mailgun Events API.
+
+      - title: Mailgun event reconciliation matches our own messages
+        priority: high
+        severity: major
+        tags: [observability]
+        description: >-
+          Run against production on 2026-09-02 this scanned 1132 events and
+          updated 0 ticket messages. Either no portal ticket mail fell in the
+          window, or stored Message-IDs are not matching the events. Worth
+          pinning down, because delivery status silently stops updating if the
+          match breaks.
+        steps:
+          - action: Send a ticket reply, wait for delivery, then run poll_mailgun_events --hours 1.
+            expected: The scan reports at least one ticket message updated.
+
+      - title: A file-share email is capped and recorded in one step
+        priority: medium
+        severity: major
+        description: >-
+          send_share_email checks the rate limit, sends, and records the send
+          together. A caller that sent without recording would let the next
+          check believe nothing was sent, and the ceiling would quietly stop
+          existing.
+        steps:
+          - action: Push a file to one recipient repeatedly, past the limit.
+            expected: >-
+              Later attempts return a suppression reason and log "share email
+              suppressed", and no further mail is sent.
+          - action: Let the reminder loop run against an unopened share.
+            expected: Reminders stop at ShareNotice.MAX_REMINDERS.
+
+  - title: Site notices (incidents and maintenance)
+    description: >-
+      The in-portal incident banner. Deliberately NOT a public status page,
+      because EC-SOP-07 §5.2 states CiteMed does not operate one, so every read
+      sits behind a portal session. The model's own docstring is what these
+      cases are held against: the banner SUPPLEMENTS the email to the
+      designated account contact that §5.2 commits to, and never replaces it.
+      That email does not exist yet, which the first two cases record.
+    cases:
+      - title: Raising a notice emails nobody
+        priority: high
+        severity: critical
+        tags: [known-defect, notifications, compliance]
+        description: >-
+          SiteNotice has no mail path at all. notices_admin._notify calls only
+          realtime.notify_notice, which is a WebSocket broadcast to the banner.
+          Both the model docstring and portal/views/notices.py state that
+          EC-SOP-07 §5.2 names email to the designated account contact as the
+          channel and that the banner only supplements it. The supplement is
+          the half that was built.
+        steps:
+          - action: Raise a notice as an admin and read the application log.
+            expected: >-
+              POST /api/admin/notices/ 201 and a WebSocket broadcast, with NOT
+              ONE mail line. Desired behaviour is an email to each in-scope
+              company's designated contact.
+          - action: Check a customer mailbox.
+            expected: Nothing arrives. The notice exists only for someone who signs in and looks.
+
+      - title: The only notice channel is unreachable during the incident it describes
+        priority: high
+        severity: critical
+        tags: [known-defect, availability]
+        description: >-
+          Named in the model docstring. The banner shares fate with the portal
+          (one host, one web container) so it is unreachable exactly when a
+          SEV-1 is happening. With no email path, a total outage is precisely
+          the case where customers can be told nothing at all.
+        steps:
+          - action: Consider a SEV-1 in which the web container is down.
+            expected: >-
+              /api/notices/ is unreachable, the banner cannot render, and no
+              other channel exists. Desired behaviour is an out-of-band email
+              that does not depend on the portal being up.
+
+      - title: A raised notice appears without a reload
+        priority: high
+        severity: major
+        preconditions: A customer signed in with the portal open and idle.
+        steps:
+          - action: Raise a notice as an admin while the customer's browser sits idle.
+            expected: >-
+              The banner appears at the top of the shell within a moment,
+              pushed over /ws/notices/, with no refresh.
+          - action: Retire the notice.
+            expected: The banner clears, again with no reload.
+
+      - title: A company-scoped notice reaches only that company
+        priority: high
+        severity: critical
+        tags: [tenancy]
+        steps:
+          - action: Raise a notice scoped to one company, then sign in as a customer of another.
+            expected: >-
+              No banner. Telling unaffected clients they are affected is its
+              own kind of incident.
+          - action: Sign in as a customer of the scoped company.
+            expected: The banner shows.
+          - action: Raise a notice with an empty company list.
+            expected: Every signed-in customer sees it.
+
+      - title: Narrowing a notice withdraws it from the old audience
+        priority: medium
+        severity: major
+        description: >-
+          The edit path captures the previous company list before the scope
+          changes and nudges it too, so people the notice was withdrawn from
+          stop showing it rather than keeping it until they next reload.
+        steps:
+          - action: Raise a notice for companies A and B, then edit it down to A only.
+            expected: B's open portal clears the banner with no reload; A keeps it.
+
+      - title: A critical notice cannot be dismissed
+        priority: high
+        severity: major
+        steps:
+          - action: Raise a critical notice and look for the dismiss control.
+            expected: There is none.
+          - action: Call the dismiss endpoint for that notice directly.
+            expected: The server refuses. The missing client control is not the only guard.
+
+      - title: Dismissing an info notice hides the banner, not the record
+        priority: medium
+        severity: normal
+        steps:
+          - action: Dismiss an info notice as a customer, then reload.
+            expected: The banner stays gone. The dismissal is per-user and persisted.
+          - action: Open the notices history page.
+            expected: The dismissed notice is still listed. Dismissing hides the banner, not the record.
+
+      - title: A scheduled notice does not show early, and an expired one stops
+        priority: medium
+        severity: major
+        description: A future starts_at is what the 72-hour maintenance notice in §3.2 needs.
+        steps:
+          - action: Raise a notice with starts_at in the future.
+            expected: No banner yet, and the admin list shows it as scheduled.
+          - action: Raise one with ends_at in the past.
+            expected: No banner. currently_visible excludes it.
+
+      - title: Retiring a notice is not deleting it
+        priority: high
+        severity: major
+        steps:
+          - action: DELETE a notice as an admin.
+            expected: >-
+              It is retired, not removed. The banner clears and the row
+              survives, because the customer-visible history depends on it.
+          - action: PATCH retired_at back to null.
+            expected: The notice is live again, for an incident that was closed too early.
+
+      - title: The notices history page has no way in
+        priority: medium
+        severity: major
+        tags: [known-defect, discoverability]
+        description: >-
+          The only link to /notices lives inside the banner, and only on the
+          first live notice. There is no nav entry anywhere in the shell.
+        steps:
+          - action: Sign in as a customer with no notice live and look for the history.
+            expected: >-
+              No route to it from any menu. /notices renders only if typed into
+              the address bar. Desired behaviour is a persistent entry.
+          - action: Dismiss the only live notice.
+            expected: >-
+              The banner disappears and takes the "Past notices" link with it,
+              so a customer loses the only route to the history by reading the
+              notice.
+
+      - title: Notices are not a public status page
+        priority: high
+        severity: critical
+        tags: [security]
+        description: >-
+          §5.2 states CiteMed does not operate a public status page, so this
+          must not quietly become one.
+        steps:
+          - action: Request /api/notices/ and /api/notices/history/ with no session.
+            expected: Both refuse. Neither leaks incident text to an anonymous caller.
+
+      - title: A notice link cannot smuggle a script
+        priority: high
+        severity: critical
+        tags: [security]
+        steps:
+          - action: Raise a notice whose link_url is a javascript URL.
+            expected: >-
+              Either the write is rejected, or safeHref refuses to render it as
+              a live href. The banner never produces a clickable script URL.
+          - action: Put HTML in the message body.
+            expected: It renders as text, not as markup.
+
+      - title: The history response is bounded
+        priority: low
+        severity: minor
+        steps:
+          - action: Request /api/notices/history/ against a long incident record.
+            expected: At most HISTORY_LIMIT (50) rows. One endpoint cannot return an unbounded list.
+
+      - title: History hides which agent raised a notice
+        priority: medium
+        severity: major
+        tags: [security]
+        steps:
+          - action: Read a notice as a customer and compare it with the admin shape.
+            expected: >-
+              The customer payload has no created_by. Which agent raised a
+              notice is internal; the customer only needs to know what is
+              happening.
+
+      - title: A malformed notice is refused without being stored
+        priority: medium
+        severity: normal
+        description: >-
+          Observed on production on 2026-09-02, where a POST returned 400
+          before a retry returned 201, so this path is live and worth pinning.
+        steps:
+          - action: POST a notice with no message, then a bad level, then ends_at before starts_at.
+            expected: 400 with a reason for each, and no row created.
+          - action: PATCH an existing notice with an invalid field.
+            expected: >-
+              400, and the stored notice is unchanged. The validation runs
+              before any save.
+
   - title: Deployment and configuration
     description: Things that only break once the app is built and served the way production serves it.
     cases:

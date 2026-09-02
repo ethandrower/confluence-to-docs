@@ -11,7 +11,7 @@ catches a release-phase failure the 661 Django tests structurally cannot see,
 because those use the in-process test client and so never build a bundle,
 resolve a static asset, terminate TLS, or read the container's environment.
 
-**`qa/qase/support-portal-cases.yaml`** is the manual one: 36 cases covering
+**`qa/qase/support-portal-cases.yaml`** is the manual one: 60 cases covering
 what a person has to look at — the shape of the upload UI, what a customer
 actually receives, whether a dead end explains itself. Every case in it was
 walked by hand against a real deployment before it was written down.
@@ -40,7 +40,7 @@ existing project — `QAC` is the QA-challenge sandbox and is not this.
 
 ## Cases that record a defect rather than the desired behaviour
 
-Four cases are tagged `known-defect`. They describe what the portal does
+Seven cases are tagged `known-defect`. They describe what the portal does
 *today*, deliberately, so that a green run is honest rather than quiet about a
 gap. Each one names the desired behaviour in its expected result. Fix the
 product, then fix the case — in that order.
@@ -51,6 +51,9 @@ product, then fix the case — in that order.
 | Customer created with no company reaches a dead end | The company dropdown defaults to "— None —", and such a user can sign in but can do nothing. The reason only appears after they try. |
 | A multi-file drop sends one email per file | Three files produced three staff emails. Twenty would produce twenty. |
 | A failing mail provider is invisible to the user | Reproduced with an invalid Mailgun key: provider returned 401, portal reported success. Right for account enumeration, wrong as the only signal. |
+| Raising a notice emails nobody | `SiteNotice` has no mail path at all — `_notify` only broadcasts over the WebSocket. Both the model docstring and `views/notices.py` say EC-SOP-07 §5.2 names email to the designated account contact and that the banner merely *supplements* it. The supplement is the half that exists. |
+| The only notice channel is unreachable during the incident it describes | The banner shares fate with the portal — one host, one web container — so it cannot render during the SEV-1 it is meant to announce. With no email path, a total outage is exactly the case where customers can be told nothing. |
+| The notices history page has no way in | The only link to `/notices` is inside the banner, on the first live notice. No nav entry exists, so with nothing live the page is reachable only by typing the URL — and dismissing the last notice removes the link too. |
 
 ## Test accounts
 
