@@ -17,7 +17,9 @@ from django.urls import path
 
 from .provisioning import CompanyProvisionView, CompanyUserProvisionView
 from .schema import GuardedSchemaView, GuardedSwaggerView
-from .views import CompanyListView, TicketDetailView, TicketListView
+from .views import (
+    CompanyListView, ShareEventListView, TicketDetailView, TicketListView,
+)
 
 app_name = 'api_v1'
 
@@ -25,6 +27,9 @@ urlpatterns = [
     path('companies/', CompanyListView.as_view(), name='companies'),
     path('tickets/', TicketListView.as_view(), name='tickets'),
     path('tickets/<int:number>/', TicketDetailView.as_view(), name='ticket-detail'),
+    # Outbound deliveries: what staff pushed to a customer and what became of
+    # it. Read-only like everything outside the provisioning prefix.
+    path('share-events/', ShareEventListView.as_view(), name='share-events'),
 
     # The write surface. See provisioning.py for why it is a separate prefix.
     path('provisioning/companies/', CompanyProvisionView.as_view(),

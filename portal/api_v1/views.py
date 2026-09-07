@@ -23,11 +23,13 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
 
-from portal.models import Company, Ticket
+from portal.models import Company, ShareNotice, Ticket
 
 from .auth import ApiClientAuthentication, IsApiClient
-from .pagination import CompanyCursorPagination, TicketCursorPagination
-from .serializers import CompanySerializer, TicketSerializer
+from .pagination import (
+    CompanyCursorPagination, ShareEventCursorPagination, TicketCursorPagination,
+)
+from .serializers import CompanySerializer, ShareEventSerializer, TicketSerializer
 
 # Statuses the portal considers still in play. Used only for the discovery
 # endpoint's `open` count — the ticket payload itself returns the portal's
@@ -265,3 +267,93 @@ class CompanyListView(ReadOnlyApiV1View, generics.ListAPIView):
                 'tickets', filter=Q(tickets__status__in=OPEN_STATUSES), distinct=True),
             last_ticket_at=Max('tickets__created_at'),
         ).prefetch_related('users')
+
+
+SHARE_EVENT_PARAMS = [
+    OpenApiParameter(
+        'company_id', OpenApiTypes.INT, many=True,
+        description='Repeatable. Portal Company id.'),
+    OpenApiParameter(
+        'recipient_email', OpenApiTypes.STR,
+        description='Exact address (case-insensitive) of the person notified.'),
+    OpenApiParameter(
+        'opened', OpenApiTypes.BOOL,
+        description='true returns only deliveries that have been opened, '
+                    'false only those that have not. Omit for both.'),
+    OpenApiParameter(
+        'sent_since', OpenApiTypes.DATETIME,
+        description='ISO-8601. Pushes made strictly after this instant.'),
+    OpenApiParameter(
+        'updated_since', OpenApiTypes.DATETIME,
+        description='ISO-8601. The incremental-sync filter — catches opens '
+                    'and reminders, not just new pushes.'),
+]
+
+
+@extend_schema(
+    parameters=SHARE_EVENT_PARAMS,
+    summary='List staff-to-customer deliveries',
+    description=(
+        'Every file or folder staff pushed TO a customer, one row per person '
+        'notified, with whether they opened it and how often they have been '
+        'reminded. Ordered by `updated_at` ascending, so `updated_since` + '
+        '`cursor` is a resumable, at-least-once incremental sync — and '
+        'unlike a push-only feed it also replays an open that happened days '
+        'after the push. Carries no file contents, no download URLs and no '
+        'link targets: it reports that a delivery happened and what became '
+        'of it, never what was in it.'
+    ),
+)
+class ShareEventListView(ReadOnlyApiV1View, generics.ListAPIView):
+    """The outbound half of the portal's file activity.
+
+    `/tickets/` answers "what has this customer asked us?". This answers "what
+    have we sent them, and did anyone look?" — which is the question a health
+    score actually turns on: a customer who stopped opening what we send has
+    disengaged well before they stop filing tickets.
+
+    Like every queryset in this module it crosses the tenant boundary on
+    purpose and is guarded only by the bearer token. Treat changes as
+    security-relevant.
+    """
+
+    serializer_class = ShareEventSerializer
+    pagination_class = ShareEventCursorPagination
+
+    def get_queryset(self):
+        # select_related covers every traversal the serializer makes —
+        # bucket.company, file, recipient, sent_by — so a 100-row page is one
+        # query rather than 401.
+        queryset = (
+            ShareNotice.objects
+            .select_related('bucket', 'bucket__company', 'file', 'recipient', 'sent_by')
+        )
+        params = self.request.query_params
+
+        company_ids = _parse_ids(params.getlist('company_id'), 'company_id')
+        if company_ids:
+            queryset = queryset.filter(bucket__company_id__in=company_ids)
+
+        recipient_email = (params.get('recipient_email') or '').strip()
+        if recipient_email:
+            queryset = queryset.filter(recipient__email__iexact=recipient_email)
+
+        raw_opened = params.get('opened')
+        if raw_opened not in (None, ''):
+            # Absent means "both", which is why this is not _parse_bool's
+            # default-to-False: that would silently turn a missing filter into
+            # "unopened only" and hide every successful delivery.
+            queryset = queryset.filter(
+                first_opened_at__isnull=not _parse_bool(raw_opened, 'opened'))
+
+        sent_since = params.get('sent_since')
+        if sent_since:
+            queryset = queryset.filter(
+                sent_at__gt=_parse_since(sent_since, 'sent_since'))
+
+        updated_since = params.get('updated_since')
+        if updated_since:
+            queryset = queryset.filter(
+                updated_at__gt=_parse_since(updated_since, 'updated_since'))
+
+        return queryset

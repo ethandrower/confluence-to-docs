@@ -193,6 +193,172 @@ cross-worker WebSocket broadcasts behave as they do on Dokku. Postgres is
 published on host port `5433` and Redis on `6380` so they don't collide with
 anything already running locally.
 
+### Run it the way production runs it (before a deploy)
+
+`docker-compose.yml` is for iterating: runserver, `DEBUG=True`, the Vite dev
+server, instant reload. It is a different **shape** of application from the one
+Dokku runs, so passing locally has never meant much about a deploy.
+`docker-compose.prod.yml` closes most of that gap.
+
+```bash
+docker compose -f docker-compose.prod.yml up --build   # http://localhost:8090
+```
+
+Its own project name, ports and volumes, so it runs alongside the dev stack.
+What it exercises that dev cannot:
+
+- **The real build.** `vite build`, then collectstatic through
+  `CompressedManifestStaticFilesStorage`, at image-build time exactly as the
+  buildpack does. That storage **raises** on a static reference it can't
+  resolve, so a broken asset path fails the build instead of 500ing a page in
+  production.
+- **One origin.** WhiteNoise serves the hashed assets and Django serves the SPA
+  shell itself. Dev's two origins (Vite + proxied API) are why
+  `CSRF_TRUSTED_ORIGINS` needs a `DEBUG`-only block; none of that applies here.
+- **`DEBUG=False`.** Secure cookies, SSL redirect, security headers, real error
+  pages, and the `SECRET_KEY` requirement that refuses to boot without one.
+- **The real web command.** gunicorn with two uvicorn workers and the 120s
+  timeout from the Procfile, not single-process autoreload.
+- **An nginx hop**, as Dokku has, so `SECURE_PROXY_SSL_HEADER` and the
+  WebSocket upgrade path are actually exercised. It sets `X-Forwarded-Proto:
+  https`, which is what stops `SECURE_SSL_REDIRECT` from bouncing every request
+  to a TLS port that isn't there.
+- **A release phase.** `migrate` runs as its own one-shot service that `web`
+  waits on, so a bad migration fails visibly the way it aborts a deploy.
+
+`SECURE_HSTS_SECONDS` is set to `0` here and **only** here. HSTS is remembered
+by the browser per host, so a real header served from `localhost` would force
+https on every other app you run there, for a month, with no obvious cause.
+
+What this still does **not** prove: the buildpacks themselves, Mailgun
+delivery, CloudFront, real S3 bucket policy and CORS, and the six cron entries
+in `app.json` — none of which run locally. A staging app on the Dokku host is
+the only true parity; this is the fast check that catches the common
+breakages first.
+
+### Smoke test — is the portal actually working for clients?
+
+The suites in `portal/tests/` drive Django's test client against a fresh
+database in-process. That is the right shape for logic and it is blind by
+construction to release breakage, because the test client never builds a
+bundle, never resolves a static asset, never terminates TLS and never reads
+the environment the container was started with. `manage.py smoke` is the
+complement: it walks a customer's journey against a **running** server, over
+real HTTP.
+
+```bash
+# before a deploy, against the parity stack
+docker compose -f docker-compose.prod.yml run --rm --no-deps release \
+    python manage.py smoke --url https://proxy --insecure
+
+# after a deploy, against production
+dokku run citemed-docs python manage.py smoke \
+    --url https://support.citemed.com --as edrower@citemed.com
+```
+
+Nine checks, in this order: health endpoint, SPA shell, **every static asset
+the shell references**, the API refusing anonymous callers, magic-link
+sign-in, session identity, the file tree (including the tenancy boundary as
+seen from outside), the ticket list, and sign-out.
+
+The static-asset check is the one that earns its keep. Under manifest static
+storage a hashed filename that wasn't collected 404s at runtime while every
+unit test stays green — the page loads and renders nothing, which reads as
+"the app is broken" with no error anywhere.
+
+It runs **inside** the app, so it mints its own sign-in token rather than
+handling a password, but every assertion is an HTTP request to `--url`.
+
+**Safe against production.** It only reads. The one mutation is spending a
+magic-link token for an account that already exists, which is what signing in
+does anyway; it creates no company, folder or file and sends no email. Write
+flows belong on the parity stack, where the blast radius is a docker volume.
+
+Two flags earn an explanation. `--insecure` skips certificate verification and
+is for the parity stack's self-signed cert **only** — against production a
+cert error is a finding, not a nuisance. And the parity stack serves TLS on
+`https://localhost:8443` precisely so this can run: with `DEBUG=False` Django
+sets `SESSION_COOKIE_SECURE`, and while browsers treat `localhost` as a
+trustworthy origin and will store a `Secure` cookie over plain http, ordinary
+HTTP clients do not — so over `http://` the sign-in check fails with a 403
+that looks like a CSRF bug and isn't.
+
+Run it from the `release` service rather than `web`: `compose run web` starts a
+second container answering to the same `web` DNS name, and Docker round-robins
+between them, so results become nondeterministic.
+
+What the smoke test deliberately leaves alone is everything needing a person's
+judgement — the shape of the upload UI, what a customer actually receives, and
+whether a dead end explains itself. That half lives in **[`qa/`](qa/README.md)**
+as 36 Qase cases, each one walked by hand against a real deployment before it
+was written down. Four of them record a defect rather than the desired
+behaviour, so a green run stays honest about the gaps.
+
+### Staging
+
+**https://support.qa.citemed.com** — Dokku app `citemed-docs-staging` on
+`157.90.131.248`, the review-apps host. Deliberately **not** on
+`116.203.82.103`, which runs production: a staging environment sharing a box
+with the thing it is meant to protect can take that thing down with it.
+
+```bash
+git remote add dokku-staging dokku@157.90.131.248:citemed-docs-staging
+git push dokku-staging <your-branch>:main        # deploy any branch
+
+dokku run citemed-docs-staging python manage.py smoke \
+    --url https://support.qa.citemed.com          # verify it
+dokku run citemed-docs-staging python manage.py magic_link \
+    --email edrower@citemed.com                   # get in
+```
+
+It runs the real buildpack chain, its own Postgres and Redis, letsencrypt TLS,
+and all eight `app.json` cron entries — the pieces `docker-compose.prod.yml`
+approximates but cannot prove. Service versions match production
+(postgres 18, redis 8); note this is **not** what CI runs, which is still
+Postgres 16.
+
+**Confluence** (`CONFLUENCE_*`, `ATLASSIAN_CLOUD_ID`) is set to literal
+`not-configured` placeholders, so doc sync is idle. `app.json` declares these
+without defaults, which makes Dokku refuse to release until *something* is set
+— placeholders are how a new environment gets past that honestly.
+
+**Mail goes to the application log.** `MAILGUN_ACCESS_KEY` is set to the empty
+string and `EMAIL_BACKEND` to the console backend, so every message the portal
+sends — magic links included — is readable with `dokku logs
+citemed-docs-staging`. That is what makes the notification and onboarding test
+cases runnable here at all.
+
+Two traps are worth knowing, because both cost an hour to find:
+
+- A **placeholder** Mailgun key is worse than an empty one. `settings.py`
+  selects the Mailgun backend whenever `MAILGUN_ACCESS_KEY` is non-empty, so
+  `not-configured` means sends fail against Mailgun (401) rather than falling
+  back to the console — and `request_magic_link` swallows the exception, so the
+  UI still says "Check your email".
+- `dokku config:unset` is **not** enough to clear a var here. The buildpack
+  bakes config into the image, so an unset value is still present in the
+  container env until the app is rebuilt. Setting it to an explicit empty
+  string (`config:set KEY=`) overrides at container start and needs no rebuild.
+
+**Object storage works** — staging inherits AWS credentials from the host's
+*global* Dokku config (the review-apps box sets them for the citemed_web review
+apps), so `FILESHARE_BUCKET` falls through to `citemed-staging` and uploads,
+presigned downloads and deletes all function. Verified end-to-end: a file
+uploaded through the browser came back byte-for-byte from
+`citemed-staging.s3.amazonaws.com`.
+
+Two consequences of inheriting rather than owning those credentials:
+
+- Staging shares a bucket with the citemed_web review apps. Objects are
+  namespaced under the `fileshare/` prefix so nothing collides, but a bucket of
+  its own would be cleaner — set `FILESHARE_BUCKET` to change it.
+- The credentials are **global to the host**, so every app on
+  `157.90.131.248` can read them, and `dokku run <app> env` prints the secret
+  key in the clear. Worth rotating to a key scoped to just this bucket.
+
+It has never pointed at `citemed-fileshare`, which holds real customer files,
+and it must not.
+
 ### Keeping docs in sync
 
 **Manual:** `python manage.py sync_confluence` (full) or `--incremental` (changed pages only).
@@ -235,6 +401,7 @@ not an extension of the table above and shares no authentication with it.
 | `/api/v1/companies/` | GET | Discovery: id, name, contract end, ticket counts, last ticket. Populate a consumer's account-id mapping from this once, instead of matching on names forever |
 | `/api/v1/tickets/` | GET | Ticket metadata. Filters: `company_id`, `email` (+`include_cc`), `status`, `priority`, `created_since`, `updated_since`; cursor paginated |
 | `/api/v1/tickets/<number>/` | GET | One ticket, same shape |
+| `/api/v1/share-events/` | GET | Files and folders staff pushed **to** a customer, one row per person notified, with open and reminder state. Filters: `company_id`, `recipient_email`, `opened`, `sent_since`, `updated_since`; cursor paginated |
 | `/api/v1/schema/` | GET | OpenAPI 3 schema (drf-spectacular) |
 | `/api/v1/docs/` | GET | Swagger UI |
 
@@ -262,6 +429,90 @@ Four rules hold this surface together, and all four are asserted in
 Statuses and priorities are returned in the portal's own vocabulary, unmapped.
 Consumers with a smaller enum collapse it on ingest; note `csm_direct` is a
 routing origin rather than a severity and has no clean severity equivalent.
+
+#### Syncing share events
+
+`/tickets/` answers *what has this customer asked us?*. `/share-events/`
+answers *what have we sent them, and did anyone look?* — one row per (push,
+person), so "two of the four people we sent this to have opened it" is
+something a consumer computes rather than something we pre-aggregate away.
+
+Poll it the same way as tickets, on `updated_at`:
+
+```bash
+curl -H "Authorization: Bearer csp_…" \
+  "https://…/api/v1/share-events/?updated_since=2026-08-01T00:00:00Z"
+```
+
+**Use `updated_since`, not `sent_since`.** Nearly everything worth knowing
+about a delivery happens after it is made: the open lands days later, and so do
+the two reminders. `sent_since` only ever replays the push itself, so a sync
+built on it would show every delivery frozen in the state it had a second after
+it left. `updated_since` catches all three, and — because the ordering is
+ascending — a row that changes mid-sync moves toward the end rather than behind
+your cursor, making the sync resumable and at-least-once.
+
+`last_email_at` is null when a push was recorded but no email was sent,
+because the per-recipient rate limit below held it. Worth reading rather than
+assuming `sent_at` implies delivery: a row that has sat unopened for a week
+means something different once you know whether anyone was ever told, and a
+consumer scoring engagement would otherwise count an email we never sent as one
+the customer ignored.
+
+Deliveries carry no file contents, no download URLs, and no link targets. The
+endpoint reports *that* something was sent and what became of it, never what
+was in it.
+
+#### How much mail one person can get
+
+Staff re-notify a folder as they add to it, which is the normal workflow rather
+than misuse — so the limits are written about the person, not the row. Two
+rules, both on `ShareNotice`:
+
+- **One email per person per folder per day** (`SAME_FOLDER_COOLDOWN`). A
+  second push of the same folder says the same sentence and points at the same
+  link, so a second email adds nothing the first did not.
+- **At most `MAX_EMAILS_PER_DAY` share emails per person across all folders**,
+  as a backstop for any path added later.
+
+A push whose email is held is still recorded, still appears in the status panel
+and the sync feed, and still supersedes the older notice — only the email is
+dropped, and `share_push` returns `held` so the UI can say so instead of
+reporting a delivery that never left. The admin's notify dialog unticks anyone
+already emailed about that folder today and flags them, so re-notifying is a
+deliberate act.
+
+Pushing a folder again **supersedes** that person's earlier unopened notices
+for it rather than adding a second nudge cycle: the older rows stay on the
+record but stop reminding. Without that, three pushes of one folder to one
+person who never opened it sent nine emails — three sends and six reminders,
+several on the same day under one subject line — even though the per-notice cap
+of two was working exactly as documented.
+
+#### What staff can no longer do to a shared folder
+
+A shared folder the customer has been **notified** about (any `ShareNotice`
+exists for it) cannot be deleted — the endpoint returns 409. The older rule
+only refused to delete a folder that still held subfolders or live files, which
+a determined admin got past by deleting the files one at a time; the folder then
+went, and with it a link a customer had been emailed. The notification is the
+line rather than the folder's creation because a staff folder appears in the
+customer's tree as soon as it exists (`buckets_list` does not filter on
+`origin`), so "before they could see it" is not a window that exists — but
+undoing a folder created by mistake has to stay possible.
+
+There is no archived state yet, so a notified folder currently cannot be
+retired at all. That is the intended follow-up; this guard holds the line until
+it lands.
+
+Renaming a shared folder requires sending back the `updated_at` you were
+looking at, and gets a 409 if the row has moved since. Two admins on one
+account is ordinary, and without the precondition the second rename silently
+won while the first admin went on reading a name that was no longer real. The
+field is required rather than optional — a caller that omitted it would get
+exactly the clobbering the check exists to prevent — and it is compared for
+equality at millisecond resolution, not as a tolerance window, because a window
+accepts the rename that landed a moment ago.
 
 ## Project structure
 
