@@ -8,4 +8,4 @@ Note: {{ note }}
 
 —
 {{ product_name }}
-This is an automated message. Please do not reply.
+{% if can_reply %}You can reply directly to this email and your response will be added to the ticket.{% else %}This is an automated message. Please do not reply.{% endif %}
