@@ -102,12 +102,17 @@
       "schedule": "0 14 * * *"
     },
     {
-      "comment": "Reclaim uploads that were started and never finished. upload-init creates a SharedFile in state='uploading' and reserves an S3 key before the browser's PUT; if that PUT fails or the tab is closed, the row and any multipart parts linger. Unscheduled, those parts are invisible in the console and still billed, and they accumulate forever. 24h is well clear of any legitimate upload, including a large multipart one on a slow link.",
-      "command": "python manage.py purge_stale_uploads --hours 24",
-      "schedule": "30 3 * * *"
+      "comment": "Email staff about customer uploads, batched. Uploads used to notify per file from the request path, so a 150-file folder upload sent 150 emails. Every minute, with a 90s settle window inside the command, so a lone upload is still reported promptly while a burst collapses into one message.",
+      "command": "python manage.py send_upload_digests",
+      "schedule": "* * * * *"
     },
     {
-      "comment": "The app-side half of the retention policy: customer deletes are soft deletes, kept for audit and accidental-recovery, and this is what finally removes the S3 object and the row. Without it 'deleted' data is retained indefinitely, which is the opposite of what a customer is told. Pair with an S3 lifecycle rule on the bucket (infra). Runs after purge_stale_uploads so the two never contend for the same keys.",
+      "comment": "Reclaim uploads that were started and never finished. upload-init creates a SharedFile in state='uploading' and reserves an S3 key before the browser's PUT; if that PUT fails or the tab is closed, the row and any multipart parts linger. Until aborted those parts are still stored, still billed, and absent from any listing of the bucket, so the cost is invisible. 24h is well clear of any legitimate upload, including a large multipart one on a slow link; hourly is how quickly we notice once that threshold is crossed. A bucket lifecycle rule (AbortIncompleteMultipartUpload) should back this up for the cases where we never get to run.",
+      "command": "python manage.py purge_stale_uploads --hours 24",
+      "schedule": "17 * * * *"
+    },
+    {
+      "comment": "The app-side half of the retention policy: customer deletes are soft deletes, kept for audit and accidental-recovery, and this is what finally removes the S3 object and the row. Without it 'deleted' data is retained indefinitely, which is the opposite of what a customer is told. Pair with an S3 lifecycle rule on the bucket (infra). The hourly purge_stale_uploads runs at :17, ahead of this, so the two never contend for the same keys.",
       "command": "python manage.py purge_deleted_files --days 90",
       "schedule": "45 3 * * *"
     }

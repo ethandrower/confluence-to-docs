@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   isJunk, dirOf, filesFromDrop, filesFromInput, partitionByExtension, pathsIn,
+  mergeIfSameFolder,
 } from './folderDrop.js'
 
 // ── Fakes for the webkit entry API, which jsdom/node do not provide ────────
@@ -162,5 +163,53 @@ describe('pathsIn', () => {
 
   it('omits the empty path — that is the drop root, not a folder', () => {
     expect(pathsIn([{ path: '', file: { name: 'f.pdf' } }])).toEqual([])
+  })
+})
+
+describe('mergeIfSameFolder', () => {
+  const item = (path, name = 'f.pdf') => ({ path, file: { name } })
+
+  it('strips the redundant top segment when re-dropping the folder you are in', () => {
+    // The regression this exists for: a finished folder upload navigates into
+    // the folder it created, so dropping the same tree again produced
+    // quarterly/quarterly/q4 instead of merging.
+    const items = [item('quarterly'), item('quarterly/q4')]
+    expect(mergeIfSameFolder(items, 'quarterly').map((i) => i.path)).toEqual(['', 'q4'])
+  })
+
+  it('matches the folder name case-insensitively, like the server does', () => {
+    const items = [item('Quarterly/q4')]
+    expect(mergeIfSameFolder(items, 'quarterly').map((i) => i.path)).toEqual(['q4'])
+  })
+
+  it('leaves a genuinely different folder nested', () => {
+    // Dropping "specs" inside "quarterly" really does mean quarterly/specs.
+    const items = [item('specs'), item('specs/device')]
+    const out = mergeIfSameFolder(items, 'quarterly')
+    expect(out).toBe(items)
+  })
+
+  it('does nothing at the root, where there is no folder to merge into', () => {
+    const items = [item('quarterly/q4')]
+    expect(mergeIfSameFolder(items, null)).toBe(items)
+    expect(mergeIfSameFolder(items, '')).toBe(items)
+  })
+
+  it('does not fire when the batch spans two top-level folders', () => {
+    // One of them sharing the current folder's name is not a re-upload of
+    // either — stripping would silently re-home the other one.
+    const items = [item('quarterly/q4'), item('archive/old')]
+    expect(mergeIfSameFolder(items, 'quarterly')).toBe(items)
+  })
+
+  it('leaves loose files alone', () => {
+    const items = [item(''), item('')]
+    expect(mergeIfSameFolder(items, 'quarterly')).toBe(items)
+  })
+
+  it('does not mutate the input batch', () => {
+    const items = [item('quarterly/q4')]
+    mergeIfSameFolder(items, 'quarterly')
+    expect(items[0].path).toBe('quarterly/q4')
   })
 })
