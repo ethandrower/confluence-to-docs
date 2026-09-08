@@ -73,7 +73,20 @@ class Command(BaseCommand):
                 f'{len(users)} listed / {added} set up / {invited} invited')
 
     def _open(self, company_name, note):
+        # Exact first, then a substring match — company names carry brackets and
+        # suffixes ("Northwind Medical (QA)") that are tedious to type exactly
+        # and awkward to quote through ssh. Ambiguity is refused rather than
+        # guessed: opening a request against the wrong customer would put
+        # another company's name in front of them.
         company = Company.objects.filter(name__iexact=company_name).first()
+        if company is None:
+            matches = list(Company.objects.filter(name__icontains=company_name)[:5])
+            if len(matches) == 1:
+                company = matches[0]
+            elif len(matches) > 1:
+                raise CommandError(
+                    f'{company_name!r} matches several companies: '
+                    f'{", ".join(c.name for c in matches)}. Be more specific.')
         if company is None:
             raise CommandError(
                 f'No company named {company_name!r}. '
