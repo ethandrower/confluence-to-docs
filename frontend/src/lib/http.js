@@ -34,10 +34,22 @@ export async function ensureCsrfToken() {
   return getCookie('csrftoken')
 }
 
-/** fetch() with credentials, JSON headers and CSRF handled. */
+/** fetch() with credentials, JSON headers and CSRF handled.
+ *
+ *  A FormData body is the one case that must NOT get a Content-Type from us.
+ *  The browser sets `multipart/form-data; boundary=…` itself, and the boundary
+ *  is generated per request — naming the type by hand omits it, so the server
+ *  receives a body it cannot split and reports no file at all. The failure is
+ *  silent and looks like an empty upload rather than a bad header, which is
+ *  exactly why it is worth handling here rather than at each call site.
+ */
 export async function apiFetch(path, opts = {}) {
   const method = (opts.method || 'GET').toUpperCase()
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  const isFormData = typeof FormData !== 'undefined' && opts.body instanceof FormData
+  const headers = {
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    ...(opts.headers || {}),
+  }
   if (!SAFE_METHODS.has(method)) {
     headers['X-CSRFToken'] = await ensureCsrfToken()
   }
