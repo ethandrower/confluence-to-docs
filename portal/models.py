@@ -54,6 +54,13 @@ class Company(models.Model):
     """A customer organisation whose people may be granted portal access."""
     name = models.CharField(max_length=256, unique=True)
     contract_end_date = models.DateField(null=True, blank=True)
+    #: Module keys this customer is licensed for, as an allowlist. EMPTY MEANS
+    #: EVERYTHING — the honest default while nothing in this system actually
+    #: records entitlement. This is the interim source for the user request
+    #: form's module picker and is expected to be replaced wholesale by real
+    #: company entitlement (ECD-2589); until then it is at least a single place
+    #: to narrow one customer by hand rather than a list hardcoded in a form.
+    licensed_modules = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1166,3 +1173,289 @@ class NoticeDismissal(models.Model):
 
     def __str__(self):
         return f'{self.user.email} dismissed {self.notice_id}'
+
+
+# ── The initial user request form (REV-45) ───────────────────────────────────
+#
+# The activation machine in REV-26 plans, provisions, verifies and invites — and
+# every step of it assumes somebody already knows who the customer's users are.
+# Nothing captured that. It arrived as a spreadsheet in an email thread and was
+# retyped by hand, which is how an address ends up misspelt on the one row whose
+# owner then cannot sign in on day one.
+#
+# These three models are the intake: the customer tells us their own roster, in
+# their own words, and the result is a set of rows provisioning can read.
+
+#: The customer-facing module vocabulary. Keys are stored; labels are shown.
+#:
+#: This is deliberately the list a CUSTOMER recognises, not the internal app
+#: labels, because the only place it is ever rendered is a form a customer fills
+#: in. Adding a module here is a product decision — the form offers exactly what
+#: this list holds, intersected with what the company is licensed for.
+MODULE_CHOICES = [
+    ('literature', 'Literature'),
+    ('citesource', 'CiteSource'),
+    ('readyview', 'Ready View'),
+    ('vigilance', 'Vigilance'),
+    ('pathways', 'Pathways'),
+]
+MODULE_KEYS = [key for key, _ in MODULE_CHOICES]
+MODULE_LABELS = dict(MODULE_CHOICES)
+
+
+class UserRequest(models.Model):
+    """One "initial user request" sent to one customer.
+
+    Many per company rather than one: "initial" describes the first send, but
+    joiners keep arriving after go-live and the same form is the right way to
+    collect them. The customer works on the newest open one.
+
+    A request is not a provisioning run and does not try to be. It holds what
+    the customer ASKED FOR; whether that was carried out is recorded per person
+    on RequestedUser, written by the provisioning path and never typed here.
+    """
+
+    STATUS_DRAFT = 'draft'
+    STATUS_SENT = 'sent'
+    STATUS_SUBMITTED = 'submitted'
+    STATUS_CLOSED = 'closed'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_SENT, 'Sent to customer'),
+        (STATUS_SUBMITTED, 'Submitted by customer'),
+        (STATUS_CLOSED, 'Closed'),
+    ]
+
+    #: Editable by the customer only in these states. Once submitted the roster
+    #: is what provisioning is about to act on, so it stops moving underneath it;
+    #: reopening is a staff action, which leaves a trace in the admin log.
+    CUSTOMER_EDITABLE = (STATUS_SENT,)
+
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name='user_requests')
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES,
+                              default=STATUS_DRAFT, db_index=True)
+    # Free text from the CS person, shown above the form. The place to say
+    # "we only need the three ReadyView people for now".
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='user_requests_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'User request #{self.pk} for {self.company_id}'
+
+    @property
+    def is_customer_editable(self):
+        return self.status in self.CUSTOMER_EDITABLE
+
+    def licensed_modules(self):
+        """What this customer may pick from.
+
+        Interim source until company entitlement lands (ECD-2589): an empty
+        allowlist on the company means "everything", which is the honest
+        default while nothing records entitlement. Once ECD-2589 exists this
+        method is the single place that has to change.
+        """
+        allowed = self.company.licensed_modules or []
+        if not allowed:
+            return list(MODULE_KEYS)
+        return [k for k in MODULE_KEYS if k in allowed]
+
+
+class RequestedUser(models.Model):
+    """One person on a customer's roster.
+
+    The two status columns the customer's own spreadsheet carried — "Activation
+    Email Sent?" and "Added?" — are `activation_email_sent_at` and `added_at`
+    here, and they are DERIVED, never typed. REV-26's second rule is that
+    nothing is trusted because a task returned; a human ticking "sent" on a mail
+    that never went is that failure in its smallest form. The form renders both
+    read-only.
+
+    `status_note` plus `status_overridden_by` is the one escape hatch, for when
+    an invite genuinely went out by some other route. It is an annotation beside
+    the derived value rather than a way to overwrite it, so the two never become
+    indistinguishable.
+    """
+
+    ROLE_ADMIN = 'admin'
+    ROLE_FULFILLER = 'fulfiller'
+    ROLE_VIEWER = 'viewer'
+    #: The CUSTOMER-facing role vocabulary, and the third one in this system:
+    #: RevenueHub's CustomerUser.Role is reviewer/writer/qa/admin/viewer and
+    #: PortalUser.role is owner/admin/customer. This set is the one written for
+    #: customers to read, so it is the one the form shows. Translation to the
+    #: other two belongs in the vocabulary boundary at the provisioning edge,
+    #: never inline at a call site — see ROLE_TO_PORTAL_ROLE below.
+    ROLE_CHOICES = [
+        (ROLE_ADMIN, 'Admin'),
+        (ROLE_FULFILLER, 'Fulfiller / Edit'),
+        (ROLE_VIEWER, 'Viewer'),
+    ]
+
+    #: The single mapping point onto the portal's own vocabulary — and it maps
+    #: EVERY role to `customer`, including Admin. That is not laziness.
+    #:
+    #: `PortalUser.role` does not mean what it looks like it means. In this app
+    #: `admin` identifies a CITEMED STAFF AGENT: `require_portal_admin` lets it
+    #: read every company's tickets and files, `ticket_notify.agent_emails()`
+    #: mails it about other customers' tickets, and `tickets_admin` offers it as
+    #: an assignee. There is currently no such thing as an admin OF A COMPANY.
+    #:
+    #: So mapping a customer's "Admin" onto it would mean a customer granting
+    #: themselves cross-tenant staff access by typing a word in a spreadsheet.
+    #: `owner` is worse again. Until the portal grows a company-scoped admin
+    #: role, the only safe answer is that a roster grants portal access and
+    #: nothing more.
+    #:
+    #: The distinction is not lost: `role_type` is kept verbatim on the row, it
+    #: is what Evidence Cloud provisioning consumes (where these roles DO mean
+    #: something), and it is what staff read when deciding who to promote by
+    #: hand. This constant governs one thing only — what the PORTAL grants.
+    ROLE_TO_PORTAL_ROLE = {
+        ROLE_ADMIN: 'customer',
+        ROLE_FULFILLER: 'customer',
+        ROLE_VIEWER: 'customer',
+    }
+
+    SOURCE_FORM = 'form'
+    SOURCE_IMPORT = 'import'
+    SOURCE_CHOICES = [(SOURCE_FORM, 'Typed into the form'),
+                      (SOURCE_IMPORT, 'Imported from a file')]
+
+    request = models.ForeignKey(
+        UserRequest, on_delete=models.CASCADE, related_name='users')
+    first_name = models.CharField(max_length=128, blank=True)
+    last_name = models.CharField(max_length=128, blank=True)
+    email = models.EmailField()
+    #: Module keys from MODULE_CHOICES. A list rather than a M2M because it is
+    #: a short fixed vocabulary that is read whole every time and never queried
+    #: across rows — a join table would be three extra queries for no answer
+    #: anybody asks.
+    modules = models.JSONField(default=list, blank=True)
+    role_type = models.CharField(max_length=16, choices=ROLE_CHOICES,
+                                 default=ROLE_VIEWER)
+    note = models.TextField(blank=True)
+    source = models.CharField(max_length=8, choices=SOURCE_CHOICES,
+                              default=SOURCE_FORM)
+
+    # ── Derived status. Written by provisioning; read-only in the UI. ────────
+    added_at = models.DateTimeField(null=True, blank=True)
+    activation_email_sent_at = models.DateTimeField(null=True, blank=True)
+    #: The row this became, once provisioning ran. Also how a re-run knows the
+    #: person already exists without matching on email a second time.
+    portal_user = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='requested_from')
+    status_note = models.CharField(max_length=512, blank=True)
+    status_overridden_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='roster_overrides')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['last_name', 'first_name', 'email']
+        constraints = [
+            # One row per person per request. The import upserts on this, which
+            # is what makes re-uploading a corrected sheet safe rather than a
+            # way to double the roster.
+            models.UniqueConstraint(fields=['request', 'email'],
+                                    name='uniq_requested_email_per_request'),
+        ]
+
+    def __str__(self):
+        return self.email
+
+    @property
+    def full_name(self):
+        return ' '.join(p for p in (self.first_name, self.last_name) if p)
+
+    @property
+    def portal_role(self):
+        return self.ROLE_TO_PORTAL_ROLE.get(self.role_type, 'customer')
+
+    def module_labels(self):
+        return [MODULE_LABELS[k] for k in self.modules if k in MODULE_LABELS]
+
+
+class RosterImport(models.Model):
+    """A CSV/Excel upload, held between "parsed" and "applied".
+
+    Two-phase on purpose. The parse is immediate because the confirmation step
+    needs something to show; applying is deferred because a large roster should
+    not be riding on one HTTP request that a proxy will time out halfway
+    through, leaving half a roster written and no record of where it stopped.
+
+    Deferred means a cron'd management command, NOT Celery. The Procfile
+    disables the worker for this app ("worker / beat disabled for v1") and every
+    background job here is a `dokku run` cron entry; adding a worker process to
+    carry one import would be a new always-on dependency and a new way for the
+    deploy to fail. `process_roster_imports` picks these up the same way
+    `send_upload_digests` picks up uploads.
+
+    The parsed rows live in a JSONField rather than in object storage: a roster
+    is a few hundred rows of eight short columns, which is small next to the
+    round-trip and the lifecycle rules an S3 object would need.
+    """
+
+    STATE_PENDING_REVIEW = 'pending_review'
+    STATE_CONFIRMED = 'confirmed'
+    STATE_APPLYING = 'applying'
+    STATE_DONE = 'done'
+    STATE_FAILED = 'failed'
+    STATE_CHOICES = [
+        (STATE_PENDING_REVIEW, 'Waiting for the uploader to confirm'),
+        (STATE_CONFIRMED, 'Confirmed, waiting to be applied'),
+        (STATE_APPLYING, 'Being applied'),
+        (STATE_DONE, 'Applied'),
+        (STATE_FAILED, 'Failed'),
+    ]
+
+    #: Refuse anything larger rather than accept a file that will time out the
+    #: parse. Well past any real roster; a 2,000-person spreadsheet is not an
+    #: initial user request, it is a migration and wants a different tool.
+    MAX_ROWS = 2000
+
+    request = models.ForeignKey(
+        UserRequest, on_delete=models.CASCADE, related_name='imports')
+    uploaded_by = models.ForeignKey(
+        'PortalUser', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='roster_imports')
+    filename = models.CharField(max_length=256)
+    state = models.CharField(max_length=16, choices=STATE_CHOICES,
+                             default=STATE_PENDING_REVIEW, db_index=True)
+
+    #: Header text as it appeared in the file, in column order.
+    headers = models.JSONField(default=list, blank=True)
+    #: {column index (as a string) -> field name or ''}. The confirmation step
+    #: exists to let a human correct this, so it is stored rather than re-sniffed
+    #: at apply time — otherwise the thing applied is not the thing confirmed.
+    mapping = models.JSONField(default=dict, blank=True)
+    #: Raw cell values, one list per row, aligned to `headers`.
+    rows = models.JSONField(default=list, blank=True)
+
+    created_count = models.PositiveIntegerField(default=0)
+    updated_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    #: Per-row complaints, as {row: <1-based>, field: ..., message: ...}.
+    problems = models.JSONField(default=list, blank=True)
+    error = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.filename} ({self.state})'

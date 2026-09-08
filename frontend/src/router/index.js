@@ -66,6 +66,15 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // The initial user request form (REV-45). Company-scoped server-side:
+      // the roster is resolved from the session's company, never from an id in
+      // the URL, so there is nothing here to enumerate.
+      path: '/users',
+      component: () => import('@/views/UserRequestView.vue'),
+      name: 'user-request',
+      meta: { requiresAuth: true },
+    },
+    {
       // Incident + maintenance history. Behind auth like every other notice
       // surface — EC-SOP-07 §5.2 commits to no PUBLIC status page.
       path: '/notices',

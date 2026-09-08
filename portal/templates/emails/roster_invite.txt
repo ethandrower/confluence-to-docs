@@ -1,0 +1,26 @@
+{{ company_name }} — {{ product_name }}
+=========================================
+
+YOUR ACCESS IS READY
+
+{% if recipient_name %}Hi {{ recipient_name }},{% else %}Hello,{% endif %}
+
+{{ customer_name }} has set you up on the {{ company_name }} {{ product_name }}.
+{% if modules %}
+You have been given access to: {% for m in modules %}{{ m }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if role_label %} ({{ role_label }}){% endif %}.
+{% endif %}
+Use the link below to sign in. It is valid for the next {{ expiry_minutes }}
+minutes and can be used once — you can always request a fresh one from the
+sign-in page.
+
+    {{ magic_url }}
+
+From the portal you can raise support tickets, track their progress, read the
+documentation, and exchange files with us.
+
+—
+
+Not expecting this? Reply to this email and we will look into it.
+
+—
+Sent to {{ recipient_email }}

@@ -2,10 +2,28 @@ from django.urls import path
 from anymail.webhooks.mailgun import MailgunTrackingWebhookView, MailgunInboundWebhookView
 from portal.views import (
     docs, auth, tickets, admin_api, files, files_admin, tickets_admin,
-    notices, notices_admin,
+    notices, notices_admin, roster, roster_admin,
 )
 
 urlpatterns = [
+    # The initial user request form (REV-45). The customer edits their own
+    # roster; the two acts that change anything outside this app — creating
+    # accounts, and emailing the people who now have them — are staff-only and
+    # live under admin/ below.
+    path('roster/', roster.current, name='roster'),
+    path('roster/users/', roster.users_collection, name='roster-users'),
+    path('roster/users/<int:user_id>/', roster.user_detail, name='roster-user'),
+    path('roster/submit/', roster.submit, name='roster-submit'),
+    path('roster/template.csv', roster.template, name='roster-template'),
+    path('roster/imports/', roster.imports_collection, name='roster-imports'),
+    path('roster/imports/<int:import_id>/', roster.import_detail, name='roster-import'),
+
+    # Admin — user requests
+    path('admin/roster/requests/', roster_admin.requests_collection, name='admin-roster-requests'),
+    path('admin/roster/requests/<int:request_id>/', roster_admin.request_detail, name='admin-roster-request'),
+    path('admin/roster/users/<int:user_id>/note', roster_admin.user_status_note, name='admin-roster-user-note'),
+    path('admin/roster/modules/', roster_admin.modules, name='admin-roster-modules'),
+
     # Incident + maintenance notices (#49). Session-gated on both sides: §5.2
     # commits to no PUBLIC status page.
     path('notices/', notices.notices, name='notices'),

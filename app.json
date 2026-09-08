@@ -107,6 +107,11 @@
       "schedule": "* * * * *"
     },
     {
+      "comment": "Apply roster spreadsheets a customer has confirmed on the user request form (REV-45). The upload is parsed on the request so the confirmation step has something to show; applying is deferred here because a few hundred rows is a few thousand queries and does not belong on a request a proxy will time out. Every minute, because a customer is sitting on a screen watching for it. Not Celery: the worker is disabled for this app (see Procfile), and one import is not worth an always-on process type.",
+      "command": "python manage.py process_roster_imports",
+      "schedule": "* * * * *"
+    },
+    {
       "comment": "Reclaim uploads that were started and never finished. upload-init creates a SharedFile in state='uploading' and reserves an S3 key before the browser's PUT; if that PUT fails or the tab is closed, the row and any multipart parts linger. Until aborted those parts are still stored, still billed, and absent from any listing of the bucket, so the cost is invisible. 24h is well clear of any legitimate upload, including a large multipart one on a slow link; hourly is how quickly we notice once that threshold is crossed. A bucket lifecycle rule (AbortIncompleteMultipartUpload) should back this up for the cases where we never get to run.",
       "command": "python manage.py purge_stale_uploads --hours 24",
       "schedule": "17 * * * *"

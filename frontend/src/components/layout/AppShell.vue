@@ -58,6 +58,7 @@
                 <RouterLink v-if="!auth.user" to="/tickets" class="mobile-nav-link" @click="mobileOpen = false">Contact</RouterLink>
                 <RouterLink v-if="auth.user && !auth.user.is_admin" to="/files" class="mobile-nav-link" @click="mobileOpen = false">Share Files</RouterLink>
                 <RouterLink v-if="auth.user && !auth.user.is_admin" to="/support" class="mobile-nav-link" @click="mobileOpen = false">Support</RouterLink>
+                <RouterLink v-if="showUserSetup" to="/users" class="mobile-nav-link" @click="mobileOpen = false">Set up your team</RouterLink>
                 <RouterLink v-if="auth.user?.is_admin" to="/manage/tickets" class="mobile-nav-link" @click="mobileOpen = false">
                   Tickets <span v-if="awaitingCount" class="mobile-nav-badge">{{ awaitingCount }}</span>
                 </RouterLink>
@@ -115,6 +116,12 @@
           </svg>
           Support
         </RouterLink>
+        <RouterLink v-if="showUserSetup" to="/users" class="topbar-btn hidden sm:inline-flex" title="Tell us who needs access">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72M18 18.72a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+          </svg>
+          Set up your team
+        </RouterLink>
         <RouterLink v-if="auth.user?.is_admin" to="/manage/tickets" class="topbar-btn hidden sm:inline-flex" title="Support tickets">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -168,6 +175,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDocsStore } from '@/stores/docs.js'
 import { useTicketsStore } from '@/stores/tickets.js'
+import { useRosterStore } from '@/stores/roster.js'
 import { usePolling } from '@/lib/usePolling'
 import { useTicketChannel } from '@/lib/useTicketChannel'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
@@ -183,6 +191,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const store = useDocsStore()
 const tickets = useTicketsStore()
+
+// The user-setup link appears only while a request is actually open, rather
+// than sitting in the nav forever pointing at "nothing to do here". One small
+// GET on boot, the same shape as the notices banner's, and it fails quiet.
+const roster = useRosterStore()
+const showUserSetup = computed(() => Boolean(roster.request))
 
 // Awaiting-reply count for the admin "Tickets" nav badge. Live via WS nudge
 // from the admin inbox channel, with a 30s poll fallback while disconnected
@@ -241,6 +255,9 @@ onMounted(() => {
   isMac.value = /Mac|iPhone|iPod|iPad/i.test(navigator.userAgentData?.platform || navigator.userAgent)
   document.addEventListener('keydown', onKey)
   window.addEventListener('citemed:open-search', onOpenSearch)
+  // Customers only: staff have no roster of their own, so asking would be a
+  // guaranteed empty response on every admin page load.
+  if (auth.user && !auth.user.is_admin && !roster.loaded) roster.load()
 })
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey)

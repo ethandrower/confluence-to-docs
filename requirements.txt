@@ -50,6 +50,11 @@ whitenoise==6.12.0
 django-anymail[mailgun]==14.0
 markdown==3.10.2
 
+# Reading customer roster spreadsheets (REV-45). Pure Python, no system
+# libraries, and only ever handed a file a signed-in customer uploaded to their
+# own request — read_only + data_only, so no formula evaluation happens.
+openpyxl==3.1.5
+
 # Atlassian Trinity — Confluence/Jira/Bitbucket CLI used by sync_from_mcp.
 # Pinned to a commit, not @main: a branch ref means every rebuild can pull
 # different code, which is the same class of surprise as an unpinned version.
