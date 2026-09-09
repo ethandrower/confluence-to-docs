@@ -17,7 +17,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from portal.models import Bucket, Company, MagicLinkToken, PortalUser
+from portal.models import (
+    Bucket, Company, MagicLinkToken, PortalUser, SharedFile,
+)
 
 # .test is reserved by RFC 2606 and can never resolve, so a stray email to one
 # of these bounces at the sender rather than reaching a real person.
@@ -42,6 +44,35 @@ class Command(BaseCommand):
         Bucket.objects.get_or_create(
             company=company, kind=Bucket.KIND_GENERAL,
             defaults={'title': 'General uploads', 'status': 'general'},
+        )
+
+        # A staff-owned folder tree, because "for testing staff→customer
+        # shares" needs an actual share to look at. Read-only to the customer
+        # (origin=staff), and shaped the way CS actually asks for it: a
+        # Reference Library with the PDFs kept in their own subfolder, so
+        # supporting documents stay separate from the articles themselves.
+        library, _ = Bucket.objects.get_or_create(
+            company=company, kind=Bucket.KIND_FOLDER, title='Reference Library',
+            parent=None, origin=Bucket.ORIGIN_STAFF,
+            defaults={'status': 'general',
+                      'description': 'Shared with you by CiteMed.'},
+        )
+        pdfs, _ = Bucket.objects.get_or_create(
+            company=company, kind=Bucket.KIND_FOLDER, title='PDFs',
+            parent=library, origin=Bucket.ORIGIN_STAFF,
+            defaults={'status': 'general'},
+        )
+        # A link, not an upload: there are no bytes behind it, so seeding one
+        # needs no object store and works on any environment.
+        SharedFile.objects.get_or_create(
+            bucket=pdfs, company=company,
+            original_name='EU MDR 2017/745 (EUR-Lex)',
+            defaults={
+                'item_type': SharedFile.ITEM_LINK,
+                'external_url': 'https://eur-lex.europa.eu/eli/reg/2017/745/oj',
+                'storage_key': '', 'mime_type': '',
+                'state': SharedFile.STATE_READY, 'processed': True,
+            },
         )
 
         frontend = getattr(settings, 'FRONTEND_URL', 'http://localhost:5174').rstrip('/')
